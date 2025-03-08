@@ -81,5 +81,4 @@ class DataUploadView(APIView):
             timestamp=timestamp
         )
         historical_data.save()
-
         return Response({"message": "检测结果上传成功"}, status=status.HTTP_201_CREATED)

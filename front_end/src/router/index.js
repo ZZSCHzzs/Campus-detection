@@ -1,18 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 // 导入视图组件
-import HomeView from '../views/HomeView.vue';
-import RealTimeView from '../views/RealTimeView.vue';
-import HistoryView from '../views/HistoryView.vue';
-import AlertsView from '../views/AlertsView.vue';
-import SettingsView from '../views/SettingsView.vue';
-
+import Index from "@/views/Index.vue";
+import Areas from "@/views/Areas.vue";
+import DataScreen from "@/views/DataScreen.vue";
+import Map from "@/views/2DMap.vue";
 const routes = [
-  { path: '/', name: 'Home', component: HomeView },
-  { path: '/realtime', name: 'RealTime', component: RealTimeView },
-  { path: '/history', name: 'History', component: HistoryView },
-  { path: '/alerts', name: 'Alerts', component: AlertsView },
-  { path: '/settings', name: 'Settings', component: SettingsView },
+  { path: '/', redirect: '/index' },
+  { path: '/index', name: 'index', component: Index },
+  { path: '/areas', name: 'areas', component: Areas },
+  { path: '/data-screen', name: 'data-screen', component: DataScreen },
+  { path: '/map', name: 'map', component: Map },
 ];
 
 const router = createRouter({
