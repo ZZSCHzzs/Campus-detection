@@ -31,7 +31,7 @@ class HistoricalDataSerializer(serializers.ModelSerializer):
         model = HistoricalData
         fields = ['id', 'area', 'detected_count', 'timestamp']
 
-class DataUploadSerializer(serializers.ModelSerializer):
+class DataUploadSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     detected_count = serializers.IntegerField()
     timestamp = serializers.DateTimeField()
