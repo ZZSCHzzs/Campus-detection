@@ -16,9 +16,9 @@
 ### 接口文档
 
 #### 接口基础信息
-- 基础URL: `http://[服务器地址]/api`
+- 基础URL: `http://smarthit.top/api`
 - 数据格式: 所有接口均返回JSON格式数据
-- 认证方式: Bearer Token (JWT)
+- 认证方式: Bearer Token (JWT)(开发阶段未启用认证)
 
 #### 通用响应格式
 ```json
