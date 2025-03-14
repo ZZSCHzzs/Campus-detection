@@ -12,11 +12,11 @@ from webapi.views import (
 
 router = DefaultRouter()
 router.register(r'users', CustomUserViewSet)
-router.register(r'hardware-nodes', HardwareNodeViewSet)
-router.register(r'process-terminals', ProcessTerminalViewSet)
+router.register(r'nodes', HardwareNodeViewSet)
+router.register(r'terminals', ProcessTerminalViewSet)
 router.register(r'buildings', BuildingViewSet)
 router.register(r'areas', AreaViewSet)
-router.register(r'historical-data', HistoricalDataViewSet)
+router.register(r'historical', HistoricalDataViewSet)
 
 urlpatterns = [
     path('api/', include(router.urls)),

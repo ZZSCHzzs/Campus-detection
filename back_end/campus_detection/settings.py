@@ -77,8 +77,15 @@ WSGI_APPLICATION = 'campus_detection.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'campus_detection',  # 数据库名
+        'USER': 'root',        # 数据库用户名
+        # 'PASSWORD': '',        # 数据库密码(未设置)
+        'HOST': 'localhost',  # 数据库主机地址
+        'PORT': '3306',       # 数据库端口号
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
     }
 }
 
