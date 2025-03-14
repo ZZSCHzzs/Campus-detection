@@ -126,12 +126,30 @@
 
 ### 数据模型说明
 本项目后端主要使用Django模型定义数据结构，各模型间通过外键关系进行关联：
-- CustomUser：继承自AbstractUser，增加了角色、电话、邮箱、注册时间等字段，同时自定义了groups和user_permissions关联。
-- HardwareNode：表示硬件节点，包含节点名称、检测结果、绑定终端、状态、更新时间和描述。
-- ProcessTerminal：终端模型，用于关联硬件节点。
-- Building：建筑模型，包含建筑名称和描述。
-- Area：区域模型，关联硬件节点和所属建筑，同时记录楼层信息。
-- HistoricalData：历史数据模型，记录检测到的人数和对应时间戳。
+- **CustomUser**：继承自`AbstractUser`
+  - 核心字段：`username`, `role`, `phone`, `email`, `register_time`
+  - 关联接口：`/api/users`
+  - 说明：用户表，用于存储登录相关信息，自定义了`groups`和`user_permissions`
+- **HardwareNode**：硬件节点
+  - 核心字段：`name`, `detected_count`, `terminal`, `status`, `updated_at`, `description`
+  - 关联接口：`/api/nodes`
+  - 说明：表示摄像头端点，与`ProcessTerminal`外键关联
+- **ProcessTerminal**：终端模型
+  - 核心字段：`name`, `status`
+  - 关联接口：`/api/terminals`
+  - 说明：表示数据处理终端（树莓派）
+- **Building**：建筑模型
+  - 核心字段：`name`, `description`
+  - 关联接口：`/api/buildings`
+  - 说明：记录建筑物相关信息，可用于关联区域`Area`
+- **Area**：区域模型
+  - 核心字段：`name`, `bound_node`, `description`, `type`, `floor`
+  - 关联接口：`/api/areas`
+  - 说明：用于描述建筑下的具体区域，`bound_node`与硬件节点`HardwareNode`关联， `type`和建筑`Building`关联
+- **HistoricalData**：历史数据模型
+  - 核心字段：`area`, `detected_count`, `timestamp`
+  - 关联接口：`/api/historical` (数据上传通过`/api/upload`)
+  - 说明：记录监测到的历史数据，配合区域信息使用
 
 ## 前端文档（待完善）
 ...existing code...
