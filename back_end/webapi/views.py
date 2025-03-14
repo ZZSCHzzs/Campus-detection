@@ -55,9 +55,12 @@ class DataUploadView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取上传的数据
-        hardware_node_id = serializer.validated_data['id']
-        detected_count = serializer.validated_data['detected_count']
-        timestamp = serializer.validated_data['timestamp']
+        try:
+            hardware_node_id = serializer.validated_data['id']
+            detected_count = serializer.validated_data['detected_count']
+            timestamp = serializer.validated_data['timestamp']
+        except KeyError as e:
+            return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # 获取硬件节点
