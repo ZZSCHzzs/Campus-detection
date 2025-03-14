@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, Group, Permission
 
 
 class CustomUser(AbstractUser):
@@ -13,6 +13,23 @@ class CustomUser(AbstractUser):
     email = models.EmailField(blank=True, null=True, verbose_name="邮箱")
     register_time = models.DateTimeField(auto_now_add=True, verbose_name="注册时间")
 
+    # 显式重写 groups 和 user_permissions 字段
+    groups = models.ManyToManyField(
+        Group,
+        verbose_name='groups',
+        blank=True,
+        help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.',
+        related_name="customuser_groups",  # 唯一的 related_name
+        related_query_name="customuser",
+    )
+    user_permissions = models.ManyToManyField(
+        Permission,
+        verbose_name='user permissions',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        related_name="customuser_permissions",  # 唯一的 related_name
+        related_query_name="customuser",
+    )
 
     def __str__(self):
         return self.username
