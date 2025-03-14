@@ -32,6 +32,7 @@ class HistoricalDataSerializer(serializers.ModelSerializer):
         fields = ['id', 'area', 'detected_count', 'timestamp']
 
 class DataUploadSerializer(serializers.ModelSerializer):
+    timestamp = serializers.DateTimeField()
     class Meta:
         model = HardwareNode
-        fields = ['id', 'detected_count', 'updated_at']
+        fields = ['id', 'detected_count', 'timestamp']
