@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.views import APIView
 from .models import *
 from .serializers import *
@@ -18,6 +19,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
     queryset = ProcessTerminal.objects.all()
     serializer_class = ProcessTerminalSerializer
 
+    @action(detail=True, methods=['get'])
     def nodes(self, request, pk=None):
         terminal = self.get_object()
         nodes = HardwareNode.objects.filter(terminal=terminal)
@@ -27,6 +29,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
 class BuildingViewSet(viewsets.ModelViewSet):
     queryset = Building.objects.all()
     serializer_class = BuildingSerializer
+    @action(detail=True, methods=['get'])
     def areas(self, request, pk=None):
         building = self.get_object()
         areas = Area.objects.filter(type=building)
@@ -37,6 +40,7 @@ class AreaViewSet(viewsets.ModelViewSet):
     queryset = Area.objects.all()
     serializer_class = AreaSerializer
 
+    @action(detail=True, methods=['get'])
     def data(self, request, pk=None):
         area = self.get_object()
         data = area.bound_node
