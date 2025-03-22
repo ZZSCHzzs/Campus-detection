@@ -12,6 +12,10 @@ const routes: Array<RouteRecordRaw> = [
         component: Home,
     },
     {
+        path: '/index',
+        redirect: '/',
+    },
+    {
         path: '/areas',
         name: 'Areas',
         component: Areas,

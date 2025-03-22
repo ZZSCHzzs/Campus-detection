@@ -7,9 +7,15 @@
         :ellipsis="false"
         @select="handleSelect"
     >
-      <el-menu-item index="0">首页</el-menu-item>
-      <el-menu-item index="1">区域</el-menu-item>
-      <el-menu-item index="2">数据大屏</el-menu-item>
+      <el-menu-item index="0">
+        <router-link to="/index">首页</router-link>
+      </el-menu-item>
+      <el-menu-item index="1">
+        <router-link to="/areas">区域</router-link>
+      </el-menu-item>
+      <el-menu-item index="2">
+        <router-link to="/data-screen">数据大屏</router-link>
+      </el-menu-item>
     </el-menu>
   </div>
 
@@ -43,5 +49,8 @@ const handleSelect = (key: string, keyPath: string[]) => {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+el-menu-item{
+  text-decoration: none!important;
 }
 </style>
