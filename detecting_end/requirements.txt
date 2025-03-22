@@ -1,1 +1,4 @@
-ultralytics
+opencv-python==4.8.1.78  # 用于图像捕获和处理
+requests==2.32.0         # 用于 HTTP 请求，上传检测结果
+ultralytics==8.0.0       # 用于 YOLO 模型推理
+datetime==5.1            # 用于时间戳生成
