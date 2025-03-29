@@ -18,7 +18,8 @@ apiClient.interceptors.request.use(config => {
 
 // 响应拦截器
 apiClient.interceptors.response.use(response => {
-  return response.data
+    console.log(response.data)
+  return response
 }, error => {
   return Promise.reject(error)
 })

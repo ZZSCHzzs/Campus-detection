@@ -1,2 +1,4 @@
 venv
 .idea
+campus_detection/__pycache__
+*.pyc

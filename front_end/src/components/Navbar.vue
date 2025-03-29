@@ -1,20 +1,9 @@
 <template>
   <div class="header">
-    <el-menu
-        :default-active="activeIndex"
-        class="el-menu-demo nav-container"
-        mode="horizontal"
-        :ellipsis="false"
-        @select="handleSelect"
-    >
-      <el-menu-item index="0">
-        <router-link to="/index">首页</router-link>
-      </el-menu-item>
-      <el-menu-item index="1">
-        <router-link to="/areas">区域</router-link>
-      </el-menu-item>
-      <el-menu-item index="2">
-        <router-link to="/data-screen">数据大屏</router-link>
+    <el-menu :default-active="activeIndex" class="el-menu-demo nav-container" mode="horizontal" :ellipsis="false"
+      @select="handleSelect">
+      <el-menu-item v-for="item in content" :key="item.index" :index="item.index">
+        {{ item.title }}
       </el-menu-item>
     </el-menu>
   </div>
@@ -24,33 +13,56 @@
 
 <script lang="ts" setup>
 import { ref } from 'vue'
+import router from '../router'
+
+const content = ref([
+  {
+    index: '0',
+    title: '首页',
+    path: '/index',
+  },
+  {
+    index: '1',
+    title: '区域',
+    path: '/areas',
+  },
+  {
+    index: '2',
+    title: '数据大屏',
+    path: '/screen',
+  },
+])
 
 const activeIndex = ref('0')
-const handleSelect = (key: string, keyPath: string[]) => {
-  console.log(key, keyPath)
+const handleSelect = (key: string) => {
+  activeIndex.value = key
+  router.push(content.value.find(item => item.index === key)?.path || '/')
 }
 </script>
 
 <style>
-
 .nav-container {
   display: flex;
   width: 1200px;
   margin: 0 auto;
 }
-.el-menu-demo{
-  border-bottom: 0px!important;
+
+.el-menu-demo {
+  border-bottom: 0px !important;
 }
-.header{
+
+.header {
   border-bottom: 2px solid #eef1ff;
   width: 100%;
 }
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
-el-menu-item{
-  text-decoration: none!important;
+
+el-menu-item {
+  text-decoration: none !important;
 }
 </style>

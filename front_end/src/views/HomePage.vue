@@ -7,14 +7,33 @@ import axios from '../axios'
 const areas = ref<AreaItem[]>([])
 const loading = ref(false)
 
-// 获取区域数据
 const fetchAreas = async () => {
   try {
     loading.value = true
-    const { data } = await axios.get('/api/areas')
-    areas.value = data.data
+    // 第一步：获取基础区域数据
+    const { data: baseData } = await axios.get('/api/areas')
+    
+    // 第二步：为每个区域获取详细数据
+    const areasWithData = await Promise.all(
+      baseData.map(async (area: AreaItem) => {
+        try {
+          const { data: hardwareData } = await axios.get(`/api/areas/${area.id}/data`)
+          return {
+            ...area,
+            current_count: hardwareData.current_count,
+            status: hardwareData.status,
+            update_time: hardwareData.update_time,
+          }
+        } catch (e) {
+          ElMessage.error(`${area.name} 数据获取失败`)
+          return area // 返回基础数据保持结构
+        }
+      })
+    )
+    
+    areas.value = areasWithData
   } catch (error) {
-    ElMessage.error('数据加载失败')
+    ElMessage.error('基础数据加载失败')
   } finally {
     loading.value = false
   }
@@ -36,23 +55,10 @@ onMounted(() => {
 
     <el-table :data="areas" v-loading="loading" stripe>
       <el-table-column prop="name" label="区域名称" />
-      <el-table-column label="当前人数">
-        <template #default="{ row }">
-          {{ row.current_count || 0 }}
-        </template>
-      </el-table-column>
-      <el-table-column label="状态">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'normal' ? 'success' : 'danger'">
-            {{ row.status === 'normal' ? '正常' : '异常' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="最后更新时间">
-        <template #default="{ row }">
-          {{ new Date(row.update_time).toLocaleTimeString() }}
-        </template>
-      </el-table-column>
+      <el-table-column prop="current_count" label="当前人数"/>
+      <el-table-column prop="status" label="状态" />
+      <el-table-column prop="update_time" label="更新时间" />
+      <!-- 保持原有状态列和时间列 -->
     </el-table>
   </div>
 </template>
