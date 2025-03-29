@@ -2,8 +2,8 @@
 
 ## 目录
 - [项目概述](#项目概述)
-- [后端文档](./backend/readme.md)
-- [前端文档](./frontend/readme.md)
+- [后端文档](./back_end/readme.md)
+- [前端文档](./front_end/readme.md)
 - [检测端文档](./detecting_end/readme.md)
 - [其他](#其他)
 
