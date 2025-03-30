@@ -24,7 +24,7 @@ class BuildingSerializer(serializers.ModelSerializer):
 class AreaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Area
-        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor']
+        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity']
 
 class HistoricalDataSerializer(serializers.ModelSerializer):
     class Meta:
