@@ -6,6 +6,13 @@ from .serializers import *
 from rest_framework.response import Response
 from rest_framework import status
 
+def get_summary_people_count():
+    # 获取所有区域
+    areas = Area.objects.all()
+    people_count = 0
+    for area in areas:
+        people_count += area.bound_node.detected_count
+    return people_count
 
 class CustomUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
@@ -89,3 +96,21 @@ class DataUploadView(APIView):
         )
         historical_data.save()
         return Response({"message": "检测结果上传成功"}, status=status.HTTP_201_CREATED)
+
+
+class SummaryView(APIView):
+    def get(self):
+        nodes_count = HardwareNode.objects.count()
+        terminals_count = ProcessTerminal.objects.count()
+        buildings_count = Building.objects.count()
+        areas_count = Area.objects.count()
+        historical_data_count = HistoricalData.objects.count()
+        people_count = get_summary_people_count()
+        return Response({
+            "nodes_count": nodes_count,
+            "terminals_count": terminals_count,
+            "buildings_count": buildings_count,
+            "areas_count": areas_count,
+            "historical_data_count": historical_data_count,
+            "people_count": people_count
+        })
