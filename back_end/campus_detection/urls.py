@@ -7,7 +7,8 @@ from webapi.views import (
     BuildingViewSet,
     AreaViewSet,
     HistoricalDataViewSet,
-    DataUploadView
+    DataUploadView,
+    SummaryView
 )
 
 router = DefaultRouter()
@@ -20,5 +21,6 @@ router.register(r'historical', HistoricalDataViewSet)
 
 urlpatterns = [
     path('api/', include(router.urls)),
-    path('api/upload/', DataUploadView.as_view())
+    path('api/upload/', DataUploadView.as_view()),
+    path('api/summary/', SummaryView.as_view())
 ]

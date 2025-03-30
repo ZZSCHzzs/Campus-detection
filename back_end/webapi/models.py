@@ -78,7 +78,7 @@ class Area(models.Model):
     description = models.TextField(blank=True, verbose_name="描述")
     type = models.ForeignKey(Building, on_delete=models.CASCADE, verbose_name="所属建筑")
     floor = models.IntegerField(default=0, verbose_name="楼层")
-
+    capacity = models.IntegerField(default=0, verbose_name="容量")
     def __str__(self):
         return f"{self.name} ({self.type.name} - {self.floor}F)"
 
