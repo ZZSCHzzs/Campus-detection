@@ -99,7 +99,7 @@ class DataUploadView(APIView):
 
 
 class SummaryView(APIView):
-    def get(self):
+    def get(self, request):
         nodes_count = HardwareNode.objects.count()
         terminals_count = ProcessTerminal.objects.count()
         buildings_count = Building.objects.count()
