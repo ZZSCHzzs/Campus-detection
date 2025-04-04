@@ -57,7 +57,8 @@ class AreaViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def popular(self, request):
         count = int(request.query_params.get('count', 5))
-        areas = Area.objects.all().order_by('-capacity')[:count]
+        areas = Area.objects.all()
+        areas = sorted(areas, key=lambda x: x.bound_node.detected_count, reverse=True)[:count]
         serializer = AreaSerializer(areas, many=True)
         return Response(serializer.data)
 
