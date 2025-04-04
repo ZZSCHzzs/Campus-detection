@@ -54,6 +54,14 @@ class AreaViewSet(viewsets.ModelViewSet):
         serializer = HardwareNodeSerializer(data)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def popular(self, request):
+        count = int(request.query_params.get('count', 5))
+        areas = Area.objects.all().order_by('-capacity')[:count]
+        serializer = AreaSerializer(areas, many=True)
+        return Response(serializer.data)
+
+
 class HistoricalDataViewSet(viewsets.ModelViewSet):
     queryset = HistoricalData.objects.all()
     serializer_class = HistoricalDataSerializer

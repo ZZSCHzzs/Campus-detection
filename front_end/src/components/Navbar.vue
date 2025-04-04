@@ -2,6 +2,10 @@
   <div class="header">
     <el-menu :default-active="activeIndex" class="el-menu-demo nav-container" mode="horizontal" :ellipsis="false"
       @select="handleSelect">
+      <img
+        class="logo"
+        src="/favicon256.ico"
+        alt="Logo"></img>
       <el-menu-item v-for="item in content" :key="item.index" :index="item.index">
         {{ item.title }}
       </el-menu-item>
@@ -43,7 +47,7 @@ const handleSelect = (key: string) => {
 <style>
 .nav-container {
   display: flex;
-  width: 1200px;
+  width: 1400px;
   margin: 0 auto;
 }
 

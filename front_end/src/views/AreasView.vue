@@ -153,7 +153,6 @@ onMounted(() => {
 
 
 <style scoped>
-/* 新增样式 */
 .info-item {
     margin: 8px 0;
     font-size: 14px;
@@ -165,7 +164,7 @@ onMounted(() => {
 }
 
 .areas-container {
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 20px auto;
 }
 

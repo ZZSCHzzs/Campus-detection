@@ -5,6 +5,7 @@ export interface AreaItem {
     bound_node: number      // 关联的硬件节点ID
     description?: string
     building: number             // 区域类型
+    capacity: number            // 区域容量
     floor: number            // 所属楼层
     status?: boolean          // 区域状态
     current_count?: number    // 当前人数

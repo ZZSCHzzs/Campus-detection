@@ -51,6 +51,8 @@ onMounted(async () => {
 </script>
 
 <template>
+
+
   <div class="dashboard">
     <div ref="chartRef" class="chart-container"></div>
     
