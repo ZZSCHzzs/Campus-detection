@@ -22,9 +22,10 @@ class BuildingSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description']
 
 class AreaSerializer(serializers.ModelSerializer):
+    detected_count = serializers.IntegerField(source='bound_node.detected_count', read_only=True)
     class Meta:
         model = Area
-        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity']
+        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity', 'detected_count']
 
 class HistoricalDataSerializer(serializers.ModelSerializer):
     class Meta:
