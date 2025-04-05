@@ -104,7 +104,7 @@ def upload_result(camera_id, detected_count):
     }
     try:
         response = requests.post(url, json=data, timeout=5)
-        if response.status_code != 200:
+        if response.status_code != 201:
             print(f"上传警告: 状态码 {response.status_code}, 响应: {response.text}")
         return response.json()
     except Exception as e:
@@ -150,7 +150,7 @@ def pull_mode_handler():
 def receive_frame(camera_id):
     if camera_id not in CAMERAS:
         print(f"无效的摄像头ID: {camera_id}")
-        return jsonify({"error": "无效的摄像头ID"}), 400
+        return jsonify({"error": "无效的摄像头ID"}), 404
 
     if 'file' not in request.files:
         print("没有文件上传")
@@ -162,25 +162,26 @@ def receive_frame(camera_id):
         img_data = file.read()
         if len(img_data) == 0:
             print("空文件内容")
-            return jsonify({"error": "空文件内容"}), 400
+            return jsonify({"error": "空文件内容"}), 415
 
         image = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
         if image is None:
             print("无效的图片格式")
-            return jsonify({"error": "无效的图片格式"}), 400
+            return jsonify({"error": "无效的图片格式"}), 415
 
         # 分析图像
-        detected_count = analyze_image(image)
+        detected_count = analyze_image(image, camera_id)
         print(f"摄像头 {camera_id} 检测到人数: {detected_count}")
 
         # 上传结果
         result = upload_result(camera_id, detected_count)
         if result is None:
-            return jsonify({"error": "云端上传失败"}), 500
-
+            return jsonify({"error": "云端上传失败"}), 504
+        print("\033[92m" + f"摄像头 {camera_id} 处理成功" + "\033[0m")
         return jsonify({
             "status": "success",
         }), 201
+
     except Exception as e:
         print(f"处理异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
