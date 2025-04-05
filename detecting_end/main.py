@@ -45,7 +45,7 @@ def analyze_image(image):
 
 # 上传检测结果到服务器
 def upload_result(camera_id, detected_count):
-    url = "http://smarthit.top:8000/api/upload"
+    url = "http://smarthit.top:8000/api/upload/"
     data = {
         "id": camera_id,
         "detected_count": detected_count,
