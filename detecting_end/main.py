@@ -10,14 +10,14 @@ from threading import Thread
 
 app = Flask(__name__)
 
-# 摄像头配置字典 {id: url}
 CAMERAS = {
-    "camera_1": "rtsp://username:password@192.168.1.101:554/stream",
-    "camera_2": "rtsp://username:password@192.168.1.102:554/stream"
+    1: "rtsp://username:password@192.168.1.101:554/stream",
+    2: "rtsp://username:password@192.168.1.102:554/stream"
 }
 
 # 运行模式
 MODE = "push"  # "pull" 或 "push"
+
 
 # 从 WiFi 摄像头捕获图像
 def capture_image_from_camera(camera_url):
@@ -49,10 +49,12 @@ def upload_result(camera_id, detected_count):
     data = {
         "id": camera_id,
         "detected_count": detected_count,
-        "timestamp": datetime.datetime.now(datetime.UTC).isoformat() + "Z"
+        "timestamp": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")  # 标准化时间格式
     }
     try:
         response = requests.post(url, json=data, timeout=5)
+        if response.status_code != 200:
+            print(f"上传警告: 状态码 {response.status_code}, 响应: {response.text}")
         return response.json()
     except Exception as e:
         print(f"上传结果失败: {e}")
@@ -72,19 +74,19 @@ def pull_mode_handler():
 
                 # 分析图像
                 detected_count = analyze_image(image)
-                print(f"{camera_id} 检测到人数: {detected_count}")
+                print(f"摄像头 {camera_id} 检测到人数: {detected_count}")
 
                 # 上传结果
                 upload_result(camera_id, detected_count)
 
             except Exception as e:
-                print(f"{camera_id} 处理失败: {e}")
+                print(f"摄像头 {camera_id} 处理失败: {e}")
 
         time.sleep(interval)
 
 
 # Flask接收端点
-@app.route('/api/push_frame/<camera_id>', methods=['POST'])
+@app.route('/api/push_frame/<int:camera_id>', methods=['POST'])  # 指定camera_id为整数
 def receive_frame(camera_id):
     if camera_id not in CAMERAS:
         return jsonify({"error": "无效的摄像头ID"}), 400
@@ -95,17 +97,30 @@ def receive_frame(camera_id):
     file = request.files['file']
     try:
         # 读取图像
-        image = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+        img_data = file.read()
+        if len(img_data) == 0:
+            return jsonify({"error": "空文件内容"}), 400
+
+        image = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return jsonify({"error": "无效的图片格式"}), 400
 
         # 分析图像
         detected_count = analyze_image(image)
-        print(f"{camera_id} 检测到人数: {detected_count}")
+        print(f"摄像头 {camera_id} 检测到人数: {detected_count}")
 
         # 上传结果
-        upload_result(camera_id, detected_count)
+        result = upload_result(camera_id, detected_count)
+        if result is None:
+            return jsonify({"error": "云端上传失败"}), 500
 
-        return jsonify({"status": "success", "count": detected_count})
+        return jsonify({
+            "status": "success",
+            "camera_id": camera_id,  
+            "count": detected_count
+        })
     except Exception as e:
+        print(f"处理异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
