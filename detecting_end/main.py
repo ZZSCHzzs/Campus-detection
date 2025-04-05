@@ -45,7 +45,7 @@ def analyze_image(image):
 
 # 上传检测结果到服务器
 def upload_result(camera_id, detected_count):
-    url = "http://smarthit.top/api/upload"
+    url = "http://smarthit.top:8000/api/upload"
     data = {
         "id": camera_id,
         "detected_count": detected_count,
@@ -89,9 +89,11 @@ def pull_mode_handler():
 @app.route('/api/push_frame/<int:camera_id>', methods=['POST'])  # 指定camera_id为整数
 def receive_frame(camera_id):
     if camera_id not in CAMERAS:
+        print(f"无效的摄像头ID: {camera_id}")
         return jsonify({"error": "无效的摄像头ID"}), 400
 
     if 'file' not in request.files:
+        print("没有文件上传")
         return jsonify({"error": "没有文件上传"}), 400
 
     file = request.files['file']
@@ -99,10 +101,12 @@ def receive_frame(camera_id):
         # 读取图像
         img_data = file.read()
         if len(img_data) == 0:
+            print("空文件内容")
             return jsonify({"error": "空文件内容"}), 400
 
         image = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
         if image is None:
+            print("无效的图片格式")
             return jsonify({"error": "无效的图片格式"}), 400
 
         # 分析图像

@@ -10,7 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   
   // 计算属性
   const isAuthenticated = computed(() => !!accessToken.value)
-  const username = computed(() => user.value?.username || '')
+  const username = computed(() => user.value?.username || 'Unknown')
   
   // 动作
   // 设置认证信息
