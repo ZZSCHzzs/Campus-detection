@@ -4,6 +4,7 @@ import type { RouteRecordRaw } from 'vue-router';
 import Home from '../views/HomePage.vue';
 import Areas from '../views/AreasView.vue';
 import DataScreen from "../views/DataScreen.vue";
+import Auth from "../views/UserView.vue";
 
 const routes: Array<RouteRecordRaw> = [
     {
@@ -25,6 +26,11 @@ const routes: Array<RouteRecordRaw> = [
         name: 'DataScreen',
         component: DataScreen,
     },
+    {
+        path: '/auth', 
+        name: 'Auth',
+        component: Auth,
+    }
 ];
 
 const router = createRouter({

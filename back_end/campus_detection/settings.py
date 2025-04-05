@@ -40,7 +40,22 @@ INSTALLED_APPS = [
     'rest_framework',
     'webapi',
     'corsheaders',
+    'rest_framework.authtoken',
+    'djoser',
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'AUTH_HEADER_TYPES': ('JWT',),
+}
+
+DJOSER = {
+    'USER_ID_FIELD': 'CustomUser',
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
