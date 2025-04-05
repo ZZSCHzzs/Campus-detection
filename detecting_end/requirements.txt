@@ -1,4 +1,7 @@
-opencv-python==4.8.1.78  # 用于图像捕获和处理
-requests==2.32.0         # 用于 HTTP 请求，上传检测结果
-ultralytics==8.0.0       # 用于 YOLO 模型推理
-datetime==5.1            # 用于时间戳生成
+# 核心依赖
+Flask==3.0.2               # Web 服务器框架
+opencv-python==4.8.1.78    # 图像处理
+requests==2.32.0           # HTTP 客户端
+ultralytics==8.0.234       # YOLO 模型推理
+
+
