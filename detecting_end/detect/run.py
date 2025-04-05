@@ -1,13 +1,15 @@
 from ultralytics import YOLO
 import os
 import torch
+from torch.serialization import add_safe_globals
+from ultralytics.nn.tasks import DetectionModel
 
-from ultralytics.nn.modules import C3
-torch.serialization.add_safe_globals([C3])
+# 将 DetectionModel 添加到安全全局对象中
+add_safe_globals([DetectionModel])
 
 def detect(file):
     model_path = os.path.join(os.path.dirname(__file__), "detect_model.pt")
-    model = torch.load(model_path, weights_only=False)
+    model = YOLO(model_path)
     results = model(file)
     people_count = 0
     for result in results[0].boxes:
