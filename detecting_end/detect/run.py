@@ -1,14 +1,6 @@
 from ultralytics import YOLO
 import os
-import torch
-from torch.serialization import add_safe_globals
-from ultralytics.nn.tasks import DetectionModel
-from torch.nn.modules.container import Sequential
-from ultralytics.nn.modules.conv import Conv
-from torch.nn.modules.conv import Conv2d
 
-# 将需要的类添加到安全全局对象中
-add_safe_globals([DetectionModel, Sequential, Conv, Conv2d])
 
 def detect(file):
     model_path = os.path.join(os.path.dirname(__file__), "detect_model.pt")
@@ -19,3 +11,8 @@ def detect(file):
         if result.cls == 0:
             people_count += 1
     return people_count
+
+if __name__ == "__main__":
+    file_path = "../test.png"  # 替换为你的图片路径
+    count = detect(file_path)
+    print(f"检测到人数: {count}")

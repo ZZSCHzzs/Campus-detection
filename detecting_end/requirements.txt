@@ -1,7 +1,8 @@
 # 核心依赖
-Flask==3.0.2               # Web 服务器框架
-opencv-python==4.8.1.78    # 图像处理
-requests==2.32.0           # HTTP 客户端
-ultralytics==8.0.234       # YOLO 模型推理
+Flask             # Web 服务器框架
+opencv-python   # 图像处理
+numpy==1.26.4            # 数值计算
+requests          # HTTP 客户端
+ultralytics       # YOLO 模型推理
 
 
