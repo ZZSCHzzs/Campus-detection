@@ -1,127 +1,141 @@
-代码功能概述
+1. 系统概述
 
-这段代码实现了一个从 WiFi 摄像头实时捕获图像、检测图像中的人数，并将检测结果上传到云服务器的功能。主要功能包括：
+本系统实现基于计算机视觉的多摄像头人数实时检测方案，主要功能包括：
 
-    从 WiFi 摄像头捕获图像：通过 RTSP 或 HTTP 协议连接到摄像头并捕获图像。
+    支持主动/被动两种检测模式
 
-    检测图像中的人数：调用 YOLO 模型（通过 detect.detect() 函数）对图像进行分析，统计人数。
+    多摄像头并发管理
 
-    上传检测结果到服务器：将检测结果（包括硬件 ID、人数和时间戳）以 JSON 格式上传到指定的服务器接口。
+    YOLOv8深度学习模型推理
 
-    定时检测：每 3 秒执行一次检测和上传操作。
+    检测结果云端同步
 
-代码模块说明
+    RESTful API服务
+2. 技术架构
+graph TD
+A[摄像头] -->|RTSP/HTTP| B{检测系统}
+B --> C[YOLOv8模型]
+C --> D[结果处理]
+D -->|HTTP POST| E[云端服务器]
+E --> F[数据分析平台]
+B -->|API| G[外部系统]
 
-1. capture_image_from_camera(camera_url)
+3. 快速入门
+环境要求
 
-    功能：从指定的 WiFi 摄像头 URL 捕获一帧图像。
+    Python 3.8+
 
-    参数：
+    RAM ≥ 2GB
 
-        camera_url：摄像头的 RTSP 或 HTTP URL（例如 rtsp://username:password@your-camera-ip:554/stream）。
+    存储空间 ≥ 500MB
+安装步骤
+sudo apt update && sudo apt install -y libjpeg-dev
 
-    返回值：捕获的图像（NumPy 数组）。
+# 安装Python依赖
+pip install -r requirements.txt
 
-    异常：如果无法连接摄像头或读取图像，抛出异常。
+# 目录结构
+.
+├── config/               # 配置文件
+├── models/               # 模型文件
+├── logs/                 # 运行日志
+└── main.py               # 主程序
+4. 配置说明
+核心配置文件 (config/settings.py)
+# 摄像头配置
+CAMERAS = {
+    "gate": "rtsp://admin:password@192.168.1.100:554/Streaming/Channels/1",
+    "lobby": "rtsp://admin:password@192.168.1.101:554/Streaming/Channels/1"
+}
 
-2. analyze_image(image_path)
+# 运行参数
+SETTINGS = {
+    "MODE": "pull",        # pull/push
+    "INTERVAL": 1,         # 检测间隔(秒)
+    "API_ENDPOINT": "http://api.example.com/v1/detections"
+}
+环境变量
+# 设置硬件ID
+export HARDWARE_ID="device_001"
 
-    功能：调用 YOLO 模型对图像进行分析，检测图像中的人数。
+# 设置调试模式
+export DEBUG_MODE="true"
+5. API文档
+被动接收接口
 
-    参数：
+Endpoint
+POST /api/push_frame/<camera_id>
+请求格式
+Content-Type: multipart/form-data
+参数说明
+参数	        类型	       必填	          说明
+camera_id	string	    是	     预配置的摄像头ID
+file	    file	    是	     JPEG格式图像文件
+响应示例
+{
+    "status": "success",
+    "camera_id": "gate",
+    "count": 5,
+    "timestamp": "2024-03-15T08:30:00Z"
+}
+6. 运行模式说明
+主动拉取模式 (Pull)
 
-        image_path：图像文件的路径。
+    特点
 
-    返回值：检测到的人数（整数）。
+        系统主动获取摄像头画面
 
-3. get_hardware_id()
+        默认1秒检测间隔
 
-    功能：获取硬件 ID。
+        需要持续摄像头连接
 
-    实现：从环境变量 HARDWARE_ID 中读取硬件 ID。如果未设置，则使用默认值 "default_hardware_id"。
+    启动命令
+    python main.py --mode pull
+被动接收模式 (Push)
 
-    返回值：硬件 ID（字符串）。
+    特点
 
-4. upload_result(hardware_id, detected_count)
+        摄像头主动推送画面
 
-    功能：将检测结果上传到服务器。
+        按需唤醒检测系统
 
-    参数：
+        支持分布式部署
 
-        hardware_id：硬件 ID。
+    启动命令
+    python main.py --mode push --port 5001
+7. 性能参数
+指标	规格
+最大摄像头数量	8路
+单帧处理时间	≤300ms (RPi4)
+网络延迟要求	≤100ms
+内存占用	常驻500MB，峰值1.2GB
+推荐硬件配置	四核CPU/4GB RAM
+8. 维护与监控
+系统监控
+# 实时资源监控
+watch -n 1 "free -m && top -bn1 | grep 'PID' -A10"
 
-        detected_count：检测到的人数。
+# 网络连接检查
+netstat -ant | grep ':5000'
+日志管理
+# 日志配置示例
+import logging
+logging.basicConfig(
+    filename='logs/system.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+故障恢复策略
+自动重启机制
+# 使用systemd服务
+[Unit]
+Description=People Detection Service
+After=network.target
 
-    实现：
+[Service]
+ExecStart=/usr/bin/python3 /opt/detection/main.py
+Restart=always
+RestartSec=10s
 
-        构造 JSON 数据，包括硬件 ID、检测人数和当前时间戳。
-
-        使用 requests.post() 将数据上传到指定的服务器接口。
-
-    返回值：服务器的响应（JSON 格式）。
-
-5. main()
-
-    功能：主函数，负责整个程序的运行逻辑。
-
-    流程：
-
-        获取硬件 ID。
-
-        进入主循环：
-
-            从摄像头捕获图像。
-
-            保存图像到本地。
-
-            调用 YOLO 模型检测人数。
-
-            将检测结果上传到服务器。
-
-            等待 3 秒后继续下一次检测。
-
-    异常处理：
-
-        捕获 KeyboardInterrupt 异常，允许用户通过 Ctrl+C 手动停止程序。
-
-        捕获其他异常并打印错误信息。
-代码运行流程
-
-    初始化：
-
-        设置摄像头 URL 和检测间隔时间。
-
-        获取硬件 ID。
-
-    主循环：
-
-        捕获图像并保存到本地。
-
-        调用 YOLO 模型检测人数。
-
-        将检测结果上传到服务器。
-
-        等待 3 秒后继续下一次检测。
-
-    退出：
-
-        用户按下 Ctrl+C 时，程序停止运行并打印提示信息。
-
-配置文件与环境变量
-
-    硬件 ID：
-
-        通过环境变量 HARDWARE_ID 设置硬件 ID。
-
-        示例：
-
-        export HARDWARE_ID="camera_001"
-
-    摄像头 URL：
-
-        替换 camera_url 为实际的摄像头 RTSP 或 HTTP URL。
-
-    服务器接口 URL：
-
-        替换 upload_result 函数中的 url 为实际的上传接口 URL。
-
+[Install]
+WantedBy=multi-user.target
