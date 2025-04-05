@@ -54,7 +54,7 @@ SIMPLE_JWT = {
 }
 
 DJOSER = {
-    'USER_ID_FIELD': 'CustomUser',
+    'USER_ID_FIELD': 'id',
 }
 
 MIDDLEWARE = [
