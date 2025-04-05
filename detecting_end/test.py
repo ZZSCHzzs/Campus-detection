@@ -1,6 +1,6 @@
 import requests
-
-url = "http://localhost:5000/api/push_frame/1"
+url = "http://smarthit.top:5000/api/push_frame/1"
+# url = "http://localhost:5000/api/push_frame/1"
 file_path = "test.png"
 
 with open(file_path, 'rb') as file:

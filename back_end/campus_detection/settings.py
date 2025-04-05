@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-5#+pkgotmtoq8#+qo)!4l7@%e24e91qb!w)6@gt9hngt0^k^9_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['smarthit.top']
 
 
 # Application definition
