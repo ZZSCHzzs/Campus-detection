@@ -5,9 +5,10 @@ from torch.serialization import add_safe_globals
 from ultralytics.nn.tasks import DetectionModel
 from torch.nn.modules.container import Sequential
 from ultralytics.nn.modules.conv import Conv
+from torch.nn.modules.conv import Conv2d
 
 # 将需要的类添加到安全全局对象中
-add_safe_globals([DetectionModel, Sequential, Conv])
+add_safe_globals([DetectionModel, Sequential, Conv, Conv2d])
 
 def detect(file):
     model_path = os.path.join(os.path.dirname(__file__), "detect_model.pt")
