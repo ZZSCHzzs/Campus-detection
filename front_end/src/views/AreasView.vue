@@ -165,7 +165,7 @@ onMounted(() => {
                                 <h3 class="floor-title">{{ floor }}F</h3>
                             </div>
                             
-                            <el-col :span="6" v-for="area in getAreasByFloor(building.areas, floor)" :key="area.id" class="card-animation">
+                            <el-col :span="5" v-for="area in getAreasByFloor(building.areas, floor)" :key="area.id" class="card-animation">
                                 <AreaCard :area="area" :expectStatus="expectStatus"
                                     @visible-change="(v) => handleCardVisibility(area.id, v)" />
                             </el-col>
