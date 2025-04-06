@@ -44,6 +44,7 @@ export interface Building {
     id: number
     name: string
     description?: string
+    areas_count: number  // 区域数量
     areas?: AreaItem[]       // 关联的区域列表
 }
 

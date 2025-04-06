@@ -21,10 +21,10 @@ class ProcessTerminalSerializer(serializers.ModelSerializer):
 
 
 class BuildingSerializer(serializers.ModelSerializer):
-    area_count = serializers.SerializerMethodField()
+    areas_count = serializers.SerializerMethodField()
     class Meta:
         model = Building
-        fields = ['id', 'name', 'description']
+        fields = ['id', 'name', 'description', 'areas_count']
     def get_area_count(self, obj):
         return Area.objects.filter(type=obj).count()
 
