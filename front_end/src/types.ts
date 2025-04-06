@@ -49,7 +49,8 @@ export interface Building {
 export interface User {
     id: number
     username: string
-    role: 'admin' | 'operator'
+    role: 'user' | 'admin'  // 修改为与后端一致的角色类型
     phone?: string
     email?: string
+    register_time?: string  // 添加注册时间字段
 }

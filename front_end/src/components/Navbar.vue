@@ -1,76 +1,126 @@
 <template>
-  <div class="header">
-    <el-menu :default-active="activeIndex" class="el-menu-demo nav-container" mode="horizontal" :ellipsis="false"
-      @select="handleSelect">
+  <div class="nav-container header">
+    <el-menu :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
+             @select="handleSelect">
       <div class="logo-container">
         <img
-          class="logo"
-          src="/favicon256.ico"
-          alt="Logo" />
+            alt="Logo"
+            class="logo"
+            src="/favicon256.ico"/>
+        <span class="site-name">校园慧感</span>
       </div>
       <el-menu-item v-for="item in content" :key="item.index" :index="item.index" class="nav-item">
-        {{ item.title }}
+        <el-icon v-if="item.icon" :size="18" class="nav-icon">
+          <component :is="item.icon"></component>
+        </el-icon>
+        <div class="nav-text">{{ item.title }}</div>
       </el-menu-item>
-      
+
       <!-- 添加弹性空间，将后续元素推到右侧 -->
       <div class="flex-grow"></div>
-      
+
       <!-- 根据登录状态显示不同内容 -->
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
           <div class="user-info">
-            <el-avatar :size="32" :icon="UserFilled"></el-avatar>
+            <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
             <span class="username">{{ authStore.username }}</span>
-            <el-icon><ArrowDown /></el-icon>
+            <el-icon>
+              <ArrowDown/>
+            </el-icon>
           </div>
           <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="settings">账户设置</el-dropdown-item>
-              <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+            <el-dropdown-menu class="custom-dropdown">
+              <el-dropdown-item command="profile">
+                <el-icon><UserFilled /></el-icon>个人中心
+              </el-dropdown-item>
+              <el-dropdown-item command="settings">
+                <el-icon><Setting /></el-icon>账户设置
+              </el-dropdown-item>
+              <el-dropdown-item command="logout" divided>
+                <el-icon><SwitchButton /></el-icon>退出登录
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
       </div>
-      
+
       <!-- 未登录时显示登录和注册按钮 -->
       <div v-else class="auth-buttons">
-        <el-button type="primary" plain size="small" @click="navigateToLogin">登录</el-button>
-        <el-button type="primary" size="small" @click="navigateToRegister">注册</el-button>
+        <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
+        <el-button size="small" type="primary" class="register-btn" @click="navigateToRegister">注册</el-button>
       </div>
     </el-menu>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import {ref, onMounted, watch, computed} from 'vue'
 import router from '../router'
-import { useAuthStore } from '../stores/auth'
-import { UserFilled, ArrowDown } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import {useRoute} from 'vue-router'
+import {useAuthStore} from '../stores/auth'
+import {UserFilled, ArrowDown, HomeFilled, Menu, DataLine, Setting, SwitchButton, Operation} from '@element-plus/icons-vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+
 
 // 获取认证store
 const authStore = useAuthStore()
+const route = useRoute()
+
+// 计算属性判断是否为管理员
+const isAdmin = computed(() => {
+  return authStore.user?.role === 'admin'
+})
 
 const content = ref([
   {
     index: '0',
     title: '首页',
     path: '/index',
+    icon: 'HomeFilled'
   },
   {
     index: '1',
     title: '区域',
     path: '/areas',
+    icon: 'Menu'
   },
   {
     index: '2',
     title: '数据大屏',
     path: '/screen',
+    icon: 'DataLine'
   },
+  {
+    index: '3',
+    title: '管理面板',
+    path: '/admin',
+    icon: 'Operation',
+  }
 ])
 
+// 根据当前路径设置激活菜单项
 const activeIndex = ref('0')
+
+// 初始化和响应路由变化
+const updateActiveIndex = () => {
+  const currentPath = route.path
+  const matchedItem = content.value.find(item => item.path === currentPath)
+  if (matchedItem) {
+    activeIndex.value = matchedItem.index
+  }
+}
+
+// 组件挂载时初始化激活菜单
+onMounted(() => {
+  updateActiveIndex()
+})
+
+// 监听路由变化
+watch(() => route.path, () => {
+  updateActiveIndex()
+})
+
 const handleSelect = (key: string) => {
   activeIndex.value = key
   router.push(content.value.find(item => item.index === key)?.path || '/')
@@ -78,12 +128,12 @@ const handleSelect = (key: string) => {
 
 // 导航到登录页面
 const navigateToLogin = () => {
-  router.push({ path: '/auth', query: { mode: 'login' } })
+  router.push({path: '/auth', query: {mode: 'login'}})
 }
 
 // 导航到注册页面
 const navigateToRegister = () => {
-  router.push({ path: '/auth', query: { mode: 'register' } })
+  router.push({path: '/auth', query: {mode: 'register'}})
 }
 
 // 处理下拉菜单命令
@@ -97,22 +147,43 @@ const handleCommand = (command: string) => {
       break
     case 'logout':
       ElMessageBox.confirm(
-        '确定要退出登录吗?',
-        '提示',
-        {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning',
-        }
+          '确定要退出登录吗?',
+          '提示',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning',
+            center: true,
+            customClass: 'logout-confirm-box'
+          }
       )
-        .then(() => {
-          authStore.logout()
-          ElMessage.success('已成功退出登录')
-          router.push('/')
-        })
-        .catch(() => {
-          // 取消退出
-        })
+          .then(async () => {
+            try {
+              // 调用store的登出方法
+              authStore.logout()
+              ElMessage({
+                message: '成功退出登录',
+                type: 'success',
+                duration: 2000
+              })
+              // 退出后跳转到首页
+              router.push('/')
+            } catch (error) {
+              console.error('退出失败:', error)
+              ElMessage({
+                message: '退出登录失败，请重试',
+                type: 'error',
+                duration: 2000
+              })
+            }
+          })
+          .catch(() => {
+            ElMessage({
+              message: '取消退出登录',
+              type: 'info',
+              duration: 2000
+            })
+          })
       break
   }
 }
@@ -123,18 +194,24 @@ const handleCommand = (command: string) => {
   display: flex;
   width: 1400px;
   margin: 0 auto;
+  justify-content: center;
   border-radius: 4px;
   background-color: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0);
 }
 
 .el-menu-demo {
-  border-bottom: 0px !important;
+  border-bottom: 0 !important;
 }
 
 .header {
   border-bottom: 2px solid #eef1ff;
   width: 100%;
   padding: 4px 0;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  transition: all 0.3s ease;
 }
 
 * {
@@ -143,16 +220,53 @@ const handleCommand = (command: string) => {
   box-sizing: border-box;
 }
 
+.site-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409EFF;
+  margin-left: 8px;
+  letter-spacing: 1px;
+}
+
 .nav-item {
   position: relative;
-  transition: all 0.3s ease;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-icon {
+  margin-right: 4px;
+}
+
+.nav-item:hover .nav-icon{
+  transform: scale(1.1);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+
+}
+.nav-item:hover .nav-text {
+  transform: scale(1.05);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+
 }
 
 .nav-item:hover {
-  background-color: #f0f2ff !important;
-  color: #409EFF;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
 }
+.nav-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0px;
+  height: 3px;
+  background-color: #409EFF;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+
+}
+
 
 .nav-item:hover::after {
   content: '';
@@ -163,7 +277,8 @@ const handleCommand = (command: string) => {
   width: 30px;
   height: 3px;
   background-color: #409EFF;
-  transition: width 0.3s ease;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+
 }
 
 .el-menu-item.is-active {
@@ -180,6 +295,7 @@ const handleCommand = (command: string) => {
   width: 40px;
   height: 3px;
   background-color: #409EFF;
+  box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
 }
 
 .logo-container {
@@ -190,12 +306,12 @@ const handleCommand = (command: string) => {
 
 .logo {
   height: 40px;
-  margin-right: 15px;
+  margin-right: 5px;
   transition: transform 0.3s ease;
 }
 
 .logo:hover {
-  transform: scale(1.1);
+  transform: scale(1.4) rotate(5deg);
 }
 
 el-menu-item {
@@ -210,7 +326,7 @@ el-menu-item {
 
 /* 覆盖默认悬停效果 */
 .el-menu--horizontal > .el-menu-item:not(.is-disabled):hover {
-  background-color: #f0f2ff !important;
+  background-color: transparent !important;
   border-bottom: none !important;
 }
 
@@ -256,13 +372,27 @@ el-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.3s;
+  padding: 4px 12px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+  background-color: #f9f9f9;
+  border: 1px solid transparent;
 }
 
 .user-info:hover {
   background-color: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-5);
+  
+}
+
+.user-avatar {
+  transition: transform 0.3s ease;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.user-info:hover .user-avatar {
+  transform: scale(1.05);
 }
 
 .username {
@@ -270,5 +400,43 @@ el-menu-item {
   font-weight: 500;
   color: var(--el-text-color-primary);
   margin: 0 4px;
+}
+
+/* 下拉菜单样式 */
+.custom-dropdown .el-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+}
+
+.custom-dropdown .el-dropdown-item i {
+  font-size: 16px;
+}
+
+/* 登出确认框样式 */
+.logout-confirm-box {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.login-btn {
+  transition: all 0.3s ease;
+  border: 1px solid #409EFF;
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+.register-btn {
+  transition: all 0.3s ease;
+}
+
+.register-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
 </style>

@@ -1,12 +1,24 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
 import { ref, computed } from 'vue'
+import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
   const accessToken = ref(localStorage.getItem('access') || '')
   const refreshToken = ref(localStorage.getItem('refresh') || '')
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const user = ref<User | null>(null)
+  
+  // 初始化时尝试从localStorage加载用户信息
+  try {
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      user.value = JSON.parse(storedUser)
+    }
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
+    localStorage.removeItem('user')
+  }
   
   // 计算属性
   const isAuthenticated = computed(() => !!accessToken.value)
@@ -23,6 +35,11 @@ export const useAuthStore = defineStore('auth', () => {
   
   // 设置用户信息
   const setUser = (userData: any) => {
+    console.log('设置用户信息:', userData) // 添加日志
+    if (!userData || !userData.username) {
+      console.error('用户数据无效或缺少用户名')
+      return
+    }
     user.value = userData
     localStorage.setItem('user', JSON.stringify(userData))
   }

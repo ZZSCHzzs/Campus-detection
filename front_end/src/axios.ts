@@ -1,27 +1,14 @@
-import axios from 'axios'
+import api, { apiService, authService } from './services/api'
 
-const apiClient = axios.create({
-  baseURL: 'http://smarthit.top:8000',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
+// 确保baseURL正确设置
+if (api.defaults.baseURL === '/api') {
+  api.defaults.baseURL = 'http://smarthit.top:8000'
+}
 
-// 请求拦截器（可用于未来添加JWT认证）
-apiClient.interceptors.request.use(config => {
-  // 此处可添加token等全局逻辑
-  return config
-}, error => {
-  return Promise.reject(error)
-})
+// 导出统一的API实例和服务
+export const apiClient = api
+export const apiServices = apiService
+export const authServices = authService
 
-// 响应拦截器
-apiClient.interceptors.response.use(response => {
-    console.log(response.data)
-  return response
-}, error => {
-  return Promise.reject(error)
-})
-
-export default apiClient
+// 默认导出，保持兼容性
+export default api

@@ -5,6 +5,8 @@ import Home from '../views/HomePage.vue';
 import Areas from '../views/AreasView.vue';
 import DataScreen from "../views/DataScreen.vue";
 import Auth from "../views/UserView.vue";
+import AdminView from '../views/Admin.vue'
+import { useAuthStore } from '../stores/auth'
 
 const routes: Array<RouteRecordRaw> = [
     {
@@ -30,12 +32,38 @@ const routes: Array<RouteRecordRaw> = [
         path: '/auth', 
         name: 'Auth',
         component: Auth,
+    },
+    {
+        path: '/admin',
+        name: 'admin',
+        component: AdminView,
+        meta: { requiresAuth: true }
     }
 ];
 
 const router = createRouter({
-    history: createWebHistory(), // 使用 HTML5 历史模式
+    history: createWebHistory(import.meta.env.BASE_URL),
     routes,
 });
 
-export default router;
+// 添加路由守卫
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
+  
+  // 检查路由是否需要认证
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    // 如果需要认证且用户未登录，重定向到登录页
+    if (!authStore.isAuthenticated) {
+      next({
+        path: '/auth',
+        query: { mode: 'login', redirect: to.fullPath }
+      })
+    } else {
+      next() // 已登录，正常跳转
+    }
+  } else {
+    next() // 不需要认证，正常跳转
+  }
+})
+
+export default router

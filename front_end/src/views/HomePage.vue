@@ -6,8 +6,8 @@ import type {AreaItem} from '../types'
 import axios from '../axios'
 
 const Hotareas = ref<AreaItem[]>([])
-const loading = ref(false) // 默认为加载状态
-// 统计项标签映射
+const loading = ref(false) 
+
 const STATS_LABELS = {
   nodes_count: '监测节点',
   terminals_count: '接入终端',
@@ -17,108 +17,95 @@ const STATS_LABELS = {
   people_count: '系统总人数'
 } as const
 
-
 const fetchHotAreas = async () => {
   try {
-    loading.value = true // 加载开始
+    loading.value = true 
     const response = await axios.get('/api/areas/popular')
-    console.log('热门区域数据:', response.data) // 添加日志查看数据
     
-    // 检查数据格式并处理
+    
     if (Array.isArray(response.data)) {
       Hotareas.value = response.data
     } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-      // 处理可能的嵌套数据结构 {data: [...]}
+      
       Hotareas.value = response.data.data
     } else {
-      console.warn('热门区域数据格式不符合预期:', response.data)
       Hotareas.value = []
     }
     
-    // 强制刷新DOM
+    
     setTimeout(() => {
       loading.value = false
     }, 100)
   } catch (error) {
     ElMessage.error('热门区域数据获取失败')
-    console.error('获取热门区域数据出错:', error)
-    Hotareas.value = [] // 确保即使出错也设置为空数组
+    Hotareas.value = [] 
   }
 }
 
-// 趋势图加载状态
-const chartLoading = ref(true)
-const chartInitFailed = ref(false) // 新增初始化失败状态
+const chartLoading = ref(false)
+const chartInitFailed = ref(false) 
 
-// 新增图表初始化
 let chart: echarts.ECharts | null = null
 const initChart = async () => {
-  chartLoading.value = true
+  chartLoading.value = false
   chartInitFailed.value = false
-  
-  // 使用nextTick确保DOM已更新
-  await nextTick()
-  
-  // 延迟执行，给DOM更多渲染时间
-  setTimeout(() => {
-    try {
-      const chartDom = document.getElementById('trend-chart')
-      if (!chartDom) {
-        console.error('找不到趋势图DOM元素')
-        chartLoading.value = false
-        // chartInitFailed.value = true
-        return
-      }
-      
-      // 如果已经存在图表实例，先销毁它
-      if (chart) {
-        chart.dispose()
-      }
-      
-      chart = echarts.init(chartDom)
-      const option = {
-        title: {text: '今日人流趋势'},
-        tooltip: {trigger: 'axis'},
-        xAxis: {type: 'category', data: ['6:00', '9:00', '12:00', '15:00', '18:00', '21:00', '24:00']},
-        yAxis: {type: 'value'},
-        series: [{
-          data: [10, 200, 100, 180, 70, 110, 20],
-          type: 'line',
-          smooth: true,
-          symbolSize: 8, // 增加数据点标识
-          lineStyle: {
-            width: 3,
-            shadowColor: 'rgba(64, 158, 255, 0.2)', // 添加线条阴影
-            shadowBlur: 12,
-            shadowOffsetY: 6
-          },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              {offset: 0, color: 'rgba(64, 158, 255, 0.4)'},
-              {offset: 1, color: 'rgba(64, 158, 255, 0.02)'}
-            ])
-          },
-          label: {
-            show: true,
-            position: 'top',
-            color: '#36b5ff',
-            fontSize: 12
-          }
-        }]
-      }
-      
-      chart.setOption(option)
-      console.log('趋势图初始化成功')
-      chartLoading.value = false
-    } catch (error) {
-      console.error('初始化趋势图出错:', error)
-      chartLoading.value = false
+  try {
+    const chartDom = document.getElementById('trend-chart')
+    if (!chartDom) {
       chartInitFailed.value = true
+      return
     }
-  }, 500) // 增加延迟时间
+    
+    if (chart) {
+      chart.dispose()
+    }
+    
+    chart = echarts.init(chartDom)
+    const option = {
+      title: {text: '今日人流趋势'},
+      tooltip: {trigger: 'axis'},
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {type: 'category', data: ['6:00', '9:00', '12:00', '15:00', '18:00', '21:00', '24:00']},
+      yAxis: {type: 'value'},
+      series: [{
+        data: [10, 200, 100, 180, 70, 110, 20],
+        type: 'line',
+        smooth: true,
+        symbolSize: 8,
+        lineStyle: {
+          width: 3,
+          shadowColor: 'rgba(64, 158, 255, 0.2)',
+          shadowBlur: 12,
+          shadowOffsetY: 6
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            {offset: 0, color: 'rgba(64, 158, 255, 0.4)'},
+            {offset: 1, color: 'rgba(64, 158, 255, 0.02)'}
+          ])
+        },
+        label: {
+          show: true,
+          position: 'top',
+          color: '#36b5ff',
+          fontSize: 12
+        }
+      }]
+    }
+    
+    chart.setOption(option)
+    chartLoading.value = false
+  } catch (error) {
+    chartLoading.value = false
+    chartInitFailed.value = true
+  }
 }
 
-// 新增统计数据结构
 interface SummaryData {
   nodes_count: number
   terminals_count: number
@@ -128,7 +115,6 @@ interface SummaryData {
   people_count: number
 }
 
-// 新增统计相关状态
 const summary = ref<SummaryData>({
   nodes_count: 0,
   terminals_count: 0,
@@ -139,17 +125,14 @@ const summary = ref<SummaryData>({
 })
 const loadingSummary = ref(false)
 
-// 新增获取统计方法
 const fetchSummary = async () => {
   try {
     loadingSummary.value = true
     const response = await axios.get('/api/summary')
-    console.log('统计数据:', response.data) // 添加日志查看数据
-    summary.value = response.data as SummaryData // 确保类型安全
+    summary.value = response.data as SummaryData 
 
   } catch (error) {
     ElMessage.error('统计信息获取失败')
-    console.error('获取统计数据出错:', error)
   } finally {
     setTimeout(() => {
       loadingSummary.value = false
@@ -158,36 +141,33 @@ const fetchSummary = async () => {
 }
 
 onMounted(async () => {
-  // 先获取数据
   await Promise.all([
     fetchHotAreas(),
     fetchSummary()
-  ]).catch(error => console.error('数据获取出错:', error))
+  ]).catch(() => ElMessage.error('数据获取出错'))
   
-  // 确保DOM完全加载后再初始化图表
   await nextTick()
   
-  // 增加更长的延迟来确保DOM已完全渲染
-  setTimeout(() => {
+  setTimeout(async () => {
+    
+    await nextTick()
     initChart()
     
-    // 监听窗口大小变化，调整图表大小
+    
     window.addEventListener('resize', () => {
       if (chart) {
         try {
           chart.resize()
         } catch (e) {
-          console.error('调整图表大小出错:', e)
+          
         }
       }
     })
-  }, 1000) // 增加延迟到1秒
+  }) 
   
-  // 每30秒自动刷新
   setInterval(fetchHotAreas, 30000)
 })
 
-// 根据负载率返回不同的进度条颜色
 const getProgressColor = (rate: number) => {
   if (rate > 0.9) return '#F56C6C'
   if (rate > 0.7) return '#E6A23C'
@@ -195,7 +175,6 @@ const getProgressColor = (rate: number) => {
   return '#67C23A'
 }
 
-// 根据负载率返回不同的标签类型
 const getTagType = (rate: number) => {
   if (rate > 0.9) return 'danger'
   if (rate > 0.7) return 'warning'
@@ -238,7 +217,6 @@ const getTagType = (rate: number) => {
         </template>
       </el-skeleton>
     </el-card>
-
 
     <el-row :gutter="20" class="mt-20">
       <el-col :span="16">
@@ -299,7 +277,7 @@ const getTagType = (rate: number) => {
           </template>
           <el-skeleton :rows="8" animated :loading="chartLoading">
             <template #default>
-              <div v-if="!chartInitFailed" id="trend-chart" style="height:320px;"></div>
+              <div v-if="!chartInitFailed" id="trend-chart" style="height:320px; width:100%;"></div>
               <div v-else class="chart-error">
                 <el-empty description="图表加载失败" :image-size="100">
                   <template #description>

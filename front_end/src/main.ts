@@ -1,9 +1,15 @@
 import { createApp } from 'vue'
-import { createPinia } from "pinia";
-import router from "./router";
-import App from './App.vue'
+import { createPinia } from 'pinia'
 
-const app = createApp(App);
-app.use(createPinia());
-app.use(router); // 注册路由
-app.mount('#app');
+import App from './App.vue'
+import router from './router'
+
+import ElementPlusPlugin from './plugins/element-plus'
+
+const app = createApp(App)
+
+app.use(createPinia())
+app.use(router)
+app.use(ElementPlusPlugin)
+
+app.mount('#app')

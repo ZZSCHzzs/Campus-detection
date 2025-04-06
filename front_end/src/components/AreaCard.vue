@@ -44,7 +44,8 @@ watch(isVisible, (newVal) => {
 
 // 计算负载率
 const loadRatio = computed(() => {
-  if (!nodeData.value || !props.area.capacity) return 0
+  if (!nodeData.value) return 0
+  if(!props.area.capacity) return -1
   return nodeData.value.detected_count / props.area.capacity
 })
 
@@ -53,7 +54,8 @@ const loadColor = computed(() => {
   const ratio = loadRatio.value
   if (ratio >= 0.9) return '#F56C6C' // 高负载 - 红色
   if (ratio >= 0.7) return '#E6A23C' // 中高负载 - 橙色
-  if (ratio >= 0.5) return '#409EFF' // 中负载 - 蓝色
+  if (ratio >= 0.5) return '#F7BA2A' // 中负载 - 黄色
+  if (ratio == -1) return '#409EFF' // 未知 - 蓝色
   return '#67C23A' // 低负载 - 绿色
 })
 
@@ -63,6 +65,7 @@ const loadStatus = computed(() => {
   if (ratio >= 0.9) return '拥挤'
   if (ratio >= 0.7) return '较拥挤'
   if (ratio >= 0.5) return '适中'
+  if (ratio == -1) return ''
   return '空闲'
 })
 
@@ -98,13 +101,19 @@ onMounted(() => {
           <div class="load-progress">
             <div class="load-label">
               <span>负载率</span>
-              <span class="load-percentage">{{ Math.round(loadRatio * 100) }}%</span>
+              <div v-if="loadRatio == -1" class="load-percentage">未知</div>
+              <div v-else>
+                <span class="load-percentage">{{ Math.round(loadRatio * 100) }}%</span>
+              </div>
+              
             </div>
             <el-progress 
-              :percentage="loadRatio * 100" 
+              :percentage="loadRatio>=0 ? loadRatio * 100 : 30" 
               :color="loadColor"
               :stroke-width="10"
+              :indeterminate="loadRatio == -1"
               :show-text="false"
+              :striped="loadRatio == -1"
             />
             <div class="load-status" :style="{ color: loadColor }">
               <el-icon><Warning v-if="loadRatio >= 0.8" /></el-icon>
