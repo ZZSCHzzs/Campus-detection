@@ -38,6 +38,8 @@
           <component 
             :is="currentComponent" 
             :title="currentModuleTitle"
+            :search-query="searchQuery"
+            @update-search="updateSearchQuery"
           ></component>
         </div>
       </div>
@@ -64,16 +66,24 @@ const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
+// 搜索查询参数
+const searchQuery = ref('')
+
 // 检查用户是否登录
 onMounted(() => {
   if (!authStore.isAuthenticated) {
     router.push('/auth?mode=login')
   }
   
-  // 从路由参数中获取模块（如果有）
+  // 从路由参数中获取模块和搜索参数（如果有）
   if (route.query.module && modules.some(m => m.name === route.query.module)) {
     activeModule.value = route.query.module
     updateCurrentComponent(route.query.module)
+  }
+  
+  // 初始化搜索查询（如果URL中有）
+  if (route.query.search) {
+    searchQuery.value = route.query.search
   }
 })
 
@@ -122,22 +132,70 @@ const updateCurrentComponent = (moduleName) => {
 
 // 处理模块切换
 const handleModuleChange = (name) => {
-  activeModule.value = name
-  updateCurrentComponent(name)
+  // 避免重复切换到相同模块
+  if (activeModule.value === name) return;
   
-  // 更新路由参数以保持状态
-  router.push({
-    query: { ...route.query, module: name }
-  })
+  // 切换模块时清空搜索条件
+  searchQuery.value = '';
+  
+  activeModule.value = name;
+  updateCurrentComponent(name);
+  
+  // 更新路由参数，仅保留必要的参数
+  router.replace({
+    path: route.path,
+    query: { 
+      module: name
+      // 不再传递搜索参数
+    }
+  });
 }
 
-// 监听路由变化，更新模块
-watch(() => route.query.module, (newModule) => {
-  if (newModule && modules.some(m => m.name === newModule) && newModule !== activeModule.value) {
-    activeModule.value = newModule
-    updateCurrentComponent(newModule)
+// 更新搜索查询
+const updateSearchQuery = (query) => {
+  // 避免重复更新相同的查询
+  if (searchQuery.value === query) return;
+  
+  searchQuery.value = query;
+  
+  // 更新路由参数，使用replace避免产生过多的历史记录
+  router.replace({
+    path: route.path,
+    query: { 
+      module: activeModule.value, 
+      search: query || undefined // 如果为空则不添加该参数
+    }
+  });
+}
+
+// 监听路由变化，使用防抖处理以避免循环更新
+let isUpdatingFromRoute = false;
+watch(() => route.query, (newQuery) => {
+  // 避免在程序内部触发的路由更新再次触发组件更新
+  if (isUpdatingFromRoute) return;
+  
+  try {
+    isUpdatingFromRoute = true;
+    
+    // 更新模块
+    const newModule = newQuery.module;
+    if (newModule && modules.some(m => m.name === newModule) && newModule !== activeModule.value) {
+      activeModule.value = newModule;
+      updateCurrentComponent(newModule);
+    }
+    
+    // 更新搜索查询
+    const newSearch = newQuery.search || '';
+    if (newSearch !== searchQuery.value) {
+      searchQuery.value = newSearch;
+    }
+  } finally {
+    // 确保标志位恢复
+    setTimeout(() => {
+      isUpdatingFromRoute = false;
+    }, 0);
   }
-})
+}, { deep: true })
 </script>
 
 <style scoped>

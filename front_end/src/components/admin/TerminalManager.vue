@@ -7,8 +7,8 @@
     :default-form-data="defaultFormData"
   >
     <template #column-status="{ row }">
-      <el-tag :type="row.status === 'online' ? 'success' : 'danger'">
-        {{ row.status === 'online' ? '在线' : '离线' }}
+      <el-tag :type="row.status === true ? 'success' : 'danger'">
+        {{ row.status === true ? '在线' : '离线' }}
       </el-tag>
     </template>
     
@@ -40,37 +40,11 @@
         </el-form-item>
       </el-form>
     </template>
+    
   </base-manager>
   
-  <!-- 节点列表对话框 -->
-  <el-dialog
-    v-model="nodesDialogVisible"
-    title="终端节点列表"
-    width="70%"
-  >
-    <el-table 
-      v-loading="loadingNodes" 
-      :data="nodesList" 
-      border 
-      style="width: 100%"
-    >
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="节点名称" />
-      <el-table-column prop="type" label="类型" />
-      <el-table-column prop="status" label="状态">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'online' ? 'success' : 'danger'">
-            {{ row.status === 'online' ? '在线' : '离线' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-    </el-table>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="nodesDialogVisible = false">关闭</el-button>
-      </span>
-    </template>
-  </el-dialog>
+  
+
 </template>
 
 <script setup>
@@ -82,8 +56,8 @@ import { ElMessage } from 'element-plus'
 // 表格列定义
 const columns = [
   { prop: 'name', label: '终端名称' },
-  { prop: 'status', label: '状态', width: '150', slot: true },
-  { prop: 'nodes_count', label: '关联节点数', width: '150', slot: true }
+  { prop: 'status', label: '状态', width: '250', slot: true },
+  { prop: 'nodes_count', label: '关联节点数', width: '250', slot: true }
 ]
 
 // 默认表单数据

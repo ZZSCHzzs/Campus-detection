@@ -34,8 +34,10 @@ export interface HardwareNode {
 export interface ProcessTerminal {
     id: number
     name: string
-    status: 'normal' | 'warning' | 'error'
+    status: boolean
+    nodes_count: number  // 关联的硬件节点数量
 }
+
 
 // 建筑类型（对应Building模型）
 export interface Building {

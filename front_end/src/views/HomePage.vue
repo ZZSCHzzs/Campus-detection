@@ -231,7 +231,7 @@ const getTagType = (rate: number) => {
                   <el-table-column label="区域名称" prop="name"/>
                   <el-table-column label="当前人数">
                     <template #default="{row}">
-                      <el-tag :type="row.detected_count > 50 ? 'warning' : 'success'" effect="light" class="animate-tag">
+                      <el-tag :type="row.detected_count > 50 ? 'warning' : 'success'" effect="light" class="animate-tag tag-40">
                         {{ row.detected_count || 0 }} 人
                       </el-tag>
                     </template>
@@ -243,8 +243,9 @@ const getTagType = (rate: number) => {
                           :percentage="Math.floor((row.detected_count / row.capacity) * 100)" 
                           :show-text="false" 
                           :color="getProgressColor(row.detected_count / row.capacity)"
-                          style="display: inline-block; width: calc(100% - 100px);"/>
-                        <el-tag :type="getTagType(row.detected_count / row.capacity)" class="animate-tag">
+                          style="display: inline-block; width: calc(100% - 100px);"
+                          class="mr-20"/>
+                        <el-tag :type="getTagType(row.detected_count / row.capacity)" class="animate-tag tag-40">
                           {{ Math.floor((row.detected_count / row.capacity) * 100) }}%
                         </el-tag>
                       </div>
@@ -567,8 +568,16 @@ const getTagType = (rate: number) => {
   margin-bottom: 20px;
 }
 
+.tag-40 {
+  width: 40px;
+}
+
 .mb-30 {
   margin-bottom: 30px;
+}
+
+.mr-20 {
+  margin-right: 20px;
 }
 
 .mt-20 {

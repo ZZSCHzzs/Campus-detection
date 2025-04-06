@@ -19,17 +19,18 @@
     <div class="toolbar" v-if="searchable">
       <div class="search-bar">
         <el-input
-          v-model="searchQuery"
+          v-model="localSearchQuery"
           placeholder="输入关键字搜索"
           clearable
-          @clear="fetchData"
+          @clear="handleSearchClear"
+          @input="handleSearchInput"
           class="search-input"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button type="primary" @click="fetchData" plain>
+        <el-button type="primary" @click="handleSearch" plain>
           <el-icon><Search /></el-icon>
           搜索
         </el-button>
@@ -43,7 +44,7 @@
     <el-card class="table-card" shadow="hover" body-style="padding: 0px;">
       <el-table
         v-loading="loading"
-        :data="tableData"
+        :data="filteredTableData"
         border
         style="width: 100%"
         stripe
@@ -92,7 +93,7 @@
         v-model:page-size="pageSize"
         :page-sizes="[10, 20, 30, 50]"
         layout="total, sizes, prev, pager, next, jumper"
-        :total="total"
+        :total="filteredTableData.length"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
         background
@@ -153,6 +154,10 @@ const props = defineProps({
     type: Boolean,
     default: true
   },
+  searchQuery: {
+    type: String,
+    default: ''
+  },
   showIndex: {
     type: Boolean,
     default: true
@@ -175,12 +180,12 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['add', 'edit', 'delete', 'submit'])
+const emit = defineEmits(['add', 'edit', 'delete', 'submit', 'update-search'])
 
 // 数据相关
 const tableData = ref([])
 const loading = ref(false)
-const searchQuery = ref('')
+const localSearchQuery = ref('')
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -198,16 +203,64 @@ const dialogTitle = computed(() => {
     : `编辑${props.itemName}`
 })
 
-// 监听搜索查询变化
-watch(searchQuery, () => {
-  if (searchQuery.value === '') {
-    fetchData()
+// 监听搜索查询参数变化
+watch(() => props.searchQuery, (newVal) => {
+  if (newVal !== localSearchQuery.value) {
+    localSearchQuery.value = newVal
+  }
+}, { immediate: true })
+
+// 处理本地搜索查询变化
+watch(localSearchQuery, (newVal) => {
+  // 避免循环更新
+  if (newVal !== props.searchQuery) {
+    emit('update-search', newVal)
   }
 })
 
-// 组件挂载时获取数据
+// 处理搜索按钮点击
+const handleSearch = () => {
+  emit('update-search', localSearchQuery.value)
+}
+
+// 处理搜索输入变化
+const handleSearchInput = () => {
+  // 如果需要即时搜索，可以取消注释下面这行
+  // emit('update-search', localSearchQuery.value)
+}
+
+// 处理清除搜索
+const handleSearchClear = () => {
+  localSearchQuery.value = ''
+  emit('update-search', '')
+}
+
+// 组件挂载时获取数据并同步搜索状态
 onMounted(() => {
   fetchData()
+  // 初始化本地搜索状态
+  if (props.searchQuery) {
+    localSearchQuery.value = props.searchQuery
+  }
+})
+
+// 添加计算属性用于前端搜索过滤
+const filteredTableData = computed(() => {
+  if (!localSearchQuery.value) {
+    return tableData.value
+  }
+  
+  const query = localSearchQuery.value.toLowerCase().trim()
+  return tableData.value.filter(row => {
+    // 检查每个字段是否包含搜索关键词
+    return Object.keys(row).some(key => {
+      const value = row[key]
+      // 跳过 null 和 undefined 值
+      if (value == null) return false
+      // 将值转为字符串后进行比较
+      return String(value).toLowerCase().includes(query)
+    })
+  })
 })
 
 // 获取数据
@@ -217,14 +270,6 @@ const fetchData = async () => {
     let url = props.resourceName
     if (!url.endsWith('/')) {
       url += '/'
-    }
-    // 暂时取消分页参数
-    // if (props.pagination) {
-    //   url += `?page=${currentPage.value}&page_size=${pageSize.value}`
-    // }
-    if (searchQuery.value) {
-    //   // 由于取消了分页参数，直接使用 ? 开始查询
-    //   url += `?search=${searchQuery.value}`
     }
     
     const response = await apiService.customGet(url)
