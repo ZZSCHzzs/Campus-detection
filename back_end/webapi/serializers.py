@@ -25,7 +25,7 @@ class BuildingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Building
         fields = ['id', 'name', 'description', 'areas_count']
-    def get_area_count(self, obj):
+    def get_areas_count(self, obj):
         return Area.objects.filter(type=obj).count()
 
 class AreaSerializer(serializers.ModelSerializer):

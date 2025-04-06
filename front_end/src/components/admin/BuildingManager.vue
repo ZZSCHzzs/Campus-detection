@@ -31,9 +31,9 @@ import BaseManager from './BaseManager.vue'
 
 // 表格列定义
 const columns = [
-  { prop: 'name', label: '建筑名称', width: '250' },
+  { prop: 'name', label: '建筑名称', width: '300' },
   { prop: 'description', label: '描述' },
-  { prop: 'areas_count', label: '区域数量', width: '150',
+  { prop: 'areas_count', label: '区域数量', width: '250',
     formatter: (row) => row.areas_count || 0 }
 ]
 
