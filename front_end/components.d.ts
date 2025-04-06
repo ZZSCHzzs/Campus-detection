@@ -12,6 +12,7 @@ declare module 'vue' {
     AreaManager: typeof import('./src/components/admin/AreaManager.vue')['default']
     BaseManager: typeof import('./src/components/admin/BaseManager.vue')['default']
     BuildingManager: typeof import('./src/components/admin/BuildingManager.vue')['default']
+    Edit: typeof import('./src/components/admin/Edit.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBreadcrumb: typeof import('element-plus/es')['ElBreadcrumb']
@@ -48,12 +49,14 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElText: typeof import('element-plus/es')['ElText']
     HistoricalDataManager: typeof import('./src/components/admin/HistoricalDataManager.vue')['default']
+    Jump: typeof import('./src/components/admin/Jump.vue')['default']
     Navbar: typeof import('./src/components/Navbar.vue')['default']
     NodeManager: typeof import('./src/components/admin/NodeManager.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TerminalManager: typeof import('./src/components/admin/TerminalManager.vue')['default']
     UserManager: typeof import('./src/components/admin/UserManager.vue')['default']
+    View: typeof import('./src/components/admin/View.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

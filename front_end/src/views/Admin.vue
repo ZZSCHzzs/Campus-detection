@@ -30,8 +30,8 @@
         <div class="admin-content">
           <div class="content-header">
             <el-breadcrumb separator="/">
-              <el-breadcrumb-item>首页</el-breadcrumb-item>
-              <el-breadcrumb-item>系统管理</el-breadcrumb-item>
+              <el-breadcrumb-item :to="{path:'/'}">首页</el-breadcrumb-item>
+              <el-breadcrumb-item :to="{path:'/admin'}">系统管理</el-breadcrumb-item>
               <el-breadcrumb-item>{{ currentModuleTitle }}</el-breadcrumb-item>
             </el-breadcrumb>
           </div>
@@ -40,6 +40,7 @@
             :title="currentModuleTitle"
             :search-query="searchQuery"
             @update-search="updateSearchQuery"
+            :data-link="dataLink"
           ></component>
         </div>
       </div>
@@ -68,6 +69,7 @@ const route = useRoute()
 
 // 搜索查询参数
 const searchQuery = ref('')
+const dataLink = ref('')
 
 // 检查用户是否登录
 onMounted(() => {
@@ -111,10 +113,10 @@ const modules = [
 ]
 
 // 激活的模块
-const activeModule = ref('users')
+const activeModule = ref('areas')
 
 // 当前显示的组件
-const currentComponent = shallowRef(modules[0].component)
+const currentComponent = shallowRef(modules[4].component)
 
 // 当前模块标题
 const currentModuleTitle = computed(() => {
@@ -137,7 +139,7 @@ const handleModuleChange = (name) => {
   
   // 切换模块时清空搜索条件
   searchQuery.value = '';
-  
+  dataLink.value = '';
   activeModule.value = name;
   updateCurrentComponent(name);
   
@@ -176,14 +178,18 @@ watch(() => route.query, (newQuery) => {
   
   try {
     isUpdatingFromRoute = true;
-    
+    dataLink.value = '';
     // 更新模块
     const newModule = newQuery.module;
     if (newModule && modules.some(m => m.name === newModule) && newModule !== activeModule.value) {
       activeModule.value = newModule;
       updateCurrentComponent(newModule);
     }
-    
+    const newData = newQuery.data || '';
+    const newId = newQuery.id || '';
+    if (newData && newId) {
+      dataLink.value = `${newData}/${newId}/${activeModule.value}`;
+    }
     // 更新搜索查询
     const newSearch = newQuery.search || '';
     if (newSearch !== searchQuery.value) {

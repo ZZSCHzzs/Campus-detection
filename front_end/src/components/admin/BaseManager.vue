@@ -142,6 +142,9 @@ const props = defineProps({
     type: String,
     required: true
   },
+  dataLink: {
+    type: String,
+  },
   itemName: {
     type: String,
     default: '记录'
@@ -268,10 +271,12 @@ const fetchData = async () => {
   loading.value = true
   try {
     let url = props.resourceName
+    if(props.dataLink) {
+      url = props.dataLink
+    }
     if (!url.endsWith('/')) {
       url += '/'
     }
-    
     const response = await apiService.customGet(url)
     
     if (response.data.results) {

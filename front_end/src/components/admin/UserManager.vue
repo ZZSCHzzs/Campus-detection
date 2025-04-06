@@ -7,7 +7,7 @@
     :default-form-data="defaultFormData"
   >
     <template #form="{ form, mode }">
-      <el-form :model="form" label-width="x100p">
+      <el-form :model="form" label-width="100px">
         <el-form-item label="用户名" required>
           <el-input v-model="form.username" placeholder="请输入用户名" />
         </el-form-item>

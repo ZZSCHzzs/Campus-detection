@@ -6,6 +6,10 @@
     :columns="columns"
     :default-form-data="defaultFormData"
   >
+    <template #column-areas_count="{ row }">
+      <el-tag>{{ row.areas_count || 0 }}</el-tag>
+      <View resource="areas" data="buildings" :id="row.id" />
+    </template>
     <template #form="{ form }">
       <el-form :model="form" label-width="100px">
         <el-form-item label="建筑名称" required>
@@ -28,13 +32,13 @@
 <script setup>
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
+import View from './View.vue'
 
 // 表格列定义
 const columns = [
   { prop: 'name', label: '建筑名称', width: '300' },
   { prop: 'description', label: '描述' },
-  { prop: 'areas_count', label: '区域数量', width: '250',
-    formatter: (row) => row.areas_count || 0 }
+  { prop: 'areas_count', label: '区域数量', width: '250', slot :true},
 ]
 
 // 默认表单数据

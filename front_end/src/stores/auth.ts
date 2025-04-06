@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
-import { ref, computed } from 'vue'
+import axios from '../services/api'
+import { ref, computed, onMounted } from 'vue'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -23,6 +23,46 @@ export const useAuthStore = defineStore('auth', () => {
   // 计算属性
   const isAuthenticated = computed(() => !!accessToken.value)
   const username = computed(() => user.value?.username || 'Unknown')
+  
+  // 监听自定义事件
+  if (typeof window !== 'undefined') {
+    // 监听token刷新事件
+    window.addEventListener('auth:token-refreshed', ((event: CustomEvent) => {
+      accessToken.value = event.detail.token
+    }) as EventListener)
+    
+    // 监听登出事件
+    window.addEventListener('auth:logout', () => {
+      logout()
+    })
+  }
+  
+  // 获取当前用户信息
+  const getCurrentUser = async () => {
+    // 如果已经有用户信息且有效，直接返回
+    if (user.value && user.value.username) {
+      return user.value
+    }
+    
+    // 如果有token但没有用户信息，尝试获取
+    if (accessToken.value) {
+      try {
+        const response = await axios.get('/auth/users/me/')
+        if (response.data) {
+          setUser(response.data)
+          return response.data
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        // 如果获取失败，可能是token已失效
+        const isValid = await verifyToken()
+        if (!isValid) {
+          logout()
+        }
+      }
+    }
+    return null
+  }
   
   // 动作
   // 设置认证信息
@@ -84,6 +124,13 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
   
+  // 登录后初始化
+  const initializeAfterLogin = async () => {
+    if (accessToken.value && !user.value) {
+      await getCurrentUser()
+    }
+  }
+  
   return {
     accessToken,
     refreshToken,
@@ -94,6 +141,8 @@ export const useAuthStore = defineStore('auth', () => {
     setUser,
     refreshAccessToken,
     verifyToken,
-    logout
+    logout,
+    getCurrentUser,
+    initializeAfterLogin
   }
 })

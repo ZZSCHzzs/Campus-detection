@@ -15,14 +15,7 @@
     <template #column-nodes_count="{ row }">
       <div class="nodes-count-cell">
         {{ row.nodes_count || 0 }}
-        <el-button 
-          type="primary" 
-          size="small" 
-          circle 
-          @click.stop="viewNodes(row.id)"
-          icon="View"
-          class="view-nodes-btn"
-        ></el-button>
+        <View resource="nodes" data="terminals" :id="row.id"/>
       </div>
     </template>
     
@@ -34,8 +27,8 @@
         
         <el-form-item label="状态">
           <el-select v-model="form.status" placeholder="请选择状态">
-            <el-option label="在线" value="online" />
-            <el-option label="离线" value="offline" />
+            <el-option label="在线" value="true" />
+            <el-option label="离线" value="false" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -52,6 +45,7 @@ import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
 import { ElMessage } from 'element-plus'
+import View from './View.vue'
 
 // 表格列定义
 const columns = [
@@ -72,29 +66,7 @@ const nodesDialogVisible = ref(false)
 const loadingNodes = ref(false)
 const currentTerminalId = ref(null)
 
-// 查看节点列表
-const viewNodes = async (terminalId) => {
-  currentTerminalId.value = terminalId
-  nodesDialogVisible.value = true
-  await loadNodes(terminalId)
-}
 
-// 加载节点列表
-const loadNodes = async (terminalId) => {
-  if (!terminalId) return
-  
-  loadingNodes.value = true
-  try {
-    const response = await apiService.customGet(`terminals/${terminalId}/nodes`)
-    nodesList.value = response.data
-  } catch (error) {
-    console.error('加载节点失败:', error)
-    ElMessage.error('加载节点列表失败')
-    nodesList.value = []
-  } finally {
-    loadingNodes.value = false
-  }
-}
 </script>
 
 <style scoped>

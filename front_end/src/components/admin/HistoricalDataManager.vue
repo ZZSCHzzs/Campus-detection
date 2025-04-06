@@ -6,6 +6,10 @@
     :columns="columns"
     :default-form-data="defaultFormData"
   >
+    <template #column-area_name="{ row }">
+      <el-tag>{{ getAreaName(row) }}</el-tag>
+      <Jump module="areas" :name="getAreaName(row)"/>
+    </template>
     <template #form="{ form }">
       <el-form :model="form" label-width="100px">
         <el-form-item label="区域" required>
@@ -44,18 +48,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
+import Jump from "./Jump.vue";
 
 // 表格列定义
 const columns = [
-  { prop: 'area_name', label: '区域名称', width: '200' },
-  { prop: 'detected_count', label: '检测人数', width: '120' },
-  { prop: 'timestamp', label: '时间戳', width: '180',
+  { prop: 'area_name', label: '区域名称', width: '250', slot:true },
+  { prop: 'detected_count', label: '检测人数', width: '200' },
+  { prop: 'timestamp', label: '时间戳',
     formatter: (row) => new Date(row.timestamp).toLocaleString() },
-  { prop: 'building_name', label: '所属建筑', width: '200' }
 ]
+const getAreaName = (row) => {
+  const area = areas.value.find(a => a.id === row.area)
+  return area ? area.name : '未知'
+}
 
 // 默认表单数据
 const defaultFormData = {
@@ -69,19 +77,19 @@ const areas = ref([])
 const loadingAreas = ref(false)
 
 // 搜索区域
-const searchAreas = async (query) => {
-  if (query !== '') {
+const fetchAreas = async () => {
     loadingAreas.value = true
     try {
-      const response = await apiService.customGet(`areas?search=${query}`)
+      const response = await apiService.getAll('areas')
       areas.value = response.data.results || response.data
     } catch (error) {
       console.error('获取区域失败:', error)
     } finally {
       loadingAreas.value = false
     }
-  } else {
-    areas.value = []
-  }
+  
 }
+onMounted(() => {
+  fetchAreas()
+})
 </script>

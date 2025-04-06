@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
+// 移除直接引入 store，避免循环依赖
+// import { useAuthStore } from '../stores/auth'
 
 // 从环境变量获取API基础URL，如果未设置则使用默认值
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://smarthit.top:8000'
@@ -24,12 +25,13 @@ api.interceptors.request.use(
   }
 )
 
-// 请求拦截器 - 添加认证token
+// 请求拦截器 - 添加认证token (优化版)
 api.interceptors.request.use(
   config => {
-    const authStore = useAuthStore()
-    if (authStore.accessToken) {
-      config.headers.Authorization = `Bearer ${authStore.accessToken}`
+    // 直接从 localStorage 获取 token，避免使用 store
+    const token = localStorage.getItem('access')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
@@ -43,28 +45,62 @@ api.interceptors.response.use(
   response => response,
   async error => {
     const originalRequest = error.config
-    const authStore = useAuthStore()
     
     // 如果是401错误且未尝试过刷新token
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       
       try {
-        // 尝试刷新token
-        const refreshSuccess = await authStore.refreshAccessToken()
+        // 获取刷新token
+        const refreshToken = localStorage.getItem('refresh')
         
-        if (refreshSuccess) {
-          // 更新认证头并重试请求
-          originalRequest.headers.Authorization = `Bearer ${authStore.accessToken}`
-          return api(originalRequest)
-        } else {
-          // 刷新失败，登出并跳转到登录页
-          authStore.logout()
+        if (refreshToken) {
+          // 尝试刷新token
+          const response = await axios.post(`${API_BASE_URL}/auth/jwt/refresh/`, {
+            refresh: refreshToken
+          })
+          
+          if (response.data && response.data.access) {
+            // 更新localStorage和认证头
+            const newToken = response.data.access
+            localStorage.setItem('access', newToken)
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            
+            // 发布自定义事件，通知token已更新
+            window.dispatchEvent(new CustomEvent('auth:token-refreshed', { 
+              detail: { token: newToken }
+            }))
+            
+            // 重试原始请求
+            return api(originalRequest)
+          }
+        }
+        
+        // 如果没有刷新token或刷新失败，清除认证状态并重定向
+        localStorage.removeItem('access')
+        localStorage.removeItem('refresh')
+        localStorage.removeItem('user')
+        
+        // 发布认证失败事件
+        window.dispatchEvent(new Event('auth:logout'))
+        
+        // 仅当不是登录相关的请求时才重定向
+        if (!originalRequest.url.includes('/auth/')) {
           window.location.href = '/auth?mode=login'
-          return Promise.reject(error)
         }
       } catch (refreshError) {
-        return Promise.reject(refreshError)
+        // 刷新失败，清除认证状态
+        localStorage.removeItem('access')
+        localStorage.removeItem('refresh')
+        localStorage.removeItem('user')
+        
+        // 发布认证失败事件
+        window.dispatchEvent(new Event('auth:logout'))
+        
+        // 仅当不是登录相关的请求时才重定向
+        if (!originalRequest.url.includes('/auth/')) {
+          window.location.href = '/auth?mode=login'
+        }
       }
     }
     
@@ -77,7 +113,8 @@ export const authService = {
   register: (userData) => api.post('/auth/users/', userData),
   login: (credentials) => api.post('/auth/jwt/create/', credentials),
   refreshToken: (refreshToken) => api.post('/auth/jwt/refresh/', { refresh: refreshToken }),
-  verifyToken: (token) => api.post('/auth/jwt/verify/', { token })
+  verifyToken: (token) => api.post('/auth/jwt/verify/', { token }),
+  getMe: () => api.get('/auth/users/me/')
 }
 
 // 通用CRUD方法

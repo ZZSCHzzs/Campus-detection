@@ -62,12 +62,23 @@ import {useAuthStore} from '../stores/auth'
 import {UserFilled, ArrowDown, HomeFilled, Menu, DataLine, Setting, SwitchButton, Operation} from '@element-plus/icons-vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 
-
-// 获取认证store
 const authStore = useAuthStore()
 const route = useRoute()
 
-// 计算属性判断是否为管理员
+// 在组件挂载后检查用户信息
+onMounted(async () => {
+  updateActiveIndex()
+  
+  // 如果已登录但没有用户信息，尝试获取
+  if (authStore.isAuthenticated && (!authStore.user || !authStore.user.username)) {
+    try {
+      await authStore.getCurrentUser()
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+    }
+  }
+})
+
 const isAdmin = computed(() => {
   return authStore.user?.role === 'admin'
 })
@@ -99,24 +110,36 @@ const content = ref([
   }
 ])
 
-// 根据当前路径设置激活菜单项
 const activeIndex = ref('0')
 
-// 初始化和响应路由变化
 const updateActiveIndex = () => {
   const currentPath = route.path
-  const matchedItem = content.value.find(item => item.path === currentPath)
+  
+  
+  if (currentPath === '/' || currentPath === '/index') {
+    activeIndex.value = '0' 
+    return
+  }
+  
+  
+  let matchedItem = content.value.find(item => item.path === currentPath)
+  
+  
+  if (!matchedItem) {
+    matchedItem = content.value.find(item => 
+      currentPath.startsWith(item.path) && item.path !== '/index'
+    )
+  }
+  
   if (matchedItem) {
     activeIndex.value = matchedItem.index
   }
 }
 
-// 组件挂载时初始化激活菜单
 onMounted(() => {
   updateActiveIndex()
 })
 
-// 监听路由变化
 watch(() => route.path, () => {
   updateActiveIndex()
 })
@@ -126,17 +149,14 @@ const handleSelect = (key: string) => {
   router.push(content.value.find(item => item.index === key)?.path || '/')
 }
 
-// 导航到登录页面
 const navigateToLogin = () => {
   router.push({path: '/auth', query: {mode: 'login'}})
 }
 
-// 导航到注册页面
 const navigateToRegister = () => {
   router.push({path: '/auth', query: {mode: 'register'}})
 }
 
-// 处理下拉菜单命令
 const handleCommand = (command: string) => {
   switch (command) {
     case 'profile':
@@ -159,14 +179,14 @@ const handleCommand = (command: string) => {
       )
           .then(async () => {
             try {
-              // 调用store的登出方法
+              
               authStore.logout()
               ElMessage({
                 message: '成功退出登录',
                 type: 'success',
                 duration: 2000
               })
-              // 退出后跳转到首页
+              
               router.push('/')
             } catch (error) {
               console.error('退出失败:', error)
@@ -266,7 +286,6 @@ const handleCommand = (command: string) => {
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
 
 }
-
 
 .nav-item:hover::after {
   content: '';

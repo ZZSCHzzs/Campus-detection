@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElLoading } from 'element-plus'
 import { Plus, Lock, User, Message } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from '../axios'
+import axios from '../services/api'
 import CryptoJS from 'crypto-js' // 添加加密库
 import { useAuthStore } from '../stores/auth' // 引入认证store
 

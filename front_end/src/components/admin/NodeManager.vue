@@ -2,6 +2,7 @@
   <base-manager
     title="硬件节点管理"
     resource-name="nodes"
+    :dataLink="props.dataLink"
     item-name="硬件节点"
     :columns="columns"
     :default-form-data="defaultFormData"
@@ -12,7 +13,10 @@
       </el-tag>
     </template>
     <template #column-terminal="{ row }">
+    <div style="display: flex; align-items: center;">
       <el-tag>{{ getTerminalName(row.terminal) }}</el-tag>
+      <Jump :module="'terminals'" :name="getTerminalName(row.terminal)" />
+    </div>
     </template>
     
     <template #form="{ form }">
@@ -23,8 +27,8 @@
         
         <el-form-item label="状态">
           <el-select v-model="form.status" placeholder="请选择状态">
-            <el-option label="在线" value="online" />
-            <el-option label="离线" value="offline" />
+            <el-option label="在线" value="true" />
+            <el-option label="离线" value="false" />
           </el-select>
         </el-form-item>
         
@@ -67,7 +71,17 @@
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
+import Jump from './Jump.vue'
+import {defineProps}  from 'vue'
 
+// 引入 props
+const props = defineProps({
+  dataLink: {
+    type: String,
+    default: ''
+  }
+})
+const dataLink = ref()
 // 表格列定义
 const columns = [
   { prop: 'name', label: '节点名称', width: '200' },
