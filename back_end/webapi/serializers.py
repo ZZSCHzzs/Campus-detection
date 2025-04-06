@@ -12,9 +12,13 @@ class HardwareNodeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'detected_count', 'terminal', 'status', 'updated_at', 'description']
 
 class ProcessTerminalSerializer(serializers.ModelSerializer):
+    nodes_count = serializers.SerializerMethodField()
     class Meta:
         model = ProcessTerminal
-        fields = ['id', 'name', 'status']
+        fields = ['id', 'name', 'status', 'nodes_count']
+    def get_nodes_count(self, obj):
+        return HardwareNode.objects.filter(terminal=obj).count()
+
 
 class BuildingSerializer(serializers.ModelSerializer):
     class Meta:
