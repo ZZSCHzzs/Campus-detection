@@ -206,6 +206,9 @@ const getTagType = (rate: number) => {
                     <el-icon v-if="key === 'people_count'" class="stat-icon"><el-icon-user /></el-icon>
                     <el-icon v-else-if="key === 'nodes_count'" class="stat-icon"><el-icon-monitor /></el-icon>
                     <el-icon v-else-if="key === 'buildings_count'" class="stat-icon"><el-icon-office-building /></el-icon>
+                    <el-icon v-else-if="key === 'terminals_count'" class="stat-icon"><el-icon-connection /></el-icon>
+                    <el-icon v-else-if="key === 'areas_count'" class="stat-icon"><el-icon-map-location /></el-icon>
+                    <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon"><el-icon-data-analysis /></el-icon>
                   </template>
                 </el-statistic>
               </el-col>

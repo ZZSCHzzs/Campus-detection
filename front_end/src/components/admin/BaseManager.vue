@@ -44,7 +44,7 @@
     <el-card class="table-card" shadow="hover" body-style="padding: 0px;">
       <el-table
         v-loading="loading"
-        :data="filteredTableData"
+        :data="paginatedData"
         border
         style="width: 100%"
         stripe
@@ -247,6 +247,13 @@ onMounted(() => {
   }
 })
 
+// 添加计算属性用于前端分页
+const paginatedData = computed(() => {
+  const startIndex = (currentPage.value - 1) * pageSize.value
+  const endIndex = startIndex + pageSize.value
+  return filteredTableData.value.slice(startIndex, endIndex)
+})
+
 // 添加计算属性用于前端搜索过滤
 const filteredTableData = computed(() => {
   if (!localSearchQuery.value) {
@@ -280,7 +287,7 @@ const fetchData = async () => {
     const response = await apiService.customGet(url)
     
     if (response.data.results) {
-      // DRF分页响应结构
+      // DRF分页响应结构 - 仍然保留兼容性
       tableData.value = response.data.results
       total.value = response.data.count
     } else {
@@ -299,13 +306,17 @@ const fetchData = async () => {
 // 处理分页大小变化
 const handleSizeChange = (size) => {
   pageSize.value = size
-  fetchData()
+  // 不再需要重新获取数据，只需更新当前页
+  if (currentPage.value * size > filteredTableData.value.length) {
+    // 如果当前页码超出了新的页面数量范围，重置为第一页
+    currentPage.value = 1
+  }
 }
 
 // 处理当前页变化
 const handleCurrentChange = (page) => {
   currentPage.value = page
-  fetchData()
+  // 不再需要重新获取数据
 }
 
 // 处理添加

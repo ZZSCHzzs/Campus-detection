@@ -53,7 +53,7 @@ import { ref, computed, markRaw, onMounted, shallowRef, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
-  User, Document, Monitor, OfficeBuilding, Operation, Histogram,
+  User, Monitor, OfficeBuilding, Location, Histogram, Camera,
   Fold, Expand
 } from '@element-plus/icons-vue'
 import UserManager from '../components/admin/UserManager.vue'
@@ -105,10 +105,10 @@ const toggleCollapse = () => {
 // 定义模块列表
 const modules = [
   { name: 'users', label: '用户管理', icon: markRaw(User), component: UserManager },
-  { name: 'nodes', label: '硬件节点', icon: markRaw(Monitor), component: NodeManager },
-  { name: 'terminals', label: '终端管理', icon: markRaw(Document), component: TerminalManager },
+  { name: 'nodes', label: '硬件节点', icon: markRaw(Camera), component: NodeManager },
+  { name: 'terminals', label: '终端管理', icon: markRaw(Monitor), component: TerminalManager },
   { name: 'buildings', label: '建筑管理', icon: markRaw(OfficeBuilding), component: BuildingManager },
-  { name: 'areas', label: '区域管理', icon: markRaw(Operation), component: AreaManager },
+  { name: 'areas', label: '区域管理', icon: markRaw(Location), component: AreaManager },
   { name: 'historical', label: '历史数据', icon: markRaw(Histogram), component: HistoricalDataManager }
 ]
 
