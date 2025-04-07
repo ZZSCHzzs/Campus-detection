@@ -27,7 +27,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['smarthit.top']
 
+TIME_ZONE = 'Asia/Shanghai'
 
+USE_TZ = True
 # Application definition
 
 INSTALLED_APPS = [
