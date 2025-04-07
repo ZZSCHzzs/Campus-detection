@@ -110,7 +110,7 @@ class AlertViewSet(viewsets.ModelViewSet):
     serializer_class = AlertSerializer
 
     @action(detail=False, methods=['get'])
-    def list(self, request):
+    def unsolved(self, request):
         alerts = self.queryset.filter(solved=False).order_by('-timestamp')
         serializer = AlertSerializer(alerts, many=True)
         return Response(serializer.data)
