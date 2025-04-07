@@ -3,6 +3,13 @@ from rest_framework import serializers
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
+    favorite_areas = serializers.PrimaryKeyRelatedField(
+        many=True,
+        read_only=True,
+    )
+    role = serializers.ChoiceField(choices=CustomUser.ROLE_CHOICES, default='user')
+    phone = serializers.CharField(max_length=20, required=False)
+    register_time = serializers.DateTimeField(read_only=True)
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'role', 'phone', 'email', 'register_time', 'favorite_areas',]
