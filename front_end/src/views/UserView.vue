@@ -332,6 +332,24 @@ onMounted(async () => {
   
   await fetchUserInfo()
 })
+
+// 格式化日期时间显示
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return '未知';
+  
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).replace(/\//g, '-');
+  } catch (e) {
+    return dateTimeStr;
+  }
+}
 </script>
 
 <template>
@@ -382,7 +400,7 @@ onMounted(async () => {
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="main-tabs">
         <el-tab-pane label="个人信息" name="profile">
           <div class="tab-content">
-            <el-card v-loading="loading" class="profile-card content-card">
+            <el-card v-loading="loading" class="profile-card content-card" :shadow="false">
               <!-- 个人资料部分 -->
               <div class="section-header">
                 <div class="section-title">
@@ -395,20 +413,20 @@ onMounted(async () => {
               </div>
               
               <div v-if="!isEditing" class="info-display">
-                <el-descriptions :column="1" border>
-                  <el-descriptions-item label="用户名">
+                <el-descriptions :column="1" border class="custom-descriptions">
+                  <el-descriptions-item label="用户名" label-class-name="custom-label" content-class-name="custom-content">
                     <el-tag size="small">{{ userInfo.username }}</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item label="邮箱">
-                    <span v-if="userInfo.email">{{ userInfo.email }}</span>
+                  <el-descriptions-item label="邮箱" label-class-name="custom-label" content-class-name="custom-content">
+                    <span v-if="userInfo.email && userInfo.email.trim() !== ''">{{ userInfo.email }}</span>
                     <el-tag v-else size="small" type="warning">未设置</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item label="电话">
-                    <span v-if="userInfo.phone">{{ userInfo.phone }}</span>
+                  <el-descriptions-item label="电话" label-class-name="custom-label" content-class-name="custom-content">
+                    <span v-if="userInfo.phone && userInfo.phone.trim() !== ''">{{ userInfo.phone }}</span>
                     <el-tag v-else size="small" type="warning">未设置</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item label="注册时间">
-                    {{ userInfo.register_time }}
+                  <el-descriptions-item label="注册时间" label-class-name="custom-label" content-class-name="custom-content">
+                    {{ formatDateTime(userInfo.register_time) }}
                   </el-descriptions-item>
                 </el-descriptions>
               </div>
@@ -473,7 +491,7 @@ onMounted(async () => {
           <div class="tab-content">
             <el-row :gutter="20">
               <el-col :md="14" :sm="24" :xs="24">
-                <el-card class="password-card content-card" shadow="hover">
+                <el-card class="password-card content-card" :shadow="false">
                   <template #header>
                     <div class="pw-card-header">
                       <span class="title">
@@ -565,7 +583,7 @@ onMounted(async () => {
               </el-col>
               
               <el-col :md="10" :sm="24" :xs="24">
-                <el-card class="security-tips-card" shadow="hover">
+                <el-card class="security-tips-card" :shadow="false">
                   <template #header>
                     <div class="security-card-header">
                       <span class="title">
@@ -621,7 +639,7 @@ onMounted(async () => {
             <div v-if="favoriteAreas.length > 0" class="favorites-container">
               <el-row :gutter="20">
                 <el-col v-for="area in favoriteAreas" :key="area.id" :xs="24" :sm="12" :md="8" :lg="8">
-                  <el-card class="favorite-item" shadow="hover">
+                  <el-card class="favorite-item" shadow="never">
                     <template #header>
                       <div class="favorite-header">
                         <h3>{{ area.name }}</h3>
@@ -880,14 +898,19 @@ onMounted(async () => {
   animation: fadeIn 0.3s ease;
 }
 
-/* 卡片共享样式 */
+/* 卡片共享样式 - 移除阴影 */
 .content-card {
   margin-bottom: 25px;
   border-radius: var(--border-radius);
   transition: all var(--transition-time);
   overflow: hidden;
-  border: none;
+  border: 1px solid var(--border-color);
   padding: 20px;
+  background-color: white;
+}
+
+.content-card:hover {
+  border-color: #e0e6ed;
 }
 
 /* 个人信息卡片样式 */
@@ -917,26 +940,39 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 
-.info-display :deep(.el-descriptions__label) {
-  width: 120px;
-  font-weight: 600;
+.custom-descriptions {
+  width: 100%;
 }
 
+.custom-descriptions :deep(.el-descriptions__body) {
+  background-color: #fcfcfc;
+}
+
+.custom-descriptions :deep(.el-descriptions__label) {
+  width: 100px;
+  font-weight: 600;
+  color: #606266;
+  background-color: #f5f7fa;
+  text-align: right;
+  padding-right: 15px;
+}
+
+.custom-descriptions :deep(.el-descriptions__content) {
+  padding: 12px 15px;
+}
+
+.custom-descriptions :deep(.el-tag) {
+  margin: 0;
+}
+
+/* 表单部分 */
 .edit-form {
   max-width: 600px;
   margin: 0 auto;
-  padding: 0;
-}
-
-.form-header {
-  margin-bottom: 20px;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 25px;
+  padding: 15px;
+  background-color: #fcfcfc;
+  border-radius: var(--border-radius);
+  border: 1px solid #ebeef5;
 }
 
 /* 密码表单样式 */
@@ -1009,10 +1045,12 @@ onMounted(async () => {
   margin-bottom: 20px;
   transition: all var(--transition-time);
   height: 100%;
+  border: 1px solid var(--border-color);
 }
 
 .favorite-item:hover {
   transform: translateY(-5px);
+  border-color: #e0e6ed;
 }
 
 .favorite-header {
