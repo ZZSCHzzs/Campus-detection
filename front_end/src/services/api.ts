@@ -13,6 +13,8 @@ const api = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
+// URL拦截器 - 确保URL以斜杠结尾
 api.interceptors.request.use(
   config => {
     if (config.url && !config.url.endsWith('/')) {
@@ -25,13 +27,13 @@ api.interceptors.request.use(
   }
 )
 
-// 请求拦截器 - 添加认证token (优化版)
+// 请求拦截器 - 添加认证token
 api.interceptors.request.use(
   config => {
-    // 直接从 localStorage 获取 token，避免使用 store
+    // 直接从localStorage获取token
     const token = localStorage.getItem('access')
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      config.headers.Authorization = `JWT ${token}` // 注意：使用JWT前缀而非Bearer
     }
     return config
   },
@@ -64,7 +66,7 @@ api.interceptors.response.use(
             // 更新localStorage和认证头
             const newToken = response.data.access
             localStorage.setItem('access', newToken)
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            originalRequest.headers.Authorization = `JWT ${newToken}` // 使用JWT前缀
             
             // 发布自定义事件，通知token已更新
             window.dispatchEvent(new CustomEvent('auth:token-refreshed', { 
@@ -89,6 +91,8 @@ api.interceptors.response.use(
           window.location.href = '/auth?mode=login'
         }
       } catch (refreshError) {
+        console.error('刷新token失败:', refreshError)
+        
         // 刷新失败，清除认证状态
         localStorage.removeItem('access')
         localStorage.removeItem('refresh')
@@ -96,11 +100,6 @@ api.interceptors.response.use(
         
         // 发布认证失败事件
         window.dispatchEvent(new Event('auth:logout'))
-        
-        // 仅当不是登录相关的请求时才重定向
-        if (!originalRequest.url.includes('/auth/')) {
-          window.location.href = '/auth?mode=login'
-        }
       }
     }
     

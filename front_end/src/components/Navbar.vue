@@ -11,7 +11,7 @@
       </div>
       <el-menu-item v-for="item in content" :key="item.index" :index="item.index" class="nav-item">
         <el-icon v-if="item.icon" :size="18" class="nav-icon">
-          <component :is="item.icon"></component>
+          <component :is="getIconComponent(item.icon)"></component>
         </el-icon>
         <div class="nav-text">{{ item.title }}</div>
       </el-menu-item>
@@ -32,10 +32,13 @@
           <template #dropdown>
             <el-dropdown-menu class="custom-dropdown">
               <el-dropdown-item command="profile">
-                <el-icon><UserFilled /></el-icon>个人中心
+                <el-icon><UserFilled /></el-icon>个人信息
               </el-dropdown-item>
-              <el-dropdown-item command="settings">
-                <el-icon><Setting /></el-icon>账户设置
+              <el-dropdown-item command="password">
+                <el-icon><Lock /></el-icon>修改密码
+              </el-dropdown-item>
+              <el-dropdown-item command="favorites">
+                <el-icon><Star /></el-icon>我的收藏
               </el-dropdown-item>
               <el-dropdown-item command="logout" divided>
                 <el-icon><SwitchButton /></el-icon>退出登录
@@ -59,7 +62,7 @@ import {ref, onMounted, watch, computed} from 'vue'
 import router from '../router'
 import {useRoute} from 'vue-router'
 import {useAuthStore} from '../stores/auth'
-import {UserFilled, ArrowDown, HomeFilled, Menu, DataLine, Setting, SwitchButton, Operation} from '@element-plus/icons-vue'
+import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, Setting, SwitchButton, Operation, Lock, Star} from '@element-plus/icons-vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 
 const authStore = useAuthStore()
@@ -110,29 +113,41 @@ const content = ref([
   }
 ])
 
+// 定义一个函数来获取正确的图标组件
+const getIconComponent = (iconName: string) => {
+  const iconMap = {
+    'HomeFilled': HomeFilled,
+    'Menu': MenuIcon,
+    'DataLine': DataLine,
+    'Operation': Operation
+  }
+  return iconMap[iconName] || HomeFilled
+}
+
+// 使用静态映射，确保路由跳转不依赖于查找
+const routePathMap = {
+  '0': '/index',
+  '1': '/areas',
+  '2': '/screen',
+  '3': '/admin'
+}
+
 const activeIndex = ref('0')
 
 const updateActiveIndex = () => {
   const currentPath = route.path
-  
   
   if (currentPath === '/' || currentPath === '/index') {
     activeIndex.value = '0' 
     return
   }
   
-  
-  let matchedItem = content.value.find(item => item.path === currentPath)
-  
-  
-  if (!matchedItem) {
-    matchedItem = content.value.find(item => 
-      currentPath.startsWith(item.path) && item.path !== '/index'
-    )
-  }
-  
-  if (matchedItem) {
-    activeIndex.value = matchedItem.index
+  // 根据当前路径反向查找对应的菜单索引
+  for (const [index, path] of Object.entries(routePathMap)) {
+    if (currentPath.startsWith(path)) {
+      activeIndex.value = index
+      return
+    }
   }
 }
 
@@ -144,9 +159,18 @@ watch(() => route.path, () => {
   updateActiveIndex()
 })
 
+// 修改handleSelect函数，使用静态映射直接导航
 const handleSelect = (key: string) => {
+  console.log('Menu item selected:', key)
   activeIndex.value = key
-  router.push(content.value.find(item => item.index === key)?.path || '/')
+  
+  const path = routePathMap[key]
+  if (path) {
+    console.log('Navigating to:', path)
+    router.push(path)
+  } else {
+    console.warn('No path found for key:', key)
+  }
 }
 
 const navigateToLogin = () => {
@@ -160,10 +184,13 @@ const navigateToRegister = () => {
 const handleCommand = (command: string) => {
   switch (command) {
     case 'profile':
-      router.push('/profile')
+      router.push({ path: '/profile', query: { tab: 'profile' } })
       break
-    case 'settings':
-      router.push('/settings')
+    case 'password':
+      router.push({ path: '/profile', query: { tab: 'password' } })
+      break
+    case 'favorites':
+      router.push({ path: '/profile', query: { tab: 'favorites' } })
       break
     case 'logout':
       ElMessageBox.confirm(

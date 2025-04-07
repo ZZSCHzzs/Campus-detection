@@ -209,22 +209,47 @@ watch(() => route.query, (newQuery) => {
   min-height: calc(100vh - 60px);
   padding: 20px;
   background-color: #f5f7fa;
+  overflow-x: hidden; /* 防止水平溢出 */
 }
 
 .admin-layout {
   display: flex;
   height: calc(100vh - 100px);
   gap: 20px;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  overflow: hidden; /* 防止内部元素溢出 */
 }
 
 .sidebar-container {
   height: 100%;
   transition: width 0.3s ease-in-out;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.collapse-width {
+  width: 64px !important;
+}
+
+.uncollapse-width {
+  width: 220px !important;
 }
 
 .content-container {
   flex: 1;
   height: 100%;
+  transition: all 0.3s ease-in-out;
+  max-width: calc(100% - 20px - 64px); /* 折叠时最大宽度 */
+  width: calc(100% - 20px - 220px); /* 展开时基础宽度 */
+}
+
+/* 当侧边栏折叠时调整内容区宽度 */
+.collapse-width + .content-container {
+  width: calc(100% - 20px - 64px);
+  max-width: none;
 }
 
 .admin-sidebar {
@@ -253,13 +278,6 @@ watch(() => route.query, (newQuery) => {
   color: var(--el-color-primary);
   font-weight: bold;
   font-size: 1.2rem;
-}
-
-.collapse-width {
-  width: 64px;
-}
-.uncollapse-width {
-  width: 220px;
 }
 
 .collapse-icon {
