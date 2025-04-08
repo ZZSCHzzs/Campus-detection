@@ -33,6 +33,119 @@
 | 404 | 资源不存在 |
 | 500 | 服务器内部错误 |
 
+### 用户认证接口
+
+#### 用户注册
+- **URL**: `/auth/users/`
+- **方法**: `POST`
+- **描述**: 创建新用户账号
+- **请求参数**:
+  ```json
+  {
+    "username": "user1",
+    "password": "securepassword",
+    "email": "user1@example.com",
+    "role": "user",
+    "phone": "13800138000"
+  }
+  ```
+- **响应示例**:
+  ```json
+  {
+    "id": 1,
+    "username": "user1",
+    "email": "user1@example.com",
+    "role": "user",
+    "phone": "13800138000"
+  }
+  ```
+
+#### 用户登录
+- **URL**: `/auth/jwt/create/`
+- **方法**: `POST`
+- **描述**: 通过用户名密码获取JWT令牌
+- **请求参数**:
+  ```json
+  {
+    "username": "user1",
+    "password": "securepassword"
+  }
+  ```
+- **响应示例**:
+  ```json
+  {
+    "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+    "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+  }
+  ```
+- **说明**: access token用于验证请求，refresh token用于刷新access token
+
+#### 刷新令牌
+- **URL**: `/auth/jwt/refresh/`
+- **方法**: `POST`
+- **描述**: 使用refresh token获取新的access token
+- **请求参数**:
+  ```json
+  {
+    "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+  }
+  ```
+- **响应示例**:
+  ```json
+  {
+    "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+  }
+  ```
+
+#### 验证令牌
+- **URL**: `/auth/jwt/verify/`
+- **方法**: `POST`
+- **描述**: 验证JWT令牌的有效性
+- **请求参数**:
+  ```json
+  {
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+  }
+  ```
+- **响应**: 
+  - 如果令牌有效，返回HTTP 200，无响应内容
+  - 如果令牌无效，返回HTTP 401
+
+#### 获取当前用户信息
+- **URL**: `/auth/users/me/`
+- **方法**: `GET`
+- **描述**: 获取当前已登录用户的详细信息
+- **请求头**: 需要包含有效的JWT令牌
+  ```
+  Authorization: JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+  ```
+- **响应示例**:
+  ```json
+  {
+    "id": 1,
+    "username": "user1",
+    "email": "user1@example.com",
+    "role": "user",
+    "phone": "13800138000",
+    "register_time": "2023-10-11T08:00:00Z",
+    "favorite_areas": [1, 3, 5]
+  }
+  ```
+
+#### 修改用户信息
+- **URL**: `/auth/users/me/`
+- **方法**: `PUT`, `PATCH`
+- **描述**: 更新当前已登录用户的信息
+- **请求头**: 需要包含有效的JWT令牌
+- **请求参数(PATCH示例)**:
+  ```json
+  {
+    "email": "newemail@example.com",
+    "phone": "13900139000"
+  }
+  ```
+- **响应**: 返回更新后的用户信息
+
 ### 如何调用ViewSet提供的接口
 
 使用DRF ViewSet时，接口调用主要区分为两种方式：
