@@ -131,12 +131,95 @@
 - **方法**: `GET`
 - **描述**: 获取区域绑定的节点信息
 
+#### 获取热门区域
+- **URL**: `/api/areas/popular`
+- **方法**: `GET`
+- **描述**: 获取人流量最多的区域列表
+- **查询参数**: `count` - 返回的区域数量，默认为5
+
+#### 获取区域历史数据
+- **URL**: `/api/areas/{id}/historical`
+- **方法**: `GET`
+- **描述**: 获取指定区域的历史人流量数据
+
+#### 收藏/取消收藏区域
+- **URL**: `/api/areas/{id}/favor`
+- **方法**: `POST`
+- **描述**: 用户收藏或取消收藏指定区域
+- **响应示例**:
+  ```json
+  {
+    "detail": "区域已收藏"
+  }
+  ```
+  或
+  ```json
+  {
+    "detail": "区域已取消收藏"
+  }
+  ```
+- **说明**: 需要用户登录后才能使用此功能
+
+#### 获取最新历史数据
+- **URL**: `/api/historical/latest`
+- **方法**: `GET`
+- **描述**: 获取最新的历史数据记录
+- **查询参数**: `count` - 返回的记录数量，默认为5
+
+#### 获取未解决的告警
+- **URL**: `/api/alerts/unsolved`
+- **方法**: `GET`
+- **描述**: 获取所有未解决的告警信息，按时间降序排列
+
+#### 解决告警
+- **URL**: `/api/alerts/{id}/solve`
+- **方法**: `POST`
+- **描述**: 将指定告警标记为已解决
+- **响应示例**:
+  ```json
+  {
+    "detail": "Alert marked as solved."
+  }
+  ```
+
+#### 获取公开告警
+- **URL**: `/api/alerts/public`
+- **方法**: `GET`
+- **描述**: 获取所有公开且未解决的告警信息，按时间降序排列
+
+#### 获取最新公告
+- **URL**: `/api/notice/latest`
+- **方法**: `GET`
+- **描述**: 获取最新的系统公告
+- **查询参数**: `count` - 返回的公告数量，默认为5
+
+#### 获取公告相关区域
+- **URL**: `/api/notice/{id}/areas`
+- **方法**: `GET`
+- **描述**: 获取与指定公告相关的所有区域
+
+#### 系统概览
+- **URL**: `/api/summary`
+- **方法**: `GET`
+- **描述**: 获取系统整体统计信息，包括节点数量、终端数量、建筑数量、区域数量、历史数据记录数量及当前总人数
+- **响应示例**:
+  ```json
+  {
+    "nodes_count": 12,
+    "terminals_count": 5,
+    "buildings_count": 3,
+    "areas_count": 20,
+    "historical_data_count": 1560,
+    "people_count": 523
+  }
+  ```
+
 ## 数据模型说明
 本项目后端主要使用Django模型定义数据结构，各模型间通过外键关系进行关联：
 - **CustomUser**：继承自`AbstractUser`
-  - 核心字段：`username`, `role`, `phone`, `email`, `register_time`
+  - 核心字段：`username`, `role`, `phone`, `email`, `register_time`, `favorite_areas`
   - 关联接口：`/api/users`
-  - 说明：用户表，用于存储登录相关信息，自定义了`groups`和`user_permissions`
+  - 说明：用户表，用于存储登录相关信息，自定义了`groups`和`user_permissions`，支持收藏区域功能
 - **HardwareNode**：硬件节点
   - 核心字段：`name`, `detected_count`, `terminal`, `status`, `updated_at`, `description`
   - 关联接口：`/api/nodes`
@@ -157,4 +240,12 @@
   - 核心字段：`area`, `detected_count`, `timestamp`
   - 关联接口：`/api/historical` (数据上传通过`/api/upload`)
   - 说明：记录监测到的历史数据，配合区域信息使用
+- **Alert**：告警模型
+  - 核心字段：`area`, `alert_type`, `grade`, `publicity`, `message`, `timestamp`, `solved`
+  - 关联接口：`/api/alerts`
+  - 说明：用于记录系统告警信息，可设置公开性，支持标记解决状态
+- **Notice**：公告模型
+  - 核心字段：`title`, `content`, `timestamp`, `related_areas`
+  - 关联接口：`/api/notice`
+  - 说明：用于发布系统公告，可关联到特定区域
 
