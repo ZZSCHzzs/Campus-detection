@@ -45,7 +45,7 @@ class BuildingViewSet(viewsets.ModelViewSet):
     def areas(self, request, pk=None):
         building = self.get_object()
         areas = Area.objects.filter(type=building)
-        serializer = AreaSerializer(areas, many=True)
+        serializer = AreaSerializer(areas, many=True, context={'request': request})
         return Response(serializer.data)    
 
 

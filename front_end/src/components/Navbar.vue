@@ -22,8 +22,8 @@
       <!-- 根据登录状态显示不同内容 -->
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
-          <div class="user-info">
-            <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
+          <div class="user-info" :class="{ 'user-info-active': isProfileRoute }">
+            <el-avatar :icon="UserFilled" :size="32" class="user-avatar" :class="{ 'avatar-active': isProfileRoute }"></el-avatar>
             <span class="username">{{ authStore.username }}</span>
             <el-icon>
               <ArrowDown/>
@@ -134,8 +134,21 @@ const routePathMap = {
 
 const activeIndex = ref('0')
 
+// 添加计算属性检测是否在profile页面
+const isProfileRoute = computed(() => {
+  return route.path.includes('/profile')
+})
+
+// 修改 updateActiveIndex 函数，使 profile 页面也能响应导航点击
 const updateActiveIndex = () => {
   const currentPath = route.path
+  
+  // 如果当前路径是个人中心页面，不激活任何导航项
+  // 但保留一个特殊标记，以便在 profile 页面也能响应点击
+  if (currentPath.includes('/profile')) {
+    activeIndex.value = ''
+    return
+  }
   
   if (currentPath === '/' || currentPath === '/index') {
     activeIndex.value = '0' 
@@ -155,19 +168,21 @@ onMounted(() => {
   updateActiveIndex()
 })
 
+// 确保路由变化时正确更新激活菜单项
 watch(() => route.path, () => {
   updateActiveIndex()
-})
+}, { immediate: true })
 
-// 修改handleSelect函数，使用静态映射直接导航
+// 修改 handleSelect 函数，确保它总是能正常工作
 const handleSelect = (key: string) => {
   console.log('Menu item selected:', key)
-  activeIndex.value = key
   
+  // 即使在 profile 页面，也允许导航到其他页面
   const path = routePathMap[key]
   if (path) {
     console.log('Navigating to:', path)
     router.push(path)
+    // 导航后应该会触发 route 的变化，进而触发 updateActiveIndex
   } else {
     console.warn('No path found for key:', key)
   }
@@ -425,16 +440,23 @@ el-menu-item {
   border: 1px solid transparent;
 }
 
-.user-info:hover {
+/* 个人中心页面激活状态 */
+.user-info-active {
   background-color: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary-light-5);
-  
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 8px rgba(64, 158, 255, 0.3);
 }
 
 .user-avatar {
   transition: transform 0.3s ease;
   border: 2px solid white;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 头像激活状态 */
+.avatar-active {
+  border: 2px solid var(--el-color-primary);
+  transform: scale(1.05);
 }
 
 .user-info:hover .user-avatar {

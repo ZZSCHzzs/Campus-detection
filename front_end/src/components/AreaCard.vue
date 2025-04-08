@@ -16,7 +16,7 @@ const nodeData = ref<HardwareNode | null>(null)
 const loading = ref(true)
 const displayBuilding = ref(props.displayBuilding || false)
 const favoriteLoading = ref(false)
-const isFavorite = ref(props.isFavorite || false)
+const isFavorite = ref(props.area.is_favorite)
 
 // 观察props.isFavorite的变化
 watch(() => props.isFavorite, (newVal) => {
