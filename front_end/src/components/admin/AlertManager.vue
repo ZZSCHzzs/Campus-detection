@@ -112,7 +112,6 @@ import { apiService } from '../../services/api'
 import Jump from './Jump.vue'
 import { defineProps } from 'vue'
 
-// 引入 props
 const props = defineProps({
   dataLink: {
     type: String,
@@ -120,7 +119,6 @@ const props = defineProps({
   }
 })
 
-// 表格列定义
 const columns = [
   { prop: 'area', label: '所属区域', width: '150', slot: true },
   { prop: 'grade', label: '告警等级', width: '120', slot: true },
@@ -132,7 +130,6 @@ const columns = [
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   area: null,
   grade: 0,
@@ -142,11 +139,9 @@ const defaultFormData = {
   solved: false
 }
 
-// 区域选择相关
 const areas = ref([])
 const loadingAreas = ref(false)
 
-// 搜索区域
 const fetchAreas = async () => {
   loadingAreas.value = true
   try {
@@ -165,7 +160,6 @@ const getAreaName = (id) => {
   return area ? area.name : '未知区域'
 }
 
-// 等级标签处理
 const getGradeLabel = (grade) => {
   const labels = ['普通', '注意', '警告', '严重']
   return labels[grade] || '未知'
@@ -176,7 +170,6 @@ const getGradeType = (grade) => {
   return types[grade] || 'info'
 }
 
-// 告警类型标签处理
 const getAlertTypeLabel = (type) => {
   const typeMap = {
     'fire': '火灾',

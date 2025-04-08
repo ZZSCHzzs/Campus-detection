@@ -4,9 +4,9 @@ import * as echarts from 'echarts'
 import {ElMessage} from 'element-plus'
 import type {AreaItem, Alert, Notice} from '../types'
 import axios from '../axios'
-import { useAuthStore } from '../stores/auth' // 导入用户状态管理
-import AreaList from '../components/AreaList.vue' // 导入区域列表组件
-// 导入所需图标
+import { useAuthStore } from '../stores/auth'
+import AreaList from '../components/AreaList.vue'
+
 import { 
   User, Monitor, OfficeBuilding, Connection, MapLocation, 
   DataAnalysis, Warning, Bell, FirstAidKit 
@@ -14,9 +14,12 @@ import {
 
 const Hotareas = ref<AreaItem[]>([])
 const loading = ref(false) 
-const favoriteAreas = ref<AreaItem[]>([]) // 添加收藏区域列表
-const isLoggedIn = ref(false) // 添加登录状态标识
-const loadingFavorites = ref(false) // 添加收藏区域加载状态
+const favoriteAreas = ref<AreaItem[]>([])
+const isLoggedIn = ref(false)
+const loadingFavorites = ref(false)
+
+// 添加首次加载标记
+const isFirstLoad = ref(true)
 
 const STATS_LABELS = {
   nodes_count: '监测节点',
@@ -29,10 +32,13 @@ const STATS_LABELS = {
 
 const fetchHotAreas = async () => {
   try {
-    loading.value = true 
+    // 只在首次加载时显示loading状态
+    if (isFirstLoad.value) {
+      loading.value = true
+    }
     const response = await axios.get('/api/areas/popular',{
       params: {
-        count: 6 // 限制返回的热门区域数量
+        count: 6
       }
     })
     if (Array.isArray(response.data)) {
@@ -42,19 +48,24 @@ const fetchHotAreas = async () => {
     } else {
       Hotareas.value = []
     }
-    setTimeout(() => {
-      loading.value = false
-    }, 100)
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loading.value = false
+      }, 100)
+    }
   } catch (error) {
     ElMessage.error('热门区域数据获取失败')
     Hotareas.value = [] 
+    if (isFirstLoad.value) {
+      loading.value = false
+    }
   }
 }
 
-const userStore = useAuthStore() // 使用用户状态store
-const favoriteAreaIds = ref<number[]>([]) // 存储收藏区域ID列表
+const userStore = useAuthStore()
+const favoriteAreaIds = ref<number[]>([])
 
-// 检查用户登录状态并获取收藏区域ID
+
 const fetchFavoriteAreas = async () => {
   try {
     isLoggedIn.value = userStore.isAuthenticated || false
@@ -71,10 +82,13 @@ const fetchFavoriteAreas = async () => {
   }
 }
 
-// 获取收藏区域的详细信息
+
 const fetchFavoriteAreasDetails = async () => {
   try {
-    loadingFavorites.value = true
+    // 只在首次加载时显示loading状态
+    if (isFirstLoad.value) {
+      loadingFavorites.value = true
+    }
     const promises = favoriteAreaIds.value.map(id => 
       axios.get(`/api/areas/${id}`)
         .then(response => response.data)
@@ -90,9 +104,11 @@ const fetchFavoriteAreasDetails = async () => {
     ElMessage.error('收藏区域数据获取失败')
     favoriteAreas.value = []
   } finally {
-    setTimeout(() => {
-      loadingFavorites.value = false
-    }, 100)
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loadingFavorites.value = false
+      }, 100)
+    }
   }
 }
 
@@ -181,64 +197,79 @@ const loadingSummary = ref(false)
 
 const fetchSummary = async () => {
   try {
-    loadingSummary.value = true
+    // 只在首次加载时显示loading状态
+    if (isFirstLoad.value) {
+      loadingSummary.value = true
+    }
     const response = await axios.get('/api/summary')
     summary.value = response.data as SummaryData 
 
   } catch (error) {
     ElMessage.error('统计信息获取失败')
   } finally {
-    setTimeout(() => {
-      loadingSummary.value = false
-    }, 100)
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loadingSummary.value = false
+      }, 100)
+    }
   }
 }
 
-// 告警和通知相关
+
 const alerts = ref<Alert[]>([])
 const notices = ref<Notice[]>([])
 const loadingAlerts = ref(false)
 const loadingNotices = ref(false)
 
-// 获取公开告警
+
 const fetchPublicAlerts = async () => {
   try {
-    loadingAlerts.value = true
+    // 只在首次加载时显示loading状态
+    if (isFirstLoad.value) {
+      loadingAlerts.value = true
+    }
     const response = await axios.get('/api/alerts/public')
     alerts.value = response.data
   } catch (error) {
     ElMessage.error('获取告警信息失败')
     alerts.value = []
   } finally {
-    setTimeout(() => {
-      loadingAlerts.value = false
-    }, 100)
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loadingAlerts.value = false
+      }, 100)
+    }
   }
 }
 
-// 获取最新通知
+
 const fetchLatestNotices = async () => {
   try {
-    loadingNotices.value = true
+    // 只在首次加载时显示loading状态
+    if (isFirstLoad.value) {
+      loadingNotices.value = true
+    }
     const response = await axios.get('/api/notice/latest')
     notices.value = response.data
   } catch (error) {
     ElMessage.error('获取通知信息失败')
     notices.value = []
   } finally {
-    setTimeout(() => {
-      loadingNotices.value = false
-    }, 100)
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loadingNotices.value = false
+      }, 100)
+    }
   }
 }
 
-// 根据告警等级获取告警类型
+
 const getAlertType = (grade: number) => {
   switch (grade) {
-    case 3: return 'error'  // 严重
-    case 2: return 'warning' // 警告
-    case 1: return 'info'    // 注意
-    default: return 'success' // 普通
+    case 3: return 'error'
+    case 2: return 'warning'
+    case 1: return 'info'
+    default: return 'success'
   }
 }
 
@@ -250,6 +281,10 @@ onMounted(async () => {
     fetchPublicAlerts(),
     fetchLatestNotices()
   ]).catch(() => ElMessage.error('数据获取出错'))
+  
+  // 完成首次加载后，将首次加载标记设为false
+  isFirstLoad.value = false
+  
   fetchFavoriteAreasDetails()
   setTimeout(async () => {
     initChart() 
@@ -264,10 +299,10 @@ onMounted(async () => {
     })
   }) 
   setInterval(fetchHotAreas, 30000)
-  // 登录后定时更新收藏区域
+
   if (isLoggedIn.value) {
     setInterval(fetchFavoriteAreas, 30000)
-    setInterval(fetchFavoriteAreasDetails, 60000) // 每分钟更新一次收藏区域数据
+    setInterval(fetchFavoriteAreasDetails, 60000)
   }
 })
 </script>

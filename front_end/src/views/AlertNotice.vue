@@ -3,62 +3,43 @@ import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import axios from '../axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Warning, Document, Plus, Check, Delete, Search, Refresh, View, InfoFilled } from '@element-plus/icons-vue'
+import { Bell, Warning, Document, Plus, Check, Delete, Search, Refresh, View, InfoFilled, Clock } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
+import type { Alert, Notice, AreaItem } from '../types'
 
-// 获取路由相关
+
 const route = useRoute()
 const router = useRouter()
 
-// 获取用户权限
+
 const authStore = useAuthStore()
 const userRole = computed(() => authStore.user?.role || '')
 const isStaffOrAdmin = computed(() => ['staff', 'admin'].includes(userRole.value))
 
-// 定义告警和通知接口
-interface Alert {
-  id: number
-  message: string
-  timestamp: string
-  area_id?: number
-  area_name?: string
-  grade: number
-  alert_type: string
-  solved: boolean
-  publicity: boolean
+
+interface ExtendedAlert extends Alert {
+  area_name?: string;
 }
 
-interface Notice {
-  id: number
-  title: string
-  content: string
-  timestamp: string
-  publisher_id?: number
-  publisher_name?: string
-  related_areas?: number[]
-}
 
-// 区域相关
-interface Area {
-  id: number;
-  name: string;
-}
+const areas = ref<AreaItem[]>([])
+const areasLoading = ref(false)
 
-// 状态定义
+
 const activeTab = ref('alerts')
 const alertsLoading = ref(false)
 const noticesLoading = ref(false)
 
-// 告警相关
-const alerts = ref<Alert[]>([])
-const alertFilter = ref('unsolved') // 'all', 'unsolved', 'solved'
+
+const alerts = ref<ExtendedAlert[]>([])
+const alertFilter = ref('unsolved')
 const alertFilterOptions = [
   { value: 'all', label: '全部告警' },
   { value: 'unsolved', label: '未处理告警' },
   { value: 'solved', label: '已处理告警' }
 ]
 
-// 通知相关
+
 const notices = ref<Notice[]>([])
 const noticeForm = reactive({
   title: '',
@@ -68,48 +49,19 @@ const noticeForm = reactive({
 const noticeDialogVisible = ref(false)
 const noticeSubmitting = ref(false)
 
-// 区域缓存和加载状态
-const areas = ref<Area[]>([])
-const areaCache = ref<Map<number, string>>(new Map())
-const pendingAreaRequests = ref<Set<number>>(new Set())
-const areasLoading = ref(false)
 
-// 数据获取队列 - 用于管理并发请求
-const fetchQueue = {
-  areas: new Set<number>(),
-  processing: false,
-  
-  // 添加区域ID到队列并开始处理
-  addAreaId(areaId: number) {
-    this.areas.add(areaId)
-    if (!this.processing) {
-      this.processQueue()
-    }
-  },
-  
-  // 处理队列中的区域请求
-  async processQueue() {
-    if (this.areas.size === 0) {
-      this.processing = false
-      return
-    }
-    
-    this.processing = true
-    const batchSize = 5 // 一次最多处理5个请求
-    const idsToFetch = [...this.areas].slice(0, batchSize)
-    
-    // 从队列中移除要处理的ID
-    idsToFetch.forEach(id => this.areas.delete(id))
-    
-    // 并行获取这些区域数据
-    await Promise.all(idsToFetch.map(id => fetchAreaById(id)))
-    
-    // 继续处理队列中剩余的请求
-    this.processQueue()
-  }
-}
+const searchText = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
 
-// 获取所有区域
+
+const alertDetailVisible = ref(false)
+const noticeDetailVisible = ref(false)
+const currentAlertDetail = ref<ExtendedAlert | null>(null)
+const currentNoticeDetail = ref<Notice | null>(null)
+
+
+
 const fetchAreas = async () => {
   if (areasLoading.value) return
   
@@ -118,136 +70,50 @@ const fetchAreas = async () => {
     const response = await axios.get('/api/areas/')
     if (Array.isArray(response.data)) {
       areas.value = response.data
-      
-      // 更新缓存
-      response.data.forEach(area => {
-        areaCache.value.set(area.id, area.name)
-      })
+      console.log('区域数据加载完成，共加载:', areas.value.length, '个区域')
+      return true
     }
   } catch (error) {
     console.error('获取区域列表失败:', error)
     ElMessage.error('获取区域列表失败')
+    return false
   } finally {
     areasLoading.value = false
   }
 }
 
-// 获取单个区域信息
-const fetchAreaById = async (areaId: number): Promise<string> => {
-  // 如果缓存中已有，直接返回
-  if (areaCache.value.has(areaId)) {
-    return areaCache.value.get(areaId) || '未知区域'
-  }
-  
-  // 如果已经在请求中，避免重复请求
-  if (pendingAreaRequests.value.has(areaId)) {
-    return '加载中...'
-  }
-  
-  pendingAreaRequests.value.add(areaId)
-  
-  try {
-    const response = await axios.get(`/api/areas/${areaId}/`)
-    if (response.data && response.data.name) {
-      const areaName = response.data.name
-      // 更新缓存
-      areaCache.value.set(areaId, areaName)
-      return areaName
-    }
-  } catch (error) {
-    console.error(`获取区域信息失败 (ID: ${areaId}):`, error)
-    // 缓存错误结果，避免重复请求出错的ID
-    areaCache.value.set(areaId, '未知区域')
-  } finally {
-    pendingAreaRequests.value.delete(areaId)
-  }
-  
-  return '未知区域'
-}
 
-// 获取区域名称的辅助函数
 const getAreaName = (areaId: number): string => {
-  // 无效ID直接返回
   if (!areaId) return '未知区域'
   
-  // 先从缓存中查找
-  if (areaCache.value.has(areaId)) {
-    return areaCache.value.get(areaId) || '未知区域'
-  }
-  
-  // 不在缓存中，添加到获取队列并返回临时值
-  fetchQueue.addAreaId(areaId)
-  return '加载中...'
+
+  const area = areas.value.find(a => a.id === areaId)
+  return area ? area.name : '未知区域'
 }
 
-// 获取通知关联的区域名称
-const getNoticeAreaNames = (areaIds: number[] = []): string[] => {
-  return areaIds.map(id => getAreaName(id)).filter(name => name !== '未知区域')
-}
 
-// 详情对话框
-const alertDetailVisible = ref(false)
-const noticeDetailVisible = ref(false)
-const currentAlertDetail = ref<Alert | null>(null)
-const currentNoticeDetail = ref<Notice | null>(null)
+const processAlertData = (alertsData: ExtendedAlert[]) => {
 
-// 搜索和分页
-const searchText = ref('')
-const currentPage = ref(1)
-const pageSize = ref(10)
-
-// 告警类型和级别映射
-const alertTypeMap = {
-  'fire': '火灾告警',
-  'crowd': '人群密度',
-  'guard': '安保告警',
-  'health': '健康告警',
-  'other': '其他告警'
-}
-
-const alertGradeMap = {
-  3: { label: '严重', type: 'danger' },
-  2: { label: '警告', type: 'warning' },
-  1: { label: '注意', type: 'info' },
-  0: { label: '普通', type: 'success' }
-}
-
-// 告警数据处理 - 主动加载区域信息
-const processAlertData = (alertsData: Alert[]) => {
-  // 设置告警数据
-  alerts.value = alertsData
-  
-  // 提取所有区域ID并预加载
-  const areaIds = alertsData
-    .filter(alert => alert.area_id && !areaCache.value.has(alert.area_id))
-    .map(alert => alert.area_id as number)
-  
-  // 添加到获取队列
-  areaIds.forEach(id => fetchQueue.addAreaId(id))
-}
-
-// 通知数据处理 - 主动加载区域信息
-const processNoticeData = (noticesData: Notice[]) => {
-  // 设置通知数据
-  notices.value = noticesData
-  
-  // 提取所有关联区域ID
-  const areaIds: number[] = []
-  noticesData.forEach(notice => {
-    if (notice.related_areas && notice.related_areas.length) {
-      notice.related_areas.forEach(id => {
-        if (!areaCache.value.has(id)) {
-          areaIds.push(id)
-        }
-      })
+  alertsData.forEach(alert => {
+    if (alert.area) {
+      alert.area_name = getAreaName(alert.area)
+      console.log(`处理告警 ID: ${alert.id}, 区域ID: ${alert.area}, 区域名称: ${alert.area_name}`)
+    } else {
+      console.log(`告警 ID: ${alert.id} 没有关联区域`)
     }
   })
   
-  // 添加到获取队列
-  areaIds.forEach(id => fetchQueue.addAreaId(id))
+
+  alerts.value = alertsData
 }
 
-// 获取告警数据
+
+const processNoticeData = (noticesData: Notice[]) => {
+
+  notices.value = noticesData
+}
+
+
 const fetchAlerts = async () => {
   alertsLoading.value = true
   try {
@@ -258,19 +124,22 @@ const fetchAlerts = async () => {
     
     const response = await axios.get(url)
     if (Array.isArray(response.data)) {
-      // 根据筛选条件处理数据
+
       let alertsData = response.data
       if (alertFilter.value === 'solved') {
         alertsData = alertsData.filter(alert => alert.solved)
       }
       
-      // 处理区域信息
+
+      console.log(`获取到 ${alertsData.length} 条告警数据`)
+      
+
       processAlertData(alertsData)
     } else {
       alerts.value = []
     }
     
-    // 检查是否需要显示详情
+
     checkUrlForDetails()
   } catch (error) {
     console.error('获取告警失败:', error)
@@ -281,7 +150,7 @@ const fetchAlerts = async () => {
   }
 }
 
-// 获取通知数据
+
 const fetchNotices = async () => {
   noticesLoading.value = true
   try {
@@ -292,7 +161,7 @@ const fetchNotices = async () => {
       notices.value = []
     }
     
-    // 检查是否需要显示详情
+
     checkUrlForDetails()
   } catch (error) {
     console.error('获取通知失败:', error)
@@ -303,7 +172,7 @@ const fetchNotices = async () => {
   }
 }
 
-// 处理告警（标记为已解决）
+
 const solveAlert = async (alertId: number) => {
   try {
     await ElMessageBox.confirm('确定将此告警标记为已解决?', '确认操作', {
@@ -314,7 +183,7 @@ const solveAlert = async (alertId: number) => {
     
     await axios.post(`/api/alerts/${alertId}/solve/`)
     ElMessage.success('告警已成功标记为已解决')
-    fetchAlerts() // 刷新告警列表
+    await fetchAlerts()
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('处理告警失败:', error)
@@ -323,7 +192,7 @@ const solveAlert = async (alertId: number) => {
   }
 }
 
-// 发布新通知
+
 const submitNotice = async () => {
   if (!noticeForm.title.trim() || !noticeForm.content.trim()) {
     ElMessage.warning('请填写完整的通知信息')
@@ -336,12 +205,12 @@ const submitNotice = async () => {
     ElMessage.success('通知发布成功')
     noticeDialogVisible.value = false
     
-    // 重置表单
+
     noticeForm.title = ''
     noticeForm.content = ''
     noticeForm.related_areas = []
     
-    fetchNotices() // 刷新通知列表
+    await fetchNotices()
   } catch (error) {
     console.error('发布通知失败:', error)
     ElMessage.error('发布通知失败')
@@ -350,7 +219,7 @@ const submitNotice = async () => {
   }
 }
 
-// 格式化日期
+
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
   return date.toLocaleString('zh-CN', {
@@ -363,17 +232,30 @@ const formatDate = (dateString: string) => {
   })
 }
 
-// 获取告警类型名称
+
 const getAlertTypeName = (type: string) => {
+    const alertTypeMap: { [key: string]: string } = {
+        fire: '火灾',
+        guard: '安保',
+        crowd: '人群聚集',
+        health: '生命危急',
+        other: '其他'
+    }
   return alertTypeMap[type] || '未知类型'
 }
 
-// 获取告警级别
+
 const getAlertGrade = (grade: number) => {
+    const alertGradeMap: { [key: number]: { label: string, type: string } } = {
+        0: { label: '普通', type: 'info' },
+        1: { label: '注意', type: 'success' },
+        2: { label: '警告', type: 'warning' },
+        3: { label: '严重', type: 'danger' }
+    }
   return alertGradeMap[grade] || { label: '未知', type: 'info' }
 }
 
-// 搜索功能
+
 const filteredAlerts = computed(() => {
   if (!searchText.value) return alerts.value
   
@@ -394,7 +276,7 @@ const filteredNotices = computed(() => {
   )
 })
 
-// 分页数据
+
 const paginatedAlerts = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
@@ -413,43 +295,48 @@ const total = computed(() => {
     : filteredNotices.value.length
 })
 
-// 页面变化处理
+
 const handlePageChange = (page: number) => {
   currentPage.value = page
 }
 
-// 切换Tab时重置页码
+
 const handleTabChange = (tab: string) => {
   currentPage.value = 1
   searchText.value = ''
   
-  // 更新URL，移除详情参数
+
   updateUrl({ tab })
 }
 
-// 初始化
-onMounted(() => {
-  // 从URL读取当前标签页
+
+onMounted(async () => {
+
   const tabParam = route.query.tab as string
   if (tabParam && ['alerts', 'notices'].includes(tabParam)) {
     activeTab.value = tabParam
   }
   
-  // 先获取所有区域信息
-  fetchAreas().then(() => {
-    // 然后获取告警和通知数据
-    fetchAlerts()
-    fetchNotices()
-  })
+
+  const areasLoaded = await fetchAreas()
+  
+
+  if (areasLoaded) {
+    await Promise.all([fetchAlerts(), fetchNotices()])
+  } else {
+
+    await Promise.all([fetchAlerts(), fetchNotices()])
+    console.warn('区域数据加载失败，告警和通知的区域信息可能不完整')
+  }
 })
 
-// 监听筛选变化
+
 const handleFilterChange = () => {
-  currentPage.value = 1 // 重置到第一页
+  currentPage.value = 1
   fetchAlerts()
 }
 
-// 刷新数据
+
 const refreshData = () => {
   if (activeTab.value === 'alerts') {
     fetchAlerts()
@@ -458,52 +345,40 @@ const refreshData = () => {
   }
 }
 
-// 显示告警详情前加载区域信息
-const prepareAlertDetail = async (alert: Alert) => {
-  // 如果有区域ID但没有区域名，先获取区域信息
-  if (alert.area_id && !areaCache.value.has(alert.area_id)) {
-    const areaName = await fetchAreaById(alert.area_id)
-    // 更新当前告警的区域名称
-    alert.area_name = areaName
+
+const prepareAlertDetail = (alert: ExtendedAlert) => {
+
+  if (alert.area && !alert.area_name) {
+    alert.area_name = getAreaName(alert.area)
   }
   
   currentAlertDetail.value = alert
   alertDetailVisible.value = true
   
-  // 更新URL
+
   updateUrl({ tab: 'alerts', alertId: alert.id })
 }
 
-// 显示通知详情前加载所有相关区域信息
-const prepareNoticeDetail = async (notice: Notice) => {
-  // 如果有关联区域，预先加载区域信息
-  if (notice.related_areas && notice.related_areas.length) {
-    // 并行加载所有区域信息
-    await Promise.all(
-      notice.related_areas
-        .filter(id => !areaCache.value.has(id))
-        .map(id => fetchAreaById(id))
-    )
-  }
-  
+
+const prepareNoticeDetail = (notice: Notice) => {
   currentNoticeDetail.value = notice
   noticeDetailVisible.value = true
   
-  // 更新URL
+
   updateUrl({ tab: 'notices', noticeId: notice.id })
 }
 
-// 查看告警详情
-const showAlertDetail = (alert: Alert) => {
+
+const showAlertDetail = (alert: ExtendedAlert) => {
   prepareAlertDetail(alert)
 }
 
-// 查看通知详情
+
 const showNoticeDetail = (notice: Notice) => {
   prepareNoticeDetail(notice)
 }
 
-// 更新URL参数
+
 const updateUrl = (params: { tab?: string, alertId?: number, noticeId?: number }) => {
   const query = { ...route.query }
   
@@ -511,11 +386,11 @@ const updateUrl = (params: { tab?: string, alertId?: number, noticeId?: number }
     query.tab = params.tab
   }
   
-  // 清除之前的ID参数
+
   delete query.alertId
   delete query.noticeId
   
-  // 添加新的ID参数
+
   if (params.alertId) {
     query.alertId = params.alertId.toString()
   }
@@ -527,7 +402,7 @@ const updateUrl = (params: { tab?: string, alertId?: number, noticeId?: number }
   router.replace({ query })
 }
 
-// 检查URL参数以显示详情
+
 const checkUrlForDetails = () => {
   const { tab, alertId, noticeId } = route.query
   
@@ -548,7 +423,7 @@ const checkUrlForDetails = () => {
   }
 }
 
-// 关闭详情对话框时更新URL
+
 const closeAlertDetail = () => {
   alertDetailVisible.value = false
   updateUrl({ tab: 'alerts' })
@@ -559,7 +434,7 @@ const closeNoticeDetail = () => {
   updateUrl({ tab: 'notices' })
 }
 
-// 监听路由变化
+
 watch(
   () => route.query,
   () => {
@@ -568,7 +443,7 @@ watch(
       activeTab.value = tabParam
     }
     
-    // 检查详情参数
+
     checkUrlForDetails()
   }
 )
@@ -590,7 +465,7 @@ watch(
       </template>
       
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="custom-tabs">
-        <!-- 告警管理标签页 -->
+
         <el-tab-pane name="alerts" lazy>
           <template #label>
             <span class="tab-label">
@@ -665,16 +540,19 @@ watch(
               </el-table-column>
               <el-table-column label="区域" width="200">
                 <template #default="scope">
-                  <div v-if="scope.row.area_name" class="area-tags">
+                  <div v-if="scope.row.area && scope.row.area_name && scope.row.area_name !== '未知区域'" class="area-tags">
                     <el-tag size="small" effect="plain" class="card-tag area-tag">{{ scope.row.area_name }}</el-tag>
                   </div>
+                  <span v-else-if="scope.row.area && (!scope.row.area_name || scope.row.area_name === '未知区域')" class="loading-area">
+                    加载区域中...
+                  </span>
                   <span v-else class="no-area">未指定区域</span>
                 </template>
               </el-table-column>
               <el-table-column label="时间" width="180">
                 <template #default="scope">
                   <div class="time-cell">
-                    <el-icon><el-icon-clock /></el-icon>
+                    <el-icon><clock /></el-icon>
                     <span class="timestamp">{{ formatDate(scope.row.timestamp) }}</span>
                   </div>
                 </template>
@@ -734,7 +612,7 @@ watch(
           </div>
         </el-tab-pane>
         
-        <!-- 通知管理标签页 -->
+
         <el-tab-pane name="notices" lazy>
           <template #label>
             <span class="tab-label">
@@ -810,7 +688,7 @@ watch(
               <el-table-column label="发布时间" width="180">
                 <template #default="scope">
                   <div class="time-cell">
-                    <el-icon><el-icon-clock /></el-icon>
+                    <el-icon><Clock /></el-icon>
                     <span class="timestamp">{{ formatDate(scope.row.timestamp) }}</span>
                   </div>
                 </template>
@@ -850,7 +728,7 @@ watch(
       </el-tabs>
     </el-card>
     
-    <!-- 发布通知对话框 -->
+
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -896,7 +774,7 @@ watch(
       </template>
     </el-dialog>
     
-    <!-- 告警详情对话框 -->
+
     <el-dialog
       v-model="alertDetailVisible"
       title="告警详情"
@@ -984,7 +862,7 @@ watch(
       </div>
     </el-dialog>
     
-    <!-- 通知详情对话框 -->
+
     <el-dialog
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1005,10 +883,10 @@ watch(
             <div class="info-value">#{{ currentNoticeDetail.id }}</div>
           </div>
           
-          <div class="info-item">
-            <div class="info-label">发布者</div>
-            <div class="info-value">{{ currentNoticeDetail.publisher_name || '未知' }}</div>
-          </div>
+
+
+
+
           
           <div class="info-item">
             <div class="info-label">发布时间</div>
@@ -1055,6 +933,7 @@ watch(
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
   overflow: hidden;
+  min-height: 600px; /* 添加最小高度 */
 }
 
 .card-header {
@@ -1135,6 +1014,7 @@ watch(
   overflow: hidden;
   margin-bottom: 20px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  min-height: 350px; /* 添加最小高度 */
 }
 
 /* 表格样式 */
@@ -1227,6 +1107,14 @@ watch(
   font-size: 13px;
 }
 
+.loading-area {
+  color: #909399;
+  font-style: italic;
+  font-size: 13px;
+  display: inline-block;
+  padding: 2px 0;
+}
+
 .action-buttons {
   display: flex;
   justify-content: center;
@@ -1269,6 +1157,7 @@ watch(
   background-color: #fafafa;
   border-radius: 8px;
   margin: 20px 0;
+  min-height: 300px; /* 添加最小高度 */
 }
 
 /* 详情对话框样式 */
@@ -1380,6 +1269,7 @@ watch(
   padding: 20px;
   margin: 20px 0;
   border-left: 4px solid #409EFF;
+  min-height: 100px; /* 添加最小高度 */
 }
 
 .message-content {

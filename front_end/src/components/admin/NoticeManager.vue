@@ -65,7 +65,6 @@ import { apiService } from '../../services/api'
 import { defineProps } from 'vue'
 import Jump from './Jump.vue'
 
-// 引入 props
 const props = defineProps({
   dataLink: {
     type: String,
@@ -73,7 +72,6 @@ const props = defineProps({
   }
 })
 
-// 表格列定义
 const columns = [
   { prop: 'title', label: '公告标题', width: '200' },
   { prop: 'content', label: '公告内容' },
@@ -82,18 +80,15 @@ const columns = [
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   title: '',
   content: '',
   related_areas: []
 }
 
-// 区域选择相关
 const areas = ref([])
 const loadingAreas = ref(false)
 
-// 搜索区域
 const fetchAreas = async () => {
   loadingAreas.value = true
   try {

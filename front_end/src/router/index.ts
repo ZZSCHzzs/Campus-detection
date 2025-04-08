@@ -1,6 +1,7 @@
 // src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
+import { ElMessage } from 'element-plus'
 import Home from '../views/HomePage.vue';
 import Areas from '../views/AreasView.vue';
 import DataScreen from "../views/DataScreen.vue";
@@ -50,7 +51,7 @@ const routes: Array<RouteRecordRaw> = [
     path: '/admin',
     name: 'admin',
     component: AdminView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, requiresAdmin: true } // 添加requiresAdmin标识
   }
 ];
 
@@ -71,8 +72,14 @@ router.beforeEach((to, from, next) => {
         path: '/auth',
         query: { mode: 'login', redirect: to.fullPath }
       })
-    } else {
-      next() // 已登录，正常跳转
+    } 
+    // 如果需要管理员权限但用户不是管理员
+    else if (to.matched.some(record => record.meta.requiresAdmin) && authStore.user?.role !== 'admin') {
+      ElMessage.error('您没有访问管理面板的权限')
+      next({ path: '/' }) // 重定向到首页
+    }
+    else {
+      next() // 已登录且有权限，正常跳转
     }
   } else {
     next() // 不需要认证，正常跳转

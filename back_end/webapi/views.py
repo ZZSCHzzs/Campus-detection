@@ -118,6 +118,8 @@ class AlertViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def solve(self, request, pk=None):
         alert = self.get_object()
+        if(alert.solved):
+            return Response({"detail": "Alert already solved."}, status=status.HTTP_400_BAD_REQUEST)
         alert.solved = True
         alert.save()
         return Response({"detail": "Alert marked as solved."})

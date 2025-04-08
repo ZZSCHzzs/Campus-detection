@@ -15,7 +15,7 @@
       </div>
     </div>
 
-    <!-- 搜索和过滤区域 -->
+
     <div class="toolbar" v-if="searchable">
       <div class="search-bar">
         <el-input
@@ -40,7 +40,7 @@
       </div>
     </div>
 
-    <!-- 数据表格 -->
+
     <el-card class="table-card" shadow="hover" body-style="padding: 0px;">
       <el-table
         v-loading="loading"
@@ -85,7 +85,7 @@
       </el-table>
     </el-card>
 
-    <!-- 分页 -->
+
     <div class="pagination-container">
       <el-pagination
         v-if="pagination"
@@ -100,7 +100,7 @@
       />
     </div>
 
-    <!-- 表单对话框 -->
+
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -185,7 +185,6 @@ const props = defineProps({
 
 const emit = defineEmits(['add', 'edit', 'delete', 'submit', 'update-search'])
 
-// 数据相关
 const tableData = ref([])
 const loading = ref(false)
 const localSearchQuery = ref('')
@@ -193,68 +192,57 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-// 表单相关
 const dialogVisible = ref(false)
-const formMode = ref('add') // 'add' 或 'edit'
+const formMode = ref('add')
 const form = ref({...props.defaultFormData})
 const submitting = ref(false)
 
-// 对话框标题
 const dialogTitle = computed(() => {
   return formMode.value === 'add' 
     ? `添加${props.itemName}` 
     : `编辑${props.itemName}`
 })
 
-// 监听搜索查询参数变化
 watch(() => props.searchQuery, (newVal) => {
   if (newVal !== localSearchQuery.value) {
     localSearchQuery.value = newVal
   }
 }, { immediate: true })
 
-// 处理本地搜索查询变化
 watch(localSearchQuery, (newVal) => {
-  // 避免循环更新
+
   if (newVal !== props.searchQuery) {
     emit('update-search', newVal)
   }
 })
 
-// 处理搜索按钮点击
 const handleSearch = () => {
   emit('update-search', localSearchQuery.value)
 }
 
-// 处理搜索输入变化
 const handleSearchInput = () => {
-  // 如果需要即时搜索，可以取消注释下面这行
-  // emit('update-search', localSearchQuery.value)
+
 }
 
-// 处理清除搜索
 const handleSearchClear = () => {
   localSearchQuery.value = ''
   emit('update-search', '')
 }
 
-// 组件挂载时获取数据并同步搜索状态
 onMounted(() => {
   fetchData()
-  // 初始化本地搜索状态
+
   if (props.searchQuery) {
     localSearchQuery.value = props.searchQuery
   }
 })
 
-// 添加计算属性用于前端分页
 const paginatedData = computed(() => {
   const startIndex = (currentPage.value - 1) * pageSize.value
   const endIndex = startIndex + pageSize.value
   return filteredTableData.value.slice(startIndex, endIndex)
 })
 
-// 添加计算属性用于前端搜索过滤
 const filteredTableData = computed(() => {
   if (!localSearchQuery.value) {
     return tableData.value
@@ -262,18 +250,17 @@ const filteredTableData = computed(() => {
   
   const query = localSearchQuery.value.toLowerCase().trim()
   return tableData.value.filter(row => {
-    // 检查每个字段是否包含搜索关键词
+
     return Object.keys(row).some(key => {
       const value = row[key]
-      // 跳过 null 和 undefined 值
+
       if (value == null) return false
-      // 将值转为字符串后进行比较
+
       return String(value).toLowerCase().includes(query)
     })
   })
 })
 
-// 获取数据
 const fetchData = async () => {
   loading.value = true
   try {
@@ -287,11 +274,11 @@ const fetchData = async () => {
     const response = await apiService.customGet(url)
     
     if (response.data.results) {
-      // DRF分页响应结构 - 仍然保留兼容性
+
       tableData.value = response.data.results
       total.value = response.data.count
     } else {
-      // 直接返回数据列表
+
       tableData.value = response.data
       total.value = response.data.length
     }
@@ -303,23 +290,20 @@ const fetchData = async () => {
   }
 }
 
-// 处理分页大小变化
 const handleSizeChange = (size) => {
   pageSize.value = size
-  // 不再需要重新获取数据，只需更新当前页
+
   if (currentPage.value * size > filteredTableData.value.length) {
-    // 如果当前页码超出了新的页面数量范围，重置为第一页
+
     currentPage.value = 1
   }
 }
 
-// 处理当前页变化
 const handleCurrentChange = (page) => {
   currentPage.value = page
-  // 不再需要重新获取数据
+
 }
 
-// 处理添加
 const handleAdd = () => {
   formMode.value = 'add'
   form.value = {...props.defaultFormData}
@@ -327,7 +311,6 @@ const handleAdd = () => {
   emit('add')
 }
 
-// 处理编辑
 const handleEdit = (row) => {
   formMode.value = 'edit'
   form.value = {...row}
@@ -335,7 +318,6 @@ const handleEdit = (row) => {
   emit('edit', row)
 }
 
-// 处理删除
 const handleDelete = (row) => {
   ElMessageBox.confirm(
     `确认删除${props.itemName} "${row.name || row.username || row.id}" 吗?`, 
@@ -361,7 +343,6 @@ const handleDelete = (row) => {
   })
 }
 
-// 提交表单
 const submitForm = async () => {
   submitting.value = true
   try {
@@ -387,7 +368,6 @@ const submitForm = async () => {
   }
 }
 
-// 关闭对话框
 const handleDialogClose = () => {
   dialogVisible.value = false
 }
