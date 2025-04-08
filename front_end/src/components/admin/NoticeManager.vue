@@ -11,7 +11,9 @@
       <div class="area-tags">
         <el-tag v-for="areaId in row.related_areas" :key="areaId" class="area-tag">
           {{ getAreaName(areaId) }}
+          <Jump :module="'areas'" :name="getAreaName(areaId)" :no_padding='true' />
         </el-tag>
+        
         <el-tag v-if="!row.related_areas || row.related_areas.length === 0" type="info">
           全局公告
         </el-tag>
@@ -61,6 +63,7 @@ import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
 import { defineProps } from 'vue'
+import Jump from './Jump.vue'
 
 // 引入 props
 const props = defineProps({

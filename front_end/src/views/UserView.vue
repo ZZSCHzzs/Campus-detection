@@ -1,13 +1,13 @@
 <script lang="ts" setup>
-import {ref, reactive, onMounted, computed, watch} from 'vue'
-import {useAuthStore} from '../stores/auth'
-import {useRoute, useRouter} from 'vue-router'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {User, Lock, Message, Edit, Star, Delete} from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { User, Lock, Message, Edit, Star, Delete } from '@element-plus/icons-vue'
 import axios from '../axios'
-import type {User as UserType, AreaItem} from '../types'
+import type { User as UserType, AreaItem } from '../types'
 import CryptoJS from 'crypto-js'  // 导入CryptoJS库用于密码加密
-import {Calendar, Check, InfoFilled, Location, Phone, Plus, View} from '@element-plus/icons-vue'
+import { Calendar, Check, InfoFilled, Location, Phone, Plus, View } from '@element-plus/icons-vue'
 import AreaCard from '../components/AreaCard.vue'
 
 const authStore = useAuthStore()
@@ -24,11 +24,11 @@ watch(() => route.query.tab, (newTab) => {
   } else {
     activeTab.value = 'profile'
   }
-}, {immediate: true})
+}, { immediate: true })
 
 // 当Tab改变时更新路由
 const handleTabChange = (tab: string) => {
-  router.push({path: '/profile', query: {tab}})
+  router.push({ path: '/profile', query: { tab } })
 }
 
 // 用户信息相关
@@ -58,22 +58,22 @@ const loading = ref(false)
 // 表单验证规则
 const profileRules = reactive({
   email: [
-    {required: true, message: '请输入邮箱地址', trigger: 'blur'},
-    {type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur'}
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
   ]
 })
 
 const passwordRules = reactive({
   current_password: [
-    {required: true, message: '请输入当前密码', trigger: 'blur'},
-    {min: 6, message: '密码长度至少为6位', trigger: 'blur'}
+    { required: true, message: '请输入当前密码', trigger: 'blur' },
+    { min: 6, message: '密码长度至少为6位', trigger: 'blur' }
   ],
   new_password: [
-    {required: true, message: '请输入新密码', trigger: 'blur'},
-    {min: 6, message: '密码长度至少为6位', trigger: 'blur'}
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码长度至少为6位', trigger: 'blur' }
   ],
   re_new_password: [
-    {required: true, message: '请确认新密码', trigger: 'blur'},
+    { required: true, message: '请确认新密码', trigger: 'blur' },
     {
       validator: (rule, value, callback) => {
         if (passwordForm.value.new_password && value !== passwordForm.value.new_password) {
@@ -122,7 +122,7 @@ const fetchUserInfo = async () => {
 
     // 更新store中的信息
     if (authStore.user) {
-      authStore.user = {...authStore.user, ...userInfo.value}
+      authStore.user = { ...authStore.user, ...userInfo.value }
     } else {
       authStore.setUser(userInfo.value)
     }
@@ -140,7 +140,7 @@ const fetchUserInfo = async () => {
       authStore.logout()
       router.push({
         path: '/auth',
-        query: {mode: 'login', redirect: '/profile'}
+        query: { mode: 'login', redirect: '/profile' }
       })
     } else {
       ElMessage.error('获取用户信息失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
@@ -185,7 +185,7 @@ const submitUserUpdate = async () => {
 
         // 更新store中的信息
         if (authStore.user) {
-          authStore.user = {...authStore.user, ...updateData}
+          authStore.user = { ...authStore.user, ...updateData }
         }
 
         ElMessage.success('用户信息更新成功')
@@ -255,7 +255,7 @@ const fetchFavoriteAreas = async () => {
   loadingFavorites.value = true
   try {
     const promises = userInfo.value.favorite_areas.map(id =>
-        axios.get(`/api/areas/${id}`).then(res => res.data)
+      axios.get(`/api/areas/${id}`).then(res => res.data)
     )
 
     const results = await Promise.all(promises)
@@ -270,7 +270,7 @@ const fetchFavoriteAreas = async () => {
 
 // 处理收藏状态变化
 const handleFavoriteChange = async (event) => {
-  const {areaId, isFavorite} = event
+  const { areaId, isFavorite } = event
 
   // 更新本地收藏列表
   if (!isFavorite) {
@@ -338,7 +338,7 @@ onMounted(async () => {
     ElMessage.warning('请先登录')
     router.push({
       path: '/auth',
-      query: {mode: 'login', redirect: '/profile'}
+      query: { mode: 'login', redirect: '/profile' }
     })
     return
   }
@@ -363,6 +363,32 @@ const formatDateTime = (dateTimeStr) => {
     return dateTimeStr;
   }
 }
+
+// 获取角色显示名称
+const getRoleDisplayName = (role: string) => {
+  switch (role) {
+    case 'admin':
+      return '管理员';
+    case 'staff':
+      return '工作人员';
+    case 'user':
+    default:
+      return '普通用户';
+  }
+}
+
+// 获取角色对应的标签类型
+const getRoleTagType = (role: string) => {
+  switch (role) {
+    case 'admin':
+      return 'danger';
+    case 'staff':
+      return 'warning';
+    case 'user':
+    default:
+      return 'primary';
+  }
+}
 </script>
 
 <template>
@@ -374,14 +400,13 @@ const formatDateTime = (dateTimeStr) => {
           <div class="user-header-text">
             <h1 class="page-title">{{ userInfo.username }}</h1>
             <div class="user-meta">
-              <el-tag :type="userInfo.role === 'admin' ? 'danger' : 'primary'" class="role-tag"
-                      effect="plain">
-                {{ userInfo.role === 'admin' ? '管理员' : '普通用户' }}
+              <el-tag :type="getRoleTagType(userInfo.role)" class="role-tag" effect="plain">
+                {{ getRoleDisplayName(userInfo.role) }}
               </el-tag>
               <span class="join-date">注册于 {{
-                  userInfo.register_time &&
-                  userInfo.register_time.split('T')[0]
-                }}</span>
+                userInfo.register_time &&
+                userInfo.register_time.split('T')[0]
+              }}</span>
             </div>
           </div>
         </div>
@@ -391,7 +416,7 @@ const formatDateTime = (dateTimeStr) => {
               <el-statistic :value="favoriteAreas.length" title="收藏区域">
                 <template #prefix>
                   <el-icon class="stat-icon">
-                    <Star/>
+                    <Star />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -400,7 +425,7 @@ const formatDateTime = (dateTimeStr) => {
               <el-statistic title="最近登录" value="今天">
                 <template #prefix>
                   <el-icon class="stat-icon">
-                    <Calendar/>
+                    <Calendar />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -409,7 +434,7 @@ const formatDateTime = (dateTimeStr) => {
               <el-statistic title="账户状态" value="正常">
                 <template #prefix>
                   <el-icon class="stat-icon">
-                    <Check/>
+                    <Check />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -428,7 +453,7 @@ const formatDateTime = (dateTimeStr) => {
               <div class="section-header">
                 <div class="section-title">
                   <el-icon :size="22" color="#409EFF">
-                    <User/>
+                    <User />
                   </el-icon>
                   <h2>个人资料</h2>
                 </div>
@@ -439,36 +464,33 @@ const formatDateTime = (dateTimeStr) => {
 
               <div v-if="!isEditing" class="info-display">
                 <el-descriptions :column="1" border class="custom-descriptions">
-                  <el-descriptions-item content-class-name="custom-content" label="用户名"
-                                        label-class-name="custom-label">
+                  <el-descriptions-item content-class-name="custom-content" label="用户名" label-class-name="custom-label">
                     <el-tag size="small">{{ userInfo.username }}</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item content-class-name="custom-content" label="邮箱"
-                                        label-class-name="custom-label">
-                                        <span v-if="userInfo.email && userInfo.email.trim() !== ''">{{
-                                            userInfo.email
-                                          }}</span>
+                  <el-descriptions-item content-class-name="custom-content" label="邮箱" label-class-name="custom-label">
+                    <span v-if="userInfo.email && userInfo.email.trim() !== ''">{{
+                      userInfo.email
+                    }}</span>
                     <el-tag v-else size="small" type="warning">未设置</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item content-class-name="custom-content" label="电话"
-                                        label-class-name="custom-label">
-                                        <span v-if="userInfo.phone && userInfo.phone.trim() !== ''">{{
-                                            userInfo.phone
-                                          }}</span>
-                    <el-tag v-else size="small" type="warning">未设置</el-tag>
+                  <el-descriptions-item content-class-name="custom-content" label="电话" label-class-name="custom-label">
+                    <span v-if="userInfo.phone && userInfo.phone.trim() !== ''">{{
+                      userInfo.phone
+                    }}</span>
+                    <el-tag v-else size="small" type="warning">未设置
+                    </el-tag>
                   </el-descriptions-item>
                   <el-descriptions-item content-class-name="custom-content" label="注册时间"
-                                        label-class-name="custom-label">
+                    label-class-name="custom-label">
                     {{ formatDateTime(userInfo.register_time) }}
                   </el-descriptions-item>
                 </el-descriptions>
               </div>
 
-              <el-form v-else ref="profileFormRef" :model="userForm" :rules="profileRules"
-                       class="edit-form" label-position="top">
+              <el-form v-else ref="profileFormRef" :model="userForm" :rules="profileRules" class="edit-form"
+                label-position="top">
                 <div class="form-header">
-                  <el-alert :closable="false" class="form-alert" show-icon title="请完善您的个人信息"
-                            type="info">
+                  <el-alert :closable="false" class="form-alert" show-icon title="请完善您的个人信息" type="info">
                     <template #default>
                       更新您的个人信息有助于我们提供更好的服务
                     </template>
@@ -478,16 +500,16 @@ const formatDateTime = (dateTimeStr) => {
                 <div class="form-body">
                   <el-form-item class="custom-form-item" label="用户名">
                     <el-input v-model="userInfo.username" class="custom-input disabled-input" disabled
-                              placeholder="用户名不可修改">
+                      placeholder="用户名不可修改">
                       <template #prefix>
                         <el-icon class="input-icon">
-                          <User/>
+                          <User />
                         </el-icon>
                       </template>
                       <template #suffix>
                         <el-tooltip content="用户名创建后不可修改" placement="top">
                           <el-icon class="info-icon">
-                            <InfoFilled/>
+                            <InfoFilled />
                           </el-icon>
                         </el-tooltip>
                       </template>
@@ -498,7 +520,7 @@ const formatDateTime = (dateTimeStr) => {
                     <el-input v-model="userForm.email" class="custom-input" placeholder="请输入邮箱地址">
                       <template #prefix>
                         <el-icon class="input-icon">
-                          <Message/>
+                          <Message />
                         </el-icon>
                       </template>
                     </el-input>
@@ -509,7 +531,7 @@ const formatDateTime = (dateTimeStr) => {
                     <el-input v-model="userForm.phone" class="custom-input" placeholder="请输入电话号码">
                       <template #prefix>
                         <el-icon class="input-icon">
-                          <Phone/>
+                          <Phone />
                         </el-icon>
                       </template>
                     </el-input>
@@ -519,10 +541,9 @@ const formatDateTime = (dateTimeStr) => {
 
                 <div class="form-actions">
                   <el-button class="cancel-btn" plain @click="cancelEdit">取消</el-button>
-                  <el-button :loading="loading" class="submit-btn" type="primary"
-                             @click="submitUserUpdate">
+                  <el-button :loading="loading" class="submit-btn" type="primary" @click="submitUserUpdate">
                     <el-icon>
-                      <Check/>
+                      <Check />
                     </el-icon>
                     <span>保存修改</span>
                   </el-button>
@@ -539,17 +560,17 @@ const formatDateTime = (dateTimeStr) => {
                 <el-card :shadow="false" class="password-card content-card">
                   <template #header>
                     <div class="pw-card-header">
-                                            <span class="title">
-                                                <el-icon :size="20">
-                                                    <Lock/>
-                                                </el-icon>
-                                                密码管理
-                                            </span>
+                      <span class="title">
+                        <el-icon :size="20">
+                          <Lock />
+                        </el-icon>
+                        密码管理
+                      </span>
                     </div>
                   </template>
 
-                  <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules"
-                           class="password-form" label-position="top" status-icon>
+                  <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" class="password-form"
+                    label-position="top" status-icon>
                     <el-alert :closable="false" class="mb-4" show-icon type="warning">
                       <template #title>
                         为保障账户安全，建议定期更换密码
@@ -560,49 +581,47 @@ const formatDateTime = (dateTimeStr) => {
                     </el-alert>
 
                     <el-form-item label="当前密码" prop="current_password">
-                      <el-input v-model="passwordForm.current_password" placeholder="请输入当前密码"
-                                show-password type="password">
+                      <el-input v-model="passwordForm.current_password" placeholder="请输入当前密码" show-password
+                        type="password">
                         <template #prefix>
                           <el-icon>
-                            <Lock/>
+                            <Lock />
                           </el-icon>
                         </template>
                       </el-input>
                     </el-form-item>
 
                     <el-form-item label="新密码" prop="new_password">
-                      <el-input v-model="passwordForm.new_password" placeholder="请输入新密码" show-password
-                                type="password" @input="updatePasswordStrength">
+                      <el-input v-model="passwordForm.new_password" placeholder="请输入新密码" show-password type="password"
+                        @input="updatePasswordStrength">
                         <template #prefix>
                           <el-icon>
-                            <Lock/>
+                            <Lock />
                           </el-icon>
                         </template>
                       </el-input>
                       <div v-if="passwordForm.new_password" class="password-strength">
                         <span>密码强度:</span>
-                        <el-progress :percentage="passwordStrength"
-                                     :status="passwordStrengthStatus" :stroke-width="8"
-                                     :text-inside="true"></el-progress>
+                        <el-progress :percentage="passwordStrength" :status="passwordStrengthStatus" :stroke-width="8"
+                          :text-inside="true"></el-progress>
                       </div>
                     </el-form-item>
 
                     <el-form-item label="确认新密码" prop="re_new_password">
-                      <el-input v-model="passwordForm.re_new_password" placeholder="请再次输入新密码"
-                                show-password type="password">
+                      <el-input v-model="passwordForm.re_new_password" placeholder="请再次输入新密码" show-password
+                        type="password">
                         <template #prefix>
                           <el-icon>
-                            <Lock/>
+                            <Lock />
                           </el-icon>
                         </template>
                       </el-input>
                     </el-form-item>
 
                     <div class="form-actions">
-                      <el-button :loading="loading" class="full-width-btn" type="primary"
-                                 @click="submitPasswordUpdate">
+                      <el-button :loading="loading" class="full-width-btn" type="primary" @click="submitPasswordUpdate">
                         <el-icon>
-                          <Check/>
+                          <Check />
                         </el-icon>
                         确认修改密码
                       </el-button>
@@ -615,19 +634,18 @@ const formatDateTime = (dateTimeStr) => {
                 <el-card :shadow="false" class="security-tips-card">
                   <template #header>
                     <div class="security-card-header">
-                                            <span class="title">
-                                                <el-icon :size="20">
-                                                    <InfoFilled/>
-                                                </el-icon>
-                                                安全提示
-                                            </span>
+                      <span class="title">
+                        <el-icon :size="20">
+                          <InfoFilled />
+                        </el-icon>
+                        安全提示
+                      </span>
                     </div>
                   </template>
 
                   <div class="security-tips">
                     <el-timeline>
-                      <el-timeline-item icon="Warning" size="large" timestamp="重要提示"
-                                        type="primary">
+                      <el-timeline-item icon="Warning" size="large" timestamp="重要提示" type="primary">
                         密码是您账户的唯一防线，请妥善保管
                       </el-timeline-item>
                       <el-timeline-item icon="Check" type="success">
@@ -655,13 +673,13 @@ const formatDateTime = (dateTimeStr) => {
             <div class="favorites-header">
               <div class="header-title">
                 <el-icon :size="22" color="#409EFF">
-                  <Star/>
+                  <Star />
                 </el-icon>
                 <h2>我收藏的区域</h2>
               </div>
               <el-button type="primary" @click="router.push('/areas')">
                 <el-icon>
-                  <Plus/>
+                  <Plus />
                 </el-icon>
                 <span>浏览所有区域</span>
               </el-button>
@@ -671,11 +689,10 @@ const formatDateTime = (dateTimeStr) => {
               <el-skeleton v-if="loadingFavorites" :count="3" :loading="loadingFavorites" animated>
                 <template #template>
                   <div style="padding: 14px;">
-                    <el-skeleton-item style="width: 50%;" variant="h3"/>
-                    <div
-                        style="display: flex; align-items: center; margin-top: 16px; justify-content: space-between;">
-                      <el-skeleton-item style="margin-right: 16px; width: 30%;" variant="text"/>
-                      <el-skeleton-item style="width: 30%;" variant="text"/>
+                    <el-skeleton-item style="width: 50%;" variant="h3" />
+                    <div style="display: flex; align-items: center; margin-top: 16px; justify-content: space-between;">
+                      <el-skeleton-item style="margin-right: 16px; width: 30%;" variant="text" />
+                      <el-skeleton-item style="width: 30%;" variant="text" />
                     </div>
                   </div>
                 </template>
@@ -683,8 +700,8 @@ const formatDateTime = (dateTimeStr) => {
 
               <el-row v-else :gutter="20">
                 <el-col v-for="area in favoriteAreas" :key="area.id" :lg="8" :md="8" :sm="12" :xs="24"
-                        class="favorite-col">
-                  <AreaCard :area="area" :isFavorite="true"/>
+                  class="favorite-col">
+                  <AreaCard :area="area" :isFavorite="true" @favorite-change="handleFavoriteChange" />
                 </el-col>
               </el-row>
             </div>
@@ -692,7 +709,7 @@ const formatDateTime = (dateTimeStr) => {
             <el-empty v-else class="empty-favorites" description="您还没有收藏任何区域">
               <template #image>
                 <el-icon :size="60" color="#909399">
-                  <Star/>
+                  <Star />
                 </el-icon>
               </template>
               <el-button type="primary" @click="router.push('/areas')">浏览区域</el-button>
@@ -746,7 +763,7 @@ const formatDateTime = (dateTimeStr) => {
 .user-header {
   background-color: #f7faff;
   background-image: linear-gradient(to right, rgba(236, 245, 255, 0.8), rgba(243, 248, 255, 0.5)),
-  repeating-linear-gradient(45deg, rgba(200, 222, 255, 0.12), rgba(200, 222, 255, 0.12) 15px, rgba(255, 255, 255, 0.5) 15px, rgba(255, 255, 255, 0.5) 30px);
+    repeating-linear-gradient(45deg, rgba(200, 222, 255, 0.12), rgba(200, 222, 255, 0.12) 15px, rgba(255, 255, 255, 0.5) 15px, rgba(255, 255, 255, 0.5) 30px);
   color: #333;
   padding: 30px 20px;
   border-radius: var(--border-radius);
@@ -887,9 +904,10 @@ const formatDateTime = (dateTimeStr) => {
   font-weight: 600;
 }
 
-.main-tabs :deep(.el-tabs__active-bar) {
-  height: 3px;
-  background-color: var(--primary-color);
+/* 修复激活条样式 */
+:deep(.el-tabs__active-bar) {
+  height: 5px !important;
+  bottom: -2px !important;
 }
 
 .tab-content {

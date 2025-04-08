@@ -235,7 +235,7 @@ const fetchLatestNotices = async () => {
 // 根据告警等级获取告警类型
 const getAlertType = (grade: number) => {
   switch (grade) {
-    case 3: return 'danger'  // 严重
+    case 3: return 'error'  // 严重
     case 2: return 'warning' // 警告
     case 1: return 'info'    // 注意
     default: return 'success' // 普通
@@ -373,20 +373,22 @@ onMounted(async () => {
                 <el-alert
                   v-for="alert in alerts"
                   :key="alert.id"
-                  :title="alert.message"
                   :type="getAlertType(alert.grade)"
                   show-icon
-                  class="animated-alert"
+                  class="animated-alert mb-10"
                 >
                   <template #icon>
-                    <el-icon v-if="alert.alert_type === 'fire'"></el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'guard'"><Bell /></el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'crowd'"><User /></el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'health'"><FirstAidKit /></el-icon>
-                    <el-icon v-else><Warning /></el-icon>
+                  <el-icon v-if="alert.alert_type === 'fire'"><Warning /></el-icon>
+                  <el-icon v-else-if="alert.alert_type === 'guard'"><Bell /></el-icon>
+                  <el-icon v-else-if="alert.alert_type === 'crowd'"><User /></el-icon>
+                  <el-icon v-else-if="alert.alert_type === 'health'"><FirstAidKit /></el-icon>
+                  <el-icon v-else><Warning /></el-icon>
                   </template>
                   <template #default>
-                    <router-link to="/alerts" class="alert-link">查看详情</router-link>
+                  <div class="alert-content">
+                    <span class="alert-message">{{ alert.message }}</span>
+                    <router-link :to="`/alerts?tab=alerts&alertId=${alert.id}`" class="alert-link">查看详情</router-link>
+                  </div>
                   </template>
                 </el-alert>
               </div>
@@ -406,7 +408,6 @@ onMounted(async () => {
                 <el-alert
                   v-for="notice in notices"
                   :key="notice.id"
-                  :title="notice.title"
                   type="info"
                   show-icon
                   class="animated-alert mt-10"
@@ -415,7 +416,11 @@ onMounted(async () => {
                     <el-icon><Bell /></el-icon>
                   </template>
                   <template #default>
-                    <router-link to="/notices" class="alert-link">查看详情</router-link>
+                    <div class="alert-content">
+                    <span class="alert-message">{{ notice.content }}</span>
+                    <router-link :to="`/alerts?tab=notices&noticeId=${notice.id}`" class="alert-link">查看详情</router-link>
+                  </div>
+                    
                   </template>
                 </el-alert>
               </div>
@@ -707,6 +712,10 @@ onMounted(async () => {
 
 .mt-30 {
   margin-top: 30px;
+}
+
+.mb-10{
+  margin-bottom: 10px;
 }
 
 .home-container {

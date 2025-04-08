@@ -8,6 +8,7 @@ import { ElMessage } from 'element-plus'
 const props = defineProps<{
   module: string
   name: string
+  no_padding?: boolean
 }>()
 
 const router = useRouter()
@@ -21,15 +22,21 @@ const handleJump = () => {
   }
 }
 
+const isNoPadding = props.no_padding || false
+
+const className = isNoPadding ? 'no-padding' : ''
+
 </script>
 
 <template>
-            <el-button type="primary" size="small" @click="handleJump()" text>
-              <el-icon><Link /></el-icon>
-            </el-button>
+  <el-button :class="className" type="primary" size="small" @click="handleJump()" text>
+    <el-icon><Link /></el-icon>
+  </el-button>
 </template>
 
 <style scoped>
-
+.no-padding {
+  padding: 0;
+}
 
 </style>

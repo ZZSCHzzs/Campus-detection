@@ -62,7 +62,7 @@ import {ref, onMounted, watch, computed} from 'vue'
 import router from '../router'
 import {useRoute} from 'vue-router'
 import {useAuthStore} from '../stores/auth'
-import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, Setting, SwitchButton, Operation, Lock, Star} from '@element-plus/icons-vue'
+import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, Setting, SwitchButton, Operation, Lock, Star, Bell} from '@element-plus/icons-vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 
 const authStore = useAuthStore()
@@ -107,6 +107,12 @@ const content = ref([
   },
   {
     index: '3',
+    title: '告警与通知',
+    path: '/alerts',
+    icon: 'Bell'
+  },
+  {
+    index: '4',
     title: '管理面板',
     path: '/admin',
     icon: 'Operation',
@@ -119,6 +125,7 @@ const getIconComponent = (iconName: string) => {
     'HomeFilled': HomeFilled,
     'Menu': MenuIcon,
     'DataLine': DataLine,
+    'Bell': Bell,
     'Operation': Operation
   }
   return iconMap[iconName] || HomeFilled
@@ -129,7 +136,8 @@ const routePathMap = {
   '0': '/index',
   '1': '/areas',
   '2': '/screen',
-  '3': '/admin'
+  '3': '/alerts',
+  '4': '/admin'
 }
 
 const activeIndex = ref('0')

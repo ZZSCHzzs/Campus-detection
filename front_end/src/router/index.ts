@@ -7,6 +7,7 @@ import DataScreen from "../views/DataScreen.vue";
 import Auth from "../views/AuthView.vue";
 import AdminView from '../views/AdminView.vue'
 import UserView from '../views/UserView.vue';
+import AlertNotice from "../views/AlertNotice.vue";
 import { useAuthStore } from '../stores/auth'
 
 const routes: Array<RouteRecordRaw> = [
@@ -33,6 +34,11 @@ const routes: Array<RouteRecordRaw> = [
     path: '/auth',
     name: 'Auth',
     component: Auth,
+  },
+  {
+    path: '/alerts',
+    name: 'AlertNotice',
+    component: AlertNotice,
   },
   {
     path: '/profile',
