@@ -1,6 +1,4 @@
 import axios from 'axios'
-// 移除直接引入 store，避免循环依赖
-// import { useAuthStore } from '../stores/auth'
 
 // 从环境变量获取API基础URL，如果未设置则使用默认值
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://smarthit.top:8000'

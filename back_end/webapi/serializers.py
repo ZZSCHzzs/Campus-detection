@@ -45,11 +45,15 @@ class BuildingSerializer(serializers.ModelSerializer):
 
 class AreaSerializer(serializers.ModelSerializer):
     detected_count = serializers.IntegerField(source='bound_node.detected_count', read_only=True)
-
+    is_favorite = serializers.SerializerMethodField()
     class Meta:
         model = Area
-        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity', 'detected_count']
-
+        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity', 'detected_count', 'is_favorite']
+    def get_is_favorite(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return request.user.favorite_areas.filter(id=obj.id).exists()
+        return False
 
 class HistoricalDataSerializer(serializers.ModelSerializer):
     class Meta:
