@@ -9,32 +9,8 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AreaCard: typeof import('./src/components/AreaCard.vue')['default']
-    ElAlert: typeof import('element-plus/es')['ElAlert']
-    ElButton: typeof import('element-plus/es')['ElButton']
-    ElCard: typeof import('element-plus/es')['ElCard']
-    ElCol: typeof import('element-plus/es')['ElCol']
-    ElEmpty: typeof import('element-plus/es')['ElEmpty']
-    ElIcon: typeof import('element-plus/es')['ElIcon']
-    ElIconMonitor: typeof import('@element-plus/icons-vue')['Monitor']
-    ElIconOfficeBuilding: typeof import('@element-plus/icons-vue')['OfficeBuilding']
-    ElIconUser: typeof import('@element-plus/icons-vue')['User']
-    ElInput: typeof import('element-plus/es')['ElInput']
-    ElMenu: typeof import('element-plus/es')['ElMenu']
-    ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
-    ElOption: typeof import('element-plus/es')['ElOption']
-    ElProgress: typeof import('element-plus/es')['ElProgress']
-    ElRow: typeof import('element-plus/es')['ElRow']
-    ElSelect: typeof import('element-plus/es')['ElSelect']
-    ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
-    ElStatistic: typeof import('element-plus/es')['ElStatistic']
-    ElTable: typeof import('element-plus/es')['ElTable']
-    ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
-    ElTag: typeof import('element-plus/es')['ElTag']
     Navbar: typeof import('./src/components/Navbar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-  }
-  export interface ComponentCustomProperties {
-    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }
