@@ -70,7 +70,7 @@ class DataUploadSerializer(serializers.Serializer):
 class AlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = Alert
-        fields = ['id', 'area', 'alert_type', 'timestamp', 'grade', 'publicity', 'solved']
+        fields = ['id', 'area', 'alert_type', 'timestamp', 'grade', 'publicity', 'solved', 'message']
 
     def validate_grade(self, value):
         if value not in [0, 1, 2, 3]:

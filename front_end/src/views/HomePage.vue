@@ -365,7 +365,7 @@ onMounted(async () => {
       <el-col :span="8">
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title">⚠️ 安全提醒</span>
+            <span class="card-title">⚠️ 公开告警</span>
           </template>
           <el-skeleton :rows="2" animated :loading="loadingAlerts">
             <template #default>
@@ -398,7 +398,7 @@ onMounted(async () => {
         </el-card>
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title">📢 今日重要通知</span>
+            <span class="card-title">📢 近期通知</span>
           </template>
           <el-skeleton :rows="2" animated :loading="loadingNotices">
             <template #default>
