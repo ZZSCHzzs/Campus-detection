@@ -1,3 +1,5 @@
 venv
 .idea
 temp
+__pycache__
+*.pyc
