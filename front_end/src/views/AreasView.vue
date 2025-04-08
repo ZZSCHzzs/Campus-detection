@@ -165,7 +165,7 @@ onMounted(() => {
                                 <h3 class="floor-title">{{ floor }}F</h3>
                             </div>
                             
-                            <el-col :span="6" v-for="area in getAreasByFloor(building.areas, floor)" :key="area.id" class="card-animation">
+                            <el-col :span="5" v-for="area in getAreasByFloor(building.areas, floor)" :key="area.id" class="card-animation">
                                 <AreaCard :area="area" :expectStatus="expectStatus"
                                     @visible-change="(v) => handleCardVisibility(area.id, v)" />
                             </el-col>
@@ -284,12 +284,12 @@ onMounted(() => {
 }
 
 .building-section:hover {
-    transform: translateY(-5px);
+    transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -354,7 +354,7 @@ onMounted(() => {
 }
 
 @keyframes slideUp {
-    from { opacity: 0; transform: translateY(15px); }
+    from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -384,7 +384,7 @@ onMounted(() => {
 }
 
 .card-animation:hover {
-    transform: translateY(-4px) scale(1.01);
+    transform: translateY(-2px) scale(1.01);
     z-index: 1;
 }
 

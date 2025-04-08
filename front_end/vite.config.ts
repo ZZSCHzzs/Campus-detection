@@ -6,6 +6,9 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 
 export default defineConfig({
   base: '/',
+  server:{
+    allowedHosts: ['.localdomain', 'localhost','smarthit.top'],
+  },
   plugins: [
     vue(),
     AutoImport({

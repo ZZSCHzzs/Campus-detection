@@ -1,10 +1,11 @@
 from rest_framework import viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, permission_classes
 from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 from rest_framework.response import Response
 from rest_framework import status
+
 
 def get_summary_people_count():
     # 获取所有区域
@@ -14,13 +15,16 @@ def get_summary_people_count():
         people_count += area.bound_node.detected_count
     return people_count
 
+
 class CustomUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = CustomUserSerializer
 
+
 class HardwareNodeViewSet(viewsets.ModelViewSet):
     queryset = HardwareNode.objects.all()
     serializer_class = HardwareNodeSerializer
+
 
 class ProcessTerminalViewSet(viewsets.ModelViewSet):
     queryset = ProcessTerminal.objects.all()
@@ -33,6 +37,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         serializer = HardwareNodeSerializer(nodes, many=True)
         return Response(serializer.data)
 
+
 class BuildingViewSet(viewsets.ModelViewSet):
     queryset = Building.objects.all()
     serializer_class = BuildingSerializer
@@ -40,15 +45,16 @@ class BuildingViewSet(viewsets.ModelViewSet):
     def areas(self, request, pk=None):
         building = self.get_object()
         areas = Area.objects.filter(type=building)
-        serializer = AreaSerializer(areas, many=True)
+        serializer = AreaSerializer(areas, many=True, context={'request': request})
         return Response(serializer.data)    
+
 
 class AreaViewSet(viewsets.ModelViewSet):
     queryset = Area.objects.all()
     serializer_class = AreaSerializer
 
     @action(detail=True, methods=['get'])
-    def data(self, request, pk=None):
+    def data(self, request,  pk=None):
         area = self.get_object()
         data = area.bound_node
         serializer = HardwareNodeSerializer(data)
@@ -62,10 +68,114 @@ class AreaViewSet(viewsets.ModelViewSet):
         serializer = AreaSerializer(areas, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def historical(self, request, pk=None):
+        area = self.get_object()
+        historical_data = HistoricalData.objects.filter(area=area)
+        serializer = HistoricalDataSerializer(historical_data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def favor(self, request, pk=None):
+        if not request.user.is_authenticated:
+            return Response({"detail": "请先登录"}, status=status.HTTP_401_UNAUTHORIZED)
+        area = self.get_object()
+        if request.user.favorite_areas.filter(id=area.id).exists():
+            request.user.favorite_areas.remove(area)
+            request.user.save()
+            return Response({"detail": "区域已取消收藏"})
+        else:
+            request.user.favorite_areas.add(area)
+            request.user.save()
+            return Response({"detail": "区域已收藏"})
+
+
+
+
 
 class HistoricalDataViewSet(viewsets.ModelViewSet):
     queryset = HistoricalData.objects.all()
     serializer_class = HistoricalDataSerializer
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        count = int(request.query_params.get('count', 5))
+        historical_data = self.queryset.order_by('-timestamp')[:count]
+        serializer = HistoricalDataSerializer(historical_data, many=True)
+        return Response(serializer.data)
+
+
+class AlertViewSet(viewsets.ModelViewSet):
+    queryset = Alert.objects.all()
+    serializer_class = AlertSerializer
+
+    @action(detail=False, methods=['get'])
+    def unsolved(self, request):
+        alerts = self.queryset.filter(solved=False).order_by('-timestamp')
+        serializer = AlertSerializer(alerts, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def solve(self, request, pk=None):
+        alert = self.get_object()
+        alert.solved = True
+        alert.save()
+        return Response({"detail": "Alert marked as solved."})
+
+    @action(detail=False, methods=['get'])
+    def public(self, request):
+        alerts = self.queryset.filter(publicity=True, solved=False).order_by('-timestamp')
+        serializer = AlertSerializer(alerts, many=True)
+        return Response(serializer.data)
+
+
+class NoticeViewSet(viewsets.ModelViewSet):
+    queryset = Notice.objects.all()
+    serializer_class = NoticeSerializer
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        count = int(request.query_params.get('count', 5))
+        notices = self.queryset.order_by('-timestamp')[:count]
+        serializer = NoticeSerializer(notices, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def areas(self, request, pk=None):
+        notice = self.get_object()
+        areas = notice.related_areas.all()
+        serializer = AreaSerializer(areas, many=True)
+        return Response(serializer.data)
+
+
+class AlertView(APIView):
+    def post(self, request):
+        # 使用 AlertSerializer 解析上传的数据
+        serializer = AlertSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # 获取上传的数据
+        try:
+            area = serializer.validated_data['area']
+            alert_type = serializer.validated_data['alert_type']
+            grade = serializer.validated_data['grade']
+            publicity = serializer.validated_data['publicity']
+            message = serializer.validated_data['message']
+        except KeyError as e:
+            return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 创建告警记录
+        alert = Alert(
+            area=area,
+            alert_type=alert_type,
+            grade=grade,
+            publicity=publicity,
+            message=message
+        )
+        alert.save()
+        return Response({"message": "告警创建成功"}, status=status.HTTP_201_CREATED)
+
 
 class DataUploadView(APIView):
     def post(self, request):

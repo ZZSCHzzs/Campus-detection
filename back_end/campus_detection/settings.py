@@ -25,9 +25,11 @@ SECRET_KEY = 'django-insecure-5#+pkgotmtoq8#+qo)!4l7@%e24e91qb!w)6@gt9hngt0^k^9_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['smarthit.top']
 
+TIME_ZONE = 'Asia/Shanghai'
 
+USE_TZ = True
 # Application definition
 
 INSTALLED_APPS = [
@@ -40,7 +42,27 @@ INSTALLED_APPS = [
     'rest_framework',
     'webapi',
     'corsheaders',
+    'rest_framework.authtoken',
+    'djoser',
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'AUTH_HEADER_TYPES': ('JWT',),
+}
+
+DJOSER = {
+    'USER_ID_FIELD': 'id',
+    'SERIALIZERS': {
+        'user': 'webapi.serializers.CustomUserSerializer',
+        'user_create': 'webapi.serializers.CustomUserSerializer',
+        'current_user': 'webapi.serializers.CustomUserSerializer',
+    }
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

@@ -8,9 +8,21 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AlertManager: typeof import('./src/components/admin/AlertManager.vue')['default']
     AreaCard: typeof import('./src/components/AreaCard.vue')['default']
+    AreaList: typeof import('./src/components/AreaList.vue')['default']
+    AreaManager: typeof import('./src/components/admin/AreaManager.vue')['default']
+    BaseManager: typeof import('./src/components/admin/BaseManager.vue')['default']
+    BuildingManager: typeof import('./src/components/admin/BuildingManager.vue')['default']
+    HistoricalDataManager: typeof import('./src/components/admin/HistoricalDataManager.vue')['default']
+    Jump: typeof import('./src/components/admin/Jump.vue')['default']
     Navbar: typeof import('./src/components/Navbar.vue')['default']
+    NodeManager: typeof import('./src/components/admin/NodeManager.vue')['default']
+    NoticeManager: typeof import('./src/components/admin/NoticeManager.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+  }
+  export interface ComponentCustomProperties {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }
