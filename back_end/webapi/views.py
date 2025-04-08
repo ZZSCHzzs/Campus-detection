@@ -54,7 +54,7 @@ class AreaViewSet(viewsets.ModelViewSet):
     serializer_class = AreaSerializer
 
     @action(detail=True, methods=['get'])
-    def data(self, request, pk=None):
+    def data(self, request,  pk=None):
         area = self.get_object()
         data = area.bound_node
         serializer = HardwareNodeSerializer(data)
@@ -121,6 +121,12 @@ class AlertViewSet(viewsets.ModelViewSet):
         alert.solved = True
         alert.save()
         return Response({"detail": "Alert marked as solved."})
+
+    @action(detail=False, methods=['get'])
+    def public(self, request):
+        alerts = self.queryset.filter(publicity=True, solved=False).order_by('-timestamp')
+        serializer = AlertSerializer(alerts, many=True)
+        return Response(serializer.data)
 
 
 class NoticeViewSet(viewsets.ModelViewSet):

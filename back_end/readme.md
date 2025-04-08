@@ -17,9 +17,9 @@
 ### 通用响应格式
 ```json
 {
-  "code": 200,       // 状态码，200表示成功
-  "message": "操作成功", // 状态描述
-  "data": {}         // 返回的数据
+  "code": 200,       
+  "message": "操作成功", 
+  "data": {}         
 }
 ```
 
@@ -81,6 +81,19 @@
 - **URL**: `/api/historical`
 - **Methods**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
 - **描述**: 历史数据查看与操作
+
+#### 告警接口
+- **URL**: `/api/alerts`
+- **Methods**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
+- **描述**: 用于告警记录的增删改查
+- **示例**:
+  - **GET**: 获取所有告警列表
+  - **POST**: 创建新的告警记录
+
+#### 公告接口
+- **URL**: `/api/notice`
+- **Methods**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
+- **描述**: 管理系统公告，支持查询及编辑
 
 #### 数据上传接口
 - **URL**: `/api/upload`

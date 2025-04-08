@@ -54,7 +54,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   User, Monitor, OfficeBuilding, Location, Histogram, Camera,
-  Fold, Expand
+  Fold, Expand, Bell, Document
 } from '@element-plus/icons-vue'
 import UserManager from '../components/admin/UserManager.vue'
 import NodeManager from '../components/admin/NodeManager.vue'
@@ -62,6 +62,8 @@ import TerminalManager from '../components/admin/TerminalManager.vue'
 import BuildingManager from '../components/admin/BuildingManager.vue'
 import AreaManager from '../components/admin/AreaManager.vue'
 import HistoricalDataManager from '../components/admin/HistoricalDataManager.vue'
+import AlertManager from '../components/admin/AlertManager.vue'
+import NoticeManager from '../components/admin/NoticeManager.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -109,7 +111,9 @@ const modules = [
   { name: 'terminals', label: '终端管理', icon: markRaw(Monitor), component: TerminalManager },
   { name: 'buildings', label: '建筑管理', icon: markRaw(OfficeBuilding), component: BuildingManager },
   { name: 'areas', label: '区域管理', icon: markRaw(Location), component: AreaManager },
-  { name: 'historical', label: '历史数据', icon: markRaw(Histogram), component: HistoricalDataManager }
+  { name: 'historical', label: '历史数据', icon: markRaw(Histogram), component: HistoricalDataManager },
+  { name: 'alerts', label: '告警管理', icon: markRaw(Bell), component: AlertManager },
+  { name: 'notice', label: '公告管理', icon: markRaw(Document), component: NoticeManager }
 ]
 
 // 激活的模块

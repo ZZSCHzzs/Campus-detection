@@ -9,7 +9,6 @@ const props = defineProps<{
   buildingName?: string
   displayBuilding?: boolean
   expectStatus?: string
-  isFavorite?: boolean
 }>()
 
 const nodeData = ref<HardwareNode | null>(null)
@@ -18,12 +17,6 @@ const displayBuilding = ref(props.displayBuilding || false)
 const favoriteLoading = ref(false)
 const isFavorite = ref(props.area.is_favorite)
 
-// 观察props.isFavorite的变化
-watch(() => props.isFavorite, (newVal) => {
-  if (newVal !== undefined) {
-    isFavorite.value = newVal
-  }
-}, {immediate: true})
 
 const fetchNodeData = async () => {
   try {
