@@ -117,8 +117,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'campus_detection',  # 数据库名
-        'USER': 'root',        # 数据库用户名
-        # 'PASSWORD': '',        # 数据库密码(未设置)
+        'USER': os.getenv('DB_USER'),  # 数据库用户名
+        'PASSWORD': os.getenv('DB_PASSWORD'),  # 数据库密码
         'HOST': 'localhost',  # 数据库主机地址
         'PORT': '3306',       # 数据库端口号
         'OPTIONS': {
