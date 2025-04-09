@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(os.path.join(BASE_DIR, '.env'))  # 添加这行
 
 AUTH_USER_MODEL = 'webapi.CustomUser'
 # Quick-start development settings - unsuitable for production
