@@ -107,7 +107,7 @@ class AreaViewSet(viewsets.ModelViewSet):
         serializer = AreaSerializer(areas, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
     def historical(self, request, pk=None):
         area = self.get_object()
         historical_data = HistoricalData.objects.filter(area=area)
@@ -115,8 +115,8 @@ class AreaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
-    @permission_classes([IsAuthenticated])
     def favor(self, request, pk=None):
+
         area = self.get_object()
         if request.user.favorite_areas.filter(id=area.id).exists():
             request.user.favorite_areas.remove(area)
