@@ -1,4 +1,3 @@
-
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { ElMessage } from 'element-plus'
@@ -9,6 +8,7 @@ import Auth from "../views/AuthView.vue";
 import AdminView from '../views/AdminView.vue'
 import UserView from '../views/UserView.vue';
 import AlertNotice from "../views/AlertNotice.vue";
+import NotFound from "../views/NotFound.vue";
 import { useAuthStore } from '../stores/auth'
 
 const routes: Array<RouteRecordRaw> = [
@@ -32,9 +32,16 @@ const routes: Array<RouteRecordRaw> = [
     component: DataScreen,
   },
   {
-    path: '/auth',
-    name: 'Auth',
+    path: '/login',
+    name: 'Login',
     component: Auth,
+    meta: { authMode: 'login' }
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: Auth,
+    meta: { authMode: 'register' }
   },
   {
     path: '/alerts',
@@ -52,6 +59,11 @@ const routes: Array<RouteRecordRaw> = [
     name: 'admin',
     component: AdminView,
     meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: NotFound
   }
 ];
 
@@ -66,8 +78,7 @@ router.beforeEach((to, from, next) => {
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!authStore.isAuthenticated) {
       next({
-        path: '/auth',
-        query: { mode: 'login', redirect: to.fullPath }
+        path: '/login',
       })
     } 
     else if (to.matched.some(record => record.meta.requiresAdmin) && authStore.user?.role !== 'admin') {

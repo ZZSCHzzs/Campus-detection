@@ -3,7 +3,7 @@ import type { AxiosRequestHeaders } from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://smarthit.top:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top'
 
 /**
  * 创建标准化的API实例

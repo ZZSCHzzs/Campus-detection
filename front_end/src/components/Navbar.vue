@@ -193,11 +193,11 @@ const handleSelect = (key: string) => {
 }
 
 const navigateToLogin = () => {
-  router.push({path: '/auth', query: {mode: 'login'}})
+  router.push('/login')
 }
 
 const navigateToRegister = () => {
-  router.push({path: '/auth', query: {mode: 'register'}})
+  router.push('/register')
 }
 
 const handleCommand = (command: string) => {
@@ -512,4 +512,3 @@ el-menu-item {
   box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
 </style>
-``` 
