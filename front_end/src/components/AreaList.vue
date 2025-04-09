@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { AreaItem } from '../types'
 
 const props = defineProps({
@@ -180,11 +179,10 @@ const getStatusIcon = (count: number, capacity: number) => {
 }
 
 .area-name {
-  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  margin-right: 8px;
+  margin: 0 8px 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

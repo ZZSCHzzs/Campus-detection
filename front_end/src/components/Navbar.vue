@@ -68,7 +68,7 @@ import {ref, onMounted, watch, computed} from 'vue'
 import router from '../router'
 import {useRoute} from 'vue-router'
 import {useAuthStore} from '../stores/auth'
-import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, Setting, SwitchButton, Operation, Lock, Star, Bell} from '@element-plus/icons-vue'
+import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, SwitchButton, Operation, Lock, Star, Bell} from '@element-plus/icons-vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 
 const authStore = useAuthStore()
@@ -233,7 +233,7 @@ const handleCommand = (command: string) => {
                 duration: 2000
               })
               
-              router.push('/')
+              await router.push('/')
             } catch (error) {
               console.error('退出失败:', error)
               ElMessage({
@@ -326,7 +326,7 @@ const handleCommand = (command: string) => {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 0px;
+  width: 0;
   height: 3px;
   background-color: #409EFF;
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
