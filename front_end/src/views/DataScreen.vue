@@ -376,7 +376,7 @@ onMounted(async () => {
 
 .number.warning {
   background: linear-gradient(45deg, #ff8888, #ffaa00);
-  -webkit-background-clip: text;
+  -webkit-background-clipin: text;
 }
 
 .main-content {
