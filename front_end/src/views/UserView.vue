@@ -1,13 +1,14 @@
 <script lang="ts" setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, Lock, Message, Edit, Star, Delete } from '@element-plus/icons-vue'
-import axios from '../axios'
+import { ElMessage } from 'element-plus'
+import { User, Lock, Message, Edit, Star } from '@element-plus/icons-vue'
+import authApi from '../services/authApi'
+import { areaService } from '../services/apiService'  // 只保留areaService
 import type { User as UserType, AreaItem } from '../types'
 import CryptoJS from 'crypto-js'  // 导入CryptoJS库用于密码加密
-import { Calendar, Check, InfoFilled, Location, Phone, Plus, View } from '@element-plus/icons-vue'
+import { Calendar, Check, InfoFilled, Phone, Plus } from '@element-plus/icons-vue'
 import AreaCard from '../components/AreaCard.vue'
 
 const authStore = useAuthStore()
@@ -101,19 +102,28 @@ const fetchUserInfo = async () => {
       throw new Error('会话无效')
     }
 
-    // 使用Djoser的用户信息端点
-    const response = await axios.get('/auth/users/me/')
-    console.log('用户信息获取成功:', response.data)
-
-    // 更新用户信息 - 只使用User接口中定义的字段
+    let userData: UserType | null = null
+    
+    try {
+      // 尝试使用 authApi 获取用户信息
+      userData = await authApi.getUserInfo()
+    } catch (error) {
+      console.error('获取用户信息失败，尝试使用 authStore 获取:', error)
+      // 如果失败，尝试从 authStore 中获取用户信息
+      userData = authStore.user || null 
+    }
+    
+    console.log('用户信息获取成功:', userData)
+    
+    // 更新用户信息
     userInfo.value = {
-      id: response.data.id || 0,
-      username: response.data.username || '',
-      role: response.data.role || 'user',
-      phone: response.data.phone || '',
-      email: response.data.email || '',
-      register_time: response.data.register_time || '',
-      favorite_areas: response.data.favorite_areas || []
+      id: userData.id || 0,
+      username: userData.username || '',
+      role: userData.role || 'user',
+      phone: userData.phone || '',
+      email: userData.email || '',
+      register_time: userData.register_time || '',
+      favorite_areas: userData.favorite_areas || []
     }
 
     // 复制到表单
@@ -138,9 +148,9 @@ const fetchUserInfo = async () => {
       ElMessage.error('登录已过期，请重新登录')
       // 如果是401错误，自动重定向到登录页
       authStore.logout()
-      router.push({
+      await router.push({
         path: '/auth',
-        query: { mode: 'login', redirect: '/profile' }
+        query: {mode: 'login', redirect: '/profile'}
       })
     } else {
       ElMessage.error('获取用户信息失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
@@ -170,14 +180,14 @@ const submitUserUpdate = async () => {
     if (valid) {
       loading.value = true
       try {
-        // 创建更新数据对象 - 只包含User接口中允许修改的字段
+        // 创建更新数据对象
         const updateData = {
           email: userForm.value.email,
           phone: userForm.value.phone
         }
 
-        // 更新用户基本信息
-        const response = await axios.patch('/auth/users/me/', updateData)
+        // 使用统一的authApi更新用户信息
+        await authApi.updateUserInfo(updateData)
 
         // 更新本地显示的信息
         userInfo.value.email = userForm.value.email
@@ -220,7 +230,8 @@ const submitPasswordUpdate = async () => {
         const encryptedNewPassword = encryptPassword(passwordForm.value.new_password)
         const encryptedReNewPassword = encryptPassword(passwordForm.value.re_new_password)
 
-        await axios.post('/auth/users/set_password/', {
+        // 使用统一的authApi更新密码
+        await authApi.updatePassword({
           current_password: encryptedCurrentPassword,
           new_password: encryptedNewPassword,
           re_new_password: encryptedReNewPassword
@@ -254,12 +265,13 @@ const fetchFavoriteAreas = async () => {
 
   loadingFavorites.value = true
   try {
-    const promises = userInfo.value.favorite_areas.map(id =>
-      axios.get(`/api/areas/${id}`).then(res => res.data)
-    )
-
-    const results = await Promise.all(promises)
-    favoriteAreas.value = results
+    // 获取收藏区域
+    const promises = userInfo.value.favorite_areas.map(id => 
+      areaService.getById(id).catch(() => null)
+    );
+    
+    const results = await Promise.all(promises);
+    favoriteAreas.value = results.filter(area => area !== null) as AreaItem[];
   } catch (error) {
     console.error('获取收藏区域详情失败:', error)
     ElMessage.error('获取收藏区域详情失败')
@@ -291,7 +303,6 @@ const handleFavoriteChange = async (event) => {
     await fetchUserInfo()
   }
 }
-
 
 // 密码强度计算
 const passwordStrength = ref(0)
@@ -336,9 +347,9 @@ onMounted(async () => {
   // 检查登录状态
   if (!authStore.isAuthenticated) {
     ElMessage.warning('请先登录')
-    router.push({
+    await router.push({
       path: '/auth',
-      query: { mode: 'login', redirect: '/profile' }
+      query: {mode: 'login', redirect: '/profile'}
     })
     return
   }
@@ -393,7 +404,7 @@ const getRoleTagType = (role: string) => {
 
 <template>
   <div class="user-center-container">
-    <!-- 重新设计的个人中心顶部 - 改为浅色系 -->
+
     <div class="user-header">
       <div class="user-header-content">
         <div class="user-info-brief">
@@ -449,7 +460,7 @@ const getRoleTagType = (role: string) => {
         <el-tab-pane label="个人信息" name="profile">
           <div class="tab-content">
             <el-card v-loading="loading" :shadow="false" class="profile-card content-card">
-              <!-- 个人资料部分 -->
+
               <div class="section-header">
                 <div class="section-title">
                   <el-icon :size="22" color="#409EFF">
@@ -1241,3 +1252,4 @@ const getRoleTagType = (role: string) => {
   }
 }
 </style>
+``` 

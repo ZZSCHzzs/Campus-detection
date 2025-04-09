@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import {ref, onMounted, defineProps, computed, watch} from 'vue'
-import axios from '../axios'
+import { areaService } from '../services/apiService'
 import type {AreaItem, HardwareNode} from '../types'
-import {Star} from '@element-plus/icons-vue'
+import {Star, Timer, Warning} from '@element-plus/icons-vue'
 
 const props = defineProps<{
   area: AreaItem
@@ -17,11 +17,10 @@ const displayBuilding = ref(props.displayBuilding || false)
 const favoriteLoading = ref(false)
 const isFavorite = ref(props.area.is_favorite)
 
-
 const fetchNodeData = async () => {
   try {
-    const {data} = await axios.get(`/api/areas/${props.area.id}/data`)
-    nodeData.value = data
+    // 使用areaService获取区域数据
+    nodeData.value = await areaService.getAreaData(props.area.id)
   } catch (error) {
     console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
   } finally {
@@ -39,19 +38,17 @@ const displayCard = () => {
 
 const emit = defineEmits(['visible-change', 'favorite-change'])
 
-// 添加计算属性判断可见性
 const isVisible = computed(() => displayCard())
 
-// 当可见性变化时触发事件
 watch(isVisible, (newVal) => {
   emit('visible-change', newVal)
 }, {immediate: true})
 
-// 收藏/取消收藏操作
 const toggleFavorite = async () => {
   favoriteLoading.value = true
   try {
-    await axios.post(`/api/areas/${props.area.id}/favor`)
+    // 使用areaService切换收藏状态
+    await areaService.toggleFavoriteArea(props.area.id)
     isFavorite.value = !isFavorite.value
     emit('favorite-change', {
       areaId: props.area.id,
@@ -64,24 +61,21 @@ const toggleFavorite = async () => {
   }
 }
 
-// 计算负载率
 const loadRatio = computed(() => {
   if (!nodeData.value) return 0
   if (!props.area.capacity) return -1
   return nodeData.value.detected_count / props.area.capacity
 })
 
-// 根据负载率决定颜色
 const loadColor = computed(() => {
   const ratio = loadRatio.value
-  if (ratio >= 0.9) return '#F56C6C' // 高负载 - 红色
-  if (ratio >= 0.7) return '#E6A23C' // 中高负载 - 橙色
-  if (ratio >= 0.5) return '#F7BA2A' // 中负载 - 黄色
-  if (ratio == -1) return '#409EFF' // 未知 - 蓝色
-  return '#67C23A' // 低负载 - 绿色
+  if (ratio >= 0.9) return '#F56C6C'
+  if (ratio >= 0.7) return '#E6A23C'
+  if (ratio >= 0.5) return '#F7BA2A'
+  if (ratio == -1) return '#409EFF'
+  return '#67C23A'
 })
 
-// 负载状态文本
 const loadStatus = computed(() => {
   const ratio = loadRatio.value
   if (ratio >= 0.9) return '拥挤'

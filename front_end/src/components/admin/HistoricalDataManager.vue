@@ -16,9 +16,6 @@
           <el-select 
             v-model="form.area" 
             placeholder="请选择区域"
-            filterable
-            remote
-            :remote-method="searchAreas"
             :loading="loadingAreas"
           >
             <el-option
@@ -50,10 +47,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { areaService } from '../../services/apiService'
 import Jump from "./Jump.vue";
 
-// 表格列定义
 const columns = [
   { prop: 'area_name', label: '区域名称', width: '250', slot:true },
   { prop: 'detected_count', label: '检测人数', width: '200' },
@@ -65,30 +61,26 @@ const getAreaName = (row) => {
   return area ? area.name : '未知'
 }
 
-// 默认表单数据
 const defaultFormData = {
   area: null,
   detected_count: 0,
   timestamp: new Date()
 }
 
-// 区域选择相关
 const areas = ref([])
 const loadingAreas = ref(false)
 
-// 搜索区域
 const fetchAreas = async () => {
     loadingAreas.value = true
     try {
-      const response = await apiService.getAll('areas')
-      areas.value = response.data.results || response.data
+      areas.value = await areaService.getAll()
     } catch (error) {
       console.error('获取区域失败:', error)
     } finally {
       loadingAreas.value = false
     }
-  
 }
+
 onMounted(() => {
   fetchAreas()
 })

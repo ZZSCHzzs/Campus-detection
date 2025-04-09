@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/upload/', DataUploadView.as_view()),
     path('api/summary/', SummaryView.as_view()),
+    path('api/alert/', AlertView.as_view()),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
 ]

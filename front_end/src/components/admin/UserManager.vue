@@ -37,10 +37,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 
-// 表格列定义
 const columns = [
   { prop: 'username', label: '用户名', width: '200' },
   { prop: 'email', label: '邮箱', width: '250' },
@@ -56,7 +54,6 @@ const columns = [
     formatter: (row) => new Date(row.register_time).toLocaleString() }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   username: '',
   email: '',

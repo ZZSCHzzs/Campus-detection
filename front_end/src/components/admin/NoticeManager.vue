@@ -59,13 +59,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref , onMounted } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { areaService } from '../../services/apiService'
 import { defineProps } from 'vue'
 import Jump from './Jump.vue'
 
-// 引入 props
 const props = defineProps({
   dataLink: {
     type: String,
@@ -73,7 +72,6 @@ const props = defineProps({
   }
 })
 
-// 表格列定义
 const columns = [
   { prop: 'title', label: '公告标题', width: '200' },
   { prop: 'content', label: '公告内容' },
@@ -82,35 +80,34 @@ const columns = [
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   title: '',
   content: '',
   related_areas: []
 }
 
-// 区域选择相关
 const areas = ref([])
 const loadingAreas = ref(false)
 
-// 搜索区域
 const fetchAreas = async () => {
   loadingAreas.value = true
   try {
-    const response = await apiService.customGet('areas')
-    areas.value = response.data.results || response.data
+    areas.value = await areaService.getAll()
   } catch (error) {
     console.error('获取区域失败:', error)
   } finally {
     loadingAreas.value = false
   }
 }
-fetchAreas()
 
 const getAreaName = (id) => {
   const area = areas.value.find(item => item.id === id)
   return area ? area.name : '未知区域'
 }
+
+onMounted(() => {
+  fetchAreas()
+})
 </script>
 
 <style scoped>

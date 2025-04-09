@@ -70,11 +70,10 @@
 <script setup>
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { terminalService } from '../../services/apiService'
 import Jump from './Jump.vue'
 import {defineProps}  from 'vue'
 
-// 引入 props
 const props = defineProps({
   dataLink: {
     type: String,
@@ -82,7 +81,7 @@ const props = defineProps({
   }
 })
 const dataLink = ref()
-// 表格列定义
+
 const columns = [
   { prop: 'name', label: '节点名称', width: '200' },
   { prop: 'detected_count', label: '检测人数', width: '150' },
@@ -93,7 +92,6 @@ const columns = [
   { prop: 'description', label: '描述' }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   name: '',
   status: 'online',
@@ -102,16 +100,13 @@ const defaultFormData = {
   detected_count: 0
 }
 
-// 终端选择相关
 const terminals = ref([])
 const loadingTerminals = ref(false)
 
-// 搜索终端
 const fetchTerminals = async () => {
     loadingTerminals.value = true
     try {
-      const response = await apiService.customGet(`terminals`)
-      terminals.value = response.data.results || response.data
+      terminals.value = await terminalService.getAll()
     } catch (error) {
       console.error('获取终端失败:', error)
     } finally {
@@ -124,6 +119,5 @@ const getTerminalName = (id) => {
   const terminal = terminals.value.find(item => item.id === id)
   return terminal ? terminal.name : '未知'
 }
-
 
 </script>

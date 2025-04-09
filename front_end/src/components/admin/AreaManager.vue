@@ -55,9 +55,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { nodeService,buildingService } from '../../services/apiService'
+import Jump from "./Jump.vue";
 
-// 表格列定义
 const columns = [
   { prop: 'name', label: '区域名称', width: '150' },
   { prop: 'type', label: '所属建筑', width: '200', slot: true },
@@ -69,7 +69,7 @@ const columns = [
   {  prop: 'status', label: '状态', width: '100', slot: true,
     formatter: (row) => {
       const node = nodes.value.find(n => n.id === row.bound_node)
-      return node && node.status ? true : false
+      return (node && node.status)
     }
   },
   {
@@ -83,7 +83,6 @@ const columns = [
   { prop: 'description', label: '描述' }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   name: '',
   type: null,
@@ -93,16 +92,13 @@ const defaultFormData = {
   capacity: 0,
 }
 
-// 建筑选择相关
 const buildings = ref([])
 const loadingBuildings = ref(false)
 
-// 获取建筑
 const fetchBuildings = async (query) => {
   loadingBuildings.value = true
   try {
-    const response = await apiService.customGet(`buildings?search=${query}`)
-    buildings.value = response.data.results || response.data
+    buildings.value = await buildingService.getAll()
   } catch (error) {
     console.error('获取建筑失败:', error)
   } finally {
@@ -110,16 +106,13 @@ const fetchBuildings = async (query) => {
   }
 }
 
-// 节点选择相关
 const nodes = ref([])
 const loadingNodes = ref(false)
 
-// 获取节点
 const fetchNodes = async (query) => {
   loadingNodes.value = true
   try {
-    const response = await apiService.customGet(`nodes?search=${query}`)
-    nodes.value = response.data.results || response.data
+    nodes.value = await nodeService.getAll()
   } catch (error) {
     console.error('获取节点失败:', error)
   } finally {

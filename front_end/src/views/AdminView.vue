@@ -1,7 +1,7 @@
 <template>
   <div class="admin-container">
     <div class="admin-layout">
-      <!-- 左侧导航栏 -->
+
       <div class="sidebar-container" :class="sidebarWidthClass">
         <div class="admin-sidebar">
           <div class="sidebar-header">
@@ -25,7 +25,7 @@
         </div>  
       </div>
       
-      <!-- 右侧内容区 -->
+
       <div class="content-container">
         <div class="admin-content">
           <div class="content-header">
@@ -54,7 +54,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   User, Monitor, OfficeBuilding, Location, Histogram, Camera,
-  Fold, Expand, Bell, Document
+  Bell, Document
 } from '@element-plus/icons-vue'
 import UserManager from '../components/admin/UserManager.vue'
 import NodeManager from '../components/admin/NodeManager.vue'
@@ -69,42 +69,42 @@ const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-// 搜索查询参数
+
 const searchQuery = ref('')
 const dataLink = ref('')
 
-// 检查用户是否登录
+
 onMounted(() => {
   if (!authStore.isAuthenticated) {
     router.push('/auth?mode=login')
   }
   
-  // 从路由参数中获取模块和搜索参数（如果有）
+
   if (route.query.module && modules.some(m => m.name === route.query.module)) {
     activeModule.value = route.query.module
     updateCurrentComponent(route.query.module)
   }
   
-  // 初始化搜索查询（如果URL中有）
+
   if (route.query.search) {
     searchQuery.value = route.query.search
   }
 })
 
-// 导航折叠状态
+
 const isCollapse = ref(false)
 
-// 侧边栏宽度类计算属性
+
 const sidebarWidthClass = computed(() => {
   return isCollapse.value ? 'collapse-width' : 'uncollapse-width'
 })
 
-// 切换折叠状态
+
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-// 定义模块列表
+
 const modules = [
   { name: 'users', label: '用户管理', icon: markRaw(User), component: UserManager },
   { name: 'nodes', label: '硬件节点', icon: markRaw(Camera), component: NodeManager },
@@ -116,19 +116,19 @@ const modules = [
   { name: 'notice', label: '公告管理', icon: markRaw(Document), component: NoticeManager }
 ]
 
-// 激活的模块
+
 const activeModule = ref('areas')
 
-// 当前显示的组件
+
 const currentComponent = shallowRef(modules[4].component)
 
-// 当前模块标题
+
 const currentModuleTitle = computed(() => {
   const module = modules.find(m => m.name === activeModule.value)
   return module ? module.label : ''
 })
 
-// 更新当前组件
+
 const updateCurrentComponent = (moduleName) => {
   const module = modules.find(m => m.name === moduleName)
   if (module) {
@@ -136,54 +136,54 @@ const updateCurrentComponent = (moduleName) => {
   }
 }
 
-// 处理模块切换
+
 const handleModuleChange = (name) => {
-  // 避免重复切换到相同模块
+
   if (activeModule.value === name) return;
   
-  // 切换模块时清空搜索条件
+
   searchQuery.value = '';
   dataLink.value = '';
   activeModule.value = name;
   updateCurrentComponent(name);
   
-  // 更新路由参数，仅保留必要的参数
+
   router.replace({
     path: route.path,
     query: { 
       module: name
-      // 不再传递搜索参数
+
     }
   });
 }
 
-// 更新搜索查询
+
 const updateSearchQuery = (query) => {
-  // 避免重复更新相同的查询
+
   if (searchQuery.value === query) return;
   
   searchQuery.value = query;
   
-  // 更新路由参数，使用replace避免产生过多的历史记录
+
   router.replace({
     path: route.path,
     query: { 
       module: activeModule.value, 
-      search: query || undefined // 如果为空则不添加该参数
+      search: query || undefined
     }
   });
 }
 
-// 监听路由变化，使用防抖处理以避免循环更新
+
 let isUpdatingFromRoute = false;
 watch(() => route.query, (newQuery) => {
-  // 避免在程序内部触发的路由更新再次触发组件更新
+
   if (isUpdatingFromRoute) return;
   
   try {
     isUpdatingFromRoute = true;
     dataLink.value = '';
-    // 更新模块
+
     const newModule = newQuery.module;
     if (newModule && modules.some(m => m.name === newModule) && newModule !== activeModule.value) {
       activeModule.value = newModule;
@@ -192,15 +192,15 @@ watch(() => route.query, (newQuery) => {
     const newData = newQuery.data || '';
     const newId = newQuery.id || '';
     if (newData && newId) {
-      dataLink.value = `${newData}/${newId}/${activeModule.value}`;
+      dataLink.value = `/api/${newData}/${newId}/${activeModule.value}`;
     }
-    // 更新搜索查询
+
     const newSearch = newQuery.search || '';
     if (newSearch !== searchQuery.value) {
       searchQuery.value = newSearch;
     }
   } finally {
-    // 确保标志位恢复
+
     setTimeout(() => {
       isUpdatingFromRoute = false;
     }, 0);

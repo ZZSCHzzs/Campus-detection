@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { AreaItem } from '../types'
 
 const props = defineProps({
@@ -21,7 +20,6 @@ const props = defineProps({
   }
 })
 
-// 获取进度条颜色
 const getProgressColor = (rate: number) => {
   if (rate > 0.9) return '#F56C6C'
   if (rate > 0.7) return '#E6A23C'
@@ -29,7 +27,6 @@ const getProgressColor = (rate: number) => {
   return '#67C23A'
 }
 
-// 获取标签类型
 const getTagType = (rate: number) => {
   if (rate > 0.9) return 'danger'
   if (rate > 0.7) return 'warning'
@@ -37,7 +34,6 @@ const getTagType = (rate: number) => {
   return 'success'
 }
 
-// 判断区域状态
 const getStatusText = (count: number, capacity: number) => {
   const ratio = count / (capacity || 100);
   if (ratio >= 0.9) return '拥挤';
@@ -46,7 +42,6 @@ const getStatusText = (count: number, capacity: number) => {
   return '空闲';
 }
 
-// 获取状态图标
 const getStatusIcon = (count: number, capacity: number) => {
   const ratio = count / (capacity || 100);
   if (ratio >= 0.9) return 'el-icon-warning-filled';
@@ -59,7 +54,7 @@ const getStatusIcon = (count: number, capacity: number) => {
 <template>
   <el-skeleton :rows="4" animated :loading="loading">
     <template #default>
-      <!-- 更紧凑的卡片式布局 -->
+
       <div v-if="areas && areas.length > 0" class="area-list-container">
         <el-scrollbar :height="maxHeight === 'auto' ? undefined : maxHeight">
           <div class="area-grid" :style="{ 'grid-template-rows': 'auto' }">
@@ -68,9 +63,9 @@ const getStatusIcon = (count: number, capacity: number) => {
               :key="area.id" 
               class="area-card"
             >
-              <!-- 超紧凑型单行卡片布局 -->
+
               <div class="card-line">
-                <!-- 左侧名称 -->
+
                 <div class="area-name-section">
                   <h4 class="area-name">{{ area.name }}</h4>
                   <el-tag v-if="area.building" size="small" type="info" effect="plain" class="area-building-tag">
@@ -78,7 +73,7 @@ const getStatusIcon = (count: number, capacity: number) => {
                   </el-tag>
                 </div>
                 
-                <!-- 右侧数据 -->
+
                 <div class="area-data-section">
                   <div class="data-chip">
                     <span class="count-value" :style="{ color: getProgressColor(area.detected_count / (area.capacity || 100)) }">
@@ -92,7 +87,7 @@ const getStatusIcon = (count: number, capacity: number) => {
                 </div>
               </div>
               
-              <!-- 进度条作为下边框 -->
+
               <div class="progress-border-container">
                 <div 
                   class="progress-border" 
@@ -107,7 +102,7 @@ const getStatusIcon = (count: number, capacity: number) => {
         </el-scrollbar>
       </div>
       
-      <!-- 无数据时的显示 -->
+
       <div v-else class="no-data-message">
         <el-empty :description="emptyText" />
       </div>
@@ -184,11 +179,10 @@ const getStatusIcon = (count: number, capacity: number) => {
 }
 
 .area-name {
-  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  margin-right: 8px;
+  margin: 0 8px 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
