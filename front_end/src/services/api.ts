@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { AxiosRequestHeaders } from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 
@@ -25,10 +26,14 @@ api.interceptors.request.use(config => {
     config.url += '/'
   }
   
-  
   const token = localStorage.getItem('access')
   if (token) {
-    config.headers = config.headers || {}
+    if (!config.headers) {
+      config.headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      } as AxiosRequestHeaders;
+    }
     config.headers['Authorization'] = `JWT ${token.trim()}`
   }
   
