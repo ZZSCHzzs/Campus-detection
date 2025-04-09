@@ -154,6 +154,7 @@ interface ResourceService<T> {
   update: (id: number | string, data: Partial<T>) => Promise<T>;
   patch?: (id: number | string, data: Partial<T>) => Promise<T>;
   delete: (id: number | string) => Promise<void>;
+  [key: string]: any; // 添加索引签名，允许任意自定义方法
 }
 
 

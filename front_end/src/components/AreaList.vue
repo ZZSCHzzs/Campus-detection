@@ -76,12 +76,12 @@ const getStatusIcon = (count: number, capacity: number) => {
 
                 <div class="area-data-section">
                   <div class="data-chip">
-                    <span class="count-value" :style="{ color: getProgressColor(area.detected_count / (area.capacity || 100)) }">
+                    <span class="count-value" :style="{ color: getProgressColor((area.detected_count || 0) / (area.capacity || 100)) }">
                       {{ area.detected_count || 0 }}
                     </span>
                     <span v-if="area.capacity" class="capacity-indicator">/ {{ area.capacity }}</span>
-                    <span class="stat-badge" :class="getTagType(area.detected_count / (area.capacity || 100))">
-                      {{ Math.floor((area.detected_count / (area.capacity || 100)) * 100) }}%
+                    <span class="stat-badge" :class="getTagType((area.detected_count || 0) / (area.capacity))">
+                      {{ Math.floor(((area.detected_count || 0) / (area.capacity))*100 ) }}%
                     </span>
                   </div>
                 </div>
@@ -92,8 +92,8 @@ const getStatusIcon = (count: number, capacity: number) => {
                 <div 
                   class="progress-border" 
                   :style="{
-                    width: Math.floor((area.detected_count / (area.capacity || 100)) * 100) + '%',
-                    backgroundColor: getProgressColor(area.detected_count / (area.capacity || 100))
+                    width: Math.floor(((area.detected_count || 0) / (area.capacity || 100)) * 100) + '%',
+                    backgroundColor: getProgressColor((area.detected_count || 0) / (area.capacity || 100))
                   }"
                 ></div>
               </div>
