@@ -6,14 +6,15 @@ import type { AreaItem, Building } from '../types'
 import axios from '../axios'
 import AreaCard from '../components/AreaCard.vue'
 
-
 const buildings = ref<Building[]>([])
 const loading = ref(false)
 const expectStatus = ref<string | "all">("all")
-const buildingFilter = ref<number | "all">("all") // 新增建筑筛选状态
+const buildingFilter = ref<number | "all">("all")
 const searchKeyword = ref("")
 
-// 新增监听搜索关键词
+// 添加首次加载标记
+const isFirstLoad = ref(true)
+
 watch(searchKeyword, (newVal) => {
     if (newVal) {
         buildingFilter.value = "all"
@@ -21,13 +22,13 @@ watch(searchKeyword, (newVal) => {
     }
 })
 
-// 修改后的计算属性
+
 const filteredAreas = computed(() => {
     return buildings.value
         .flatMap(b => b.areas || [])
         .filter(a => a.name.includes(searchKeyword.value))
 })
-// 新增计算属性过滤建筑
+
 const filteredBuildings = computed(() => {
     if (buildingFilter.value === "all") return buildings.value
     return buildings.value.filter(b => b.id === buildingFilter.value)
@@ -40,9 +41,11 @@ const getFloors = (areas: AreaItem[] | undefined) => {
 const getAreasByFloor = (areas: AreaItem[] | undefined, floor: number) => {
     return areas?.filter(a => a.floor === floor)
 }
-// 获取建筑数据
+
 const fetchBuildings = async () => {
-    loading.value = true
+    if (isFirstLoad.value) {
+        loading.value = true
+    }
     try {
         const { data } = await axios.get('/api/buildings')
         buildings.value = await Promise.all(
@@ -55,31 +58,31 @@ const fetchBuildings = async () => {
     } catch (error) {
         ElMessage.error('数据加载失败')
     } finally {
-        loading.value = false
+            loading.value = false
     }
 }
 
-// 新增卡片可见性状态记录
+
 const cardVisibilities = ref<Record<number, boolean>>({})
 
-// 处理卡片可见性变化
+
 const handleCardVisibility = (areaId: number, visible: boolean) => {
     cardVisibilities.value[areaId] = visible
 }
 
-// 修改楼层可见性判断
+
 const isFloorVisible = (buildingId: number, floor: number) => {
-    // 获取当前建筑的所有区域
+
     const currentBuilding = buildings.value.find(b => b.id === buildingId)
     const areasInFloor = currentBuilding?.areas?.filter(a => a.floor === floor) || []
 
-    // 当存在可见区域时返回 true（至少一个区域可见）
+
     return areasInFloor.some(area =>
         cardVisibilities.value[area.id]
     )
 }
 
-// 重构建筑可见性计算属性
+
 const isBuildingVisible = computed(() => (buildingId: number) => {
     const building = filteredBuildings.value.find(b => b.id === buildingId)
     if (!building) return false
@@ -89,7 +92,10 @@ const isBuildingVisible = computed(() => (buildingId: number) => {
 })
 onMounted(() => {
     fetchBuildings()
-    setInterval(fetchBuildings, 30000) // 修改定时器只刷新建筑数据
+    // 完成首次加载后，将首次加载标记设为false
+    isFirstLoad.value = false
+    // 定期刷新数据不会再显示loading状态
+    setInterval(fetchBuildings, 30000)
 })
 </script>
 
@@ -176,7 +182,6 @@ onMounted(() => {
         </el-skeleton>
     </div>
 </template>
-
 
 <style scoped>
 .areas-container {

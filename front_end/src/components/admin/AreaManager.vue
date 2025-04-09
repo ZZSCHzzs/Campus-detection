@@ -57,7 +57,6 @@ import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
 
-// 表格列定义
 const columns = [
   { prop: 'name', label: '区域名称', width: '150' },
   { prop: 'type', label: '所属建筑', width: '200', slot: true },
@@ -83,7 +82,6 @@ const columns = [
   { prop: 'description', label: '描述' }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   name: '',
   type: null,
@@ -93,11 +91,9 @@ const defaultFormData = {
   capacity: 0,
 }
 
-// 建筑选择相关
 const buildings = ref([])
 const loadingBuildings = ref(false)
 
-// 获取建筑
 const fetchBuildings = async (query) => {
   loadingBuildings.value = true
   try {
@@ -110,11 +106,9 @@ const fetchBuildings = async (query) => {
   }
 }
 
-// 节点选择相关
 const nodes = ref([])
 const loadingNodes = ref(false)
 
-// 获取节点
 const fetchNodes = async (query) => {
   loadingNodes.value = true
   try {

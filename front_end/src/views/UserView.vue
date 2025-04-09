@@ -292,7 +292,6 @@ const handleFavoriteChange = async (event) => {
   }
 }
 
-
 // 密码强度计算
 const passwordStrength = ref(0)
 const passwordStrengthStatus = ref('success')
@@ -393,7 +392,7 @@ const getRoleTagType = (role: string) => {
 
 <template>
   <div class="user-center-container">
-    <!-- 重新设计的个人中心顶部 - 改为浅色系 -->
+
     <div class="user-header">
       <div class="user-header-content">
         <div class="user-info-brief">
@@ -449,7 +448,7 @@ const getRoleTagType = (role: string) => {
         <el-tab-pane label="个人信息" name="profile">
           <div class="tab-content">
             <el-card v-loading="loading" :shadow="false" class="profile-card content-card">
-              <!-- 个人资料部分 -->
+
               <div class="section-header">
                 <div class="section-title">
                   <el-icon :size="22" color="#409EFF">

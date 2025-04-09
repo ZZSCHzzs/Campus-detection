@@ -53,7 +53,6 @@ import BaseManager from './BaseManager.vue'
 import { apiService } from '../../services/api'
 import Jump from "./Jump.vue";
 
-// 表格列定义
 const columns = [
   { prop: 'area_name', label: '区域名称', width: '250', slot:true },
   { prop: 'detected_count', label: '检测人数', width: '200' },
@@ -65,18 +64,15 @@ const getAreaName = (row) => {
   return area ? area.name : '未知'
 }
 
-// 默认表单数据
 const defaultFormData = {
   area: null,
   detected_count: 0,
   timestamp: new Date()
 }
 
-// 区域选择相关
 const areas = ref([])
 const loadingAreas = ref(false)
 
-// 搜索区域
 const fetchAreas = async () => {
     loadingAreas.value = true
     try {

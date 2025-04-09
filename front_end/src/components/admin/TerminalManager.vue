@@ -35,9 +35,6 @@
     </template>
     
   </base-manager>
-  
-  
-
 </template>
 
 <script setup>
@@ -47,25 +44,21 @@ import { apiService } from '../../services/api'
 import { ElMessage } from 'element-plus'
 import View from './View.vue'
 
-// 表格列定义
 const columns = [
   { prop: 'name', label: '终端名称' },
   { prop: 'status', label: '状态', width: '250', slot: true },
   { prop: 'nodes_count', label: '关联节点数', width: '250', slot: true }
 ]
 
-// 默认表单数据
 const defaultFormData = {
   name: '',
   status: 'online'
 }
 
-// 节点列表数据
 const nodesList = ref([])
 const nodesDialogVisible = ref(false)
 const loadingNodes = ref(false)
 const currentTerminalId = ref(null)
-
 
 </script>
 

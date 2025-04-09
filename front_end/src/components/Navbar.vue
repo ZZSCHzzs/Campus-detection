@@ -9,17 +9,23 @@
             src="/favicon256.ico"/>
         <span class="site-name">校园慧感</span>
       </div>
-      <el-menu-item v-for="item in content" :key="item.index" :index="item.index" class="nav-item">
+      <el-menu-item 
+        v-for="item in content" 
+        :key="item.index" 
+        :index="item.index" 
+        class="nav-item"
+        v-show="!item.adminOnly || isAdmin"
+      >
         <el-icon v-if="item.icon" :size="18" class="nav-icon">
           <component :is="getIconComponent(item.icon)"></component>
         </el-icon>
         <div class="nav-text">{{ item.title }}</div>
       </el-menu-item>
 
-      <!-- 添加弹性空间，将后续元素推到右侧 -->
+
       <div class="flex-grow"></div>
 
-      <!-- 根据登录状态显示不同内容 -->
+
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
           <div class="user-info" :class="{ 'user-info-active': isProfileRoute }">
@@ -48,7 +54,7 @@
         </el-dropdown>
       </div>
 
-      <!-- 未登录时显示登录和注册按钮 -->
+
       <div v-else class="auth-buttons">
         <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
         <el-button size="small" type="primary" class="register-btn" @click="navigateToRegister">注册</el-button>
@@ -68,11 +74,9 @@ import {ElMessage, ElMessageBox} from 'element-plus'
 const authStore = useAuthStore()
 const route = useRoute()
 
-// 在组件挂载后检查用户信息
 onMounted(async () => {
   updateActiveIndex()
-  
-  // 如果已登录但没有用户信息，尝试获取
+
   if (authStore.isAuthenticated && (!authStore.user || !authStore.user.username)) {
     try {
       await authStore.getCurrentUser()
@@ -116,10 +120,10 @@ const content = ref([
     title: '管理面板',
     path: '/admin',
     icon: 'Operation',
+    adminOnly: true  
   }
 ])
 
-// 定义一个函数来获取正确的图标组件
 const getIconComponent = (iconName: string) => {
   const iconMap = {
     'HomeFilled': HomeFilled,
@@ -131,7 +135,6 @@ const getIconComponent = (iconName: string) => {
   return iconMap[iconName] || HomeFilled
 }
 
-// 使用静态映射，确保路由跳转不依赖于查找
 const routePathMap = {
   '0': '/index',
   '1': '/areas',
@@ -142,17 +145,14 @@ const routePathMap = {
 
 const activeIndex = ref('0')
 
-// 添加计算属性检测是否在profile页面
 const isProfileRoute = computed(() => {
   return route.path.includes('/profile')
 })
 
-// 修改 updateActiveIndex 函数，使 profile 页面也能响应导航点击
 const updateActiveIndex = () => {
   const currentPath = route.path
+
   
-  // 如果当前路径是个人中心页面，不激活任何导航项
-  // 但保留一个特殊标记，以便在 profile 页面也能响应点击
   if (currentPath.includes('/profile')) {
     activeIndex.value = ''
     return
@@ -162,8 +162,7 @@ const updateActiveIndex = () => {
     activeIndex.value = '0' 
     return
   }
-  
-  // 根据当前路径反向查找对应的菜单索引
+
   for (const [index, path] of Object.entries(routePathMap)) {
     if (currentPath.startsWith(path)) {
       activeIndex.value = index
@@ -176,21 +175,18 @@ onMounted(() => {
   updateActiveIndex()
 })
 
-// 确保路由变化时正确更新激活菜单项
 watch(() => route.path, () => {
   updateActiveIndex()
 }, { immediate: true })
 
-// 修改 handleSelect 函数，确保它总是能正常工作
 const handleSelect = (key: string) => {
   console.log('Menu item selected:', key)
-  
-  // 即使在 profile 页面，也允许导航到其他页面
+
   const path = routePathMap[key]
   if (path) {
     console.log('Navigating to:', path)
     router.push(path)
-    // 导航后应该会触发 route 的变化，进而触发 updateActiveIndex
+    
   } else {
     console.warn('No path found for key:', key)
   }
@@ -516,3 +512,4 @@ el-menu-item {
   box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
 </style>
+``` 

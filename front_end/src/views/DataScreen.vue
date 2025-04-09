@@ -7,16 +7,16 @@ import type { AreaItem, HistoricalData } from '../types'
 const areas = ref<AreaItem[]>([])
 const chartRef = ref<HTMLElement>()
 
-// 初始化时获取区域数据
+
 onMounted(async () => {
-  // 获取区域基本信息
+
   const { data: areaData } = await axios.get('/api/areas')
   areas.value = areaData.data.map((a: AreaItem) => ({
     ...a,
-    max_capacity: 50 // 根据实际业务需求设置或从API获取
+    max_capacity: 50
   }))
 
-  // 图表初始化及历史数据获取
+
   const chart = echarts.init(chartRef.value!)
   
   const option = {
@@ -37,10 +37,10 @@ onMounted(async () => {
     }]
   }
 
-  // 定时更新图表数据
+
   setInterval(async () => {
     const { data } = await axios.get<HistoricalData[]>('/api/historical')
-    // 修改为直接使用 data 数组，因为 HistoricalData[] 上不存在属性 data
+
     option.dataset.source = data.map(d => ([
       d.timestamp,
       d.detected_count
@@ -51,7 +51,6 @@ onMounted(async () => {
 </script>
 
 <template>
-
 
   <div class="dashboard">
     <div ref="chartRef" class="chart-container"></div>

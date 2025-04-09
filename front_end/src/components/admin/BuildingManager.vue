@@ -34,14 +34,12 @@ import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 import View from './View.vue'
 
-// 表格列定义
 const columns = [
   { prop: 'name', label: '建筑名称', width: '300' },
   { prop: 'description', label: '描述' },
   { prop: 'areas_count', label: '区域数量', width: '250', slot :true},
 ]
 
-// 默认表单数据
 const defaultFormData = {
   name: '',
   description: ''

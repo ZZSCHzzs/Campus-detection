@@ -294,19 +294,18 @@ onMounted(async () => {
     <div class="user-container">
         <div class="flip-container" :class="{ 'flipped': !isLogin }">
             <div class="flipper">
-                <!-- 登录表单 (正面) -->
+
                 <div class="front">
                     <el-card class="login-card" :body-style="{ padding: '0px' }">
                         <div class="card-header">
                             <h2>登录</h2>
                         </div>
                         <div class="form-container">
-                            <!-- 添加校园标志和欢迎信息 -->
                             <div class="welcome-section">
                                 <div class="campus-logo">
-                                    <img src="/favicon256.ico" alt="校园标志" onerror="this.src='https://via.placeholder.com/100x100?text=校园检测'">
+                                    <img src="/favicon256.ico" alt="校园标志"/>
                                 </div>
-                                <div class="welcome-text">
+                                <div class=welcome-text>
                                     <h3>欢迎回来</h3>
                                     <p>校园检测系统将为您提供安全、便捷的服务</p>
                                 </div>
@@ -322,7 +321,7 @@ onMounted(async () => {
                                         show-password />
                                 </el-form-item>
 
-                                <!-- 添加忘记密码链接 -->
+
                                 <div class="forgot-password">
                                     <el-button type="text" size="small">忘记密码?</el-button>
                                 </div>
@@ -341,7 +340,7 @@ onMounted(async () => {
                     </el-card>
                 </div>
 
-                <!-- 注册表单 (背面) -->
+
                 <div class="back">
                     <el-card class="login-card" :body-style="{ padding: '0px' }">
                         <div class="card-header">

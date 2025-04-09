@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { defineProps } from 'vue'
 import { ElMessage } from 'element-plus'
 
-
 const props = defineProps<{
   module: string
   name: string

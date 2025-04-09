@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 需集成地图库（如Leaflet）
+
 </script>
 
 <template>
