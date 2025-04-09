@@ -54,7 +54,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   User, Monitor, OfficeBuilding, Location, Histogram, Camera,
-  Fold, Expand, Bell, Document
+  Bell, Document
 } from '@element-plus/icons-vue'
 import UserManager from '../components/admin/UserManager.vue'
 import NodeManager from '../components/admin/NodeManager.vue'
@@ -192,7 +192,7 @@ watch(() => route.query, (newQuery) => {
     const newData = newQuery.data || '';
     const newId = newQuery.id || '';
     if (newData && newId) {
-      dataLink.value = `${newData}/${newId}/${activeModule.value}`;
+      dataLink.value = `/api/${newData}/${newId}/${activeModule.value}`;
     }
 
     const newSearch = newQuery.search || '';

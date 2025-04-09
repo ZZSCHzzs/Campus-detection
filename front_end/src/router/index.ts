@@ -1,4 +1,4 @@
-// src/router/index.ts
+
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { ElMessage } from 'element-plus'
@@ -45,13 +45,13 @@ const routes: Array<RouteRecordRaw> = [
     path: '/profile',
     name: 'UserProfile',
     component: UserView,
-    meta: { requiresAuth: true } // 需要认证的路由
+    meta: { requiresAuth: true }
   },
   {
     path: '/admin',
     name: 'admin',
     component: AdminView,
-    meta: { requiresAuth: true, requiresAdmin: true } // 添加requiresAdmin标识
+    meta: { requiresAuth: true, requiresAdmin: true }
   }
 ];
 
@@ -60,29 +60,25 @@ const router = createRouter({
   routes,
 });
 
-// 添加路由守卫
+
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
-
-  // 检查路由是否需要认证
   if (to.matched.some(record => record.meta.requiresAuth)) {
-    // 如果需要认证且用户未登录，重定向到登录页
     if (!authStore.isAuthenticated) {
       next({
         path: '/auth',
         query: { mode: 'login', redirect: to.fullPath }
       })
     } 
-    // 如果需要管理员权限但用户不是管理员
     else if (to.matched.some(record => record.meta.requiresAdmin) && authStore.user?.role !== 'admin') {
       ElMessage.error('您没有访问管理面板的权限')
-      next({ path: '/' }) // 重定向到首页
+      next({ path: '/' }) 
     }
     else {
-      next() // 已登录且有权限，正常跳转
+      next() 
     }
   } else {
-    next() // 不需要认证，正常跳转
+    next() 
   }
 })
 

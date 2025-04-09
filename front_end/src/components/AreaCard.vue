@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import {ref, onMounted, defineProps, computed, watch} from 'vue'
-import axios from '../axios'
+import { areaService } from '../services/apiService'
 import type {AreaItem, HardwareNode} from '../types'
-import {Star} from '@element-plus/icons-vue'
+import {Star, Timer, Warning} from '@element-plus/icons-vue'
 
 const props = defineProps<{
   area: AreaItem
@@ -19,8 +19,8 @@ const isFavorite = ref(props.area.is_favorite)
 
 const fetchNodeData = async () => {
   try {
-    const {data} = await axios.get(`/api/areas/${props.area.id}/data`)
-    nodeData.value = data
+    // 使用areaService获取区域数据
+    nodeData.value = await areaService.getAreaData(props.area.id)
   } catch (error) {
     console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
   } finally {
@@ -47,7 +47,8 @@ watch(isVisible, (newVal) => {
 const toggleFavorite = async () => {
   favoriteLoading.value = true
   try {
-    await axios.post(`/api/areas/${props.area.id}/favor`)
+    // 使用areaService切换收藏状态
+    await areaService.toggleFavoriteArea(props.area.id)
     isFavorite.value = !isFavorite.value
     emit('favorite-change', {
       areaId: props.area.id,

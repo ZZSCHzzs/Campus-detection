@@ -131,7 +131,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Search } from '@element-plus/icons-vue'
-import { apiServices as apiService } from '../../axios.ts'
+import apiService from '../../services/apiService'
 
 const props = defineProps({
   title: {
@@ -143,7 +143,8 @@ const props = defineProps({
     required: true
   },
   dataLink: {
-    type: String,
+    type: String || null,
+    default: null
   },
   itemName: {
     type: String,
@@ -264,27 +265,47 @@ const filteredTableData = computed(() => {
 const fetchData = async () => {
   loading.value = true
   try {
-    let url = props.resourceName
-    if(props.dataLink) {
-      url = props.dataLink
-    }
-    if (!url.endsWith('/')) {
-      url += '/'
-    }
-    const response = await apiService.customGet(url)
+    let response;
     
-    if (response.data.results) {
-
-      tableData.value = response.data.results
-      total.value = response.data.count
+    const url = props.dataLink
+    if(!url) {
+      
+      response = await apiService[props.resourceName].getAll()
+    }
+    else{
+      response = await apiService.customGet(url)
+    }
+    
+    
+    if (response && response.data) {
+      
+      if (response.data.results !== undefined) {
+        
+        tableData.value = response.data.results
+        total.value = response.data.count || response.data.results.length
+      } else {
+        
+        tableData.value = response.data
+        total.value = response.data.length
+      }
+    } else if (Array.isArray(response)) {
+      
+      tableData.value = response
+      total.value = response.length
+    } else if (response && response.results) {
+      
+      tableData.value = response.results
+      total.value = response.count || response.results.length
     } else {
-
-      tableData.value = response.data
-      total.value = response.data.length
+      
+      tableData.value = response || []
+      total.value = Array.isArray(response) ? response.length : 0
     }
   } catch (error) {
     console.error('获取数据失败:', error)
     ElMessage.error('获取数据失败')
+    tableData.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -329,10 +350,9 @@ const handleDelete = (row) => {
     }
   ).then(async () => {
     try {
-      const resourceUrl = `${props.resourceName}/${row.id}/`
-      await apiService.delete(resourceUrl)
+      await apiService[props.resourceName].delete(row.id)
       ElMessage.success('删除成功')
-      fetchData()
+      await fetchData()
       emit('delete', row)
     } catch (error) {
       console.error('删除失败:', error)
@@ -347,18 +367,14 @@ const submitForm = async () => {
   submitting.value = true
   try {
     if (formMode.value === 'add') {
-      let url = props.resourceName
-      if (!url.endsWith('/')) {
-        url += '/'
-      }
-      await apiService.create(url, form.value)
+      await apiService[props.resourceName].create(form.value)
       ElMessage.success(`${props.itemName}添加成功`)
     } else {
-      await apiService.update(props.resourceName,form.value.id, form.value)
+      await apiService[props.resourceName].update(form.value.id, form.value)
       ElMessage.success(`${props.itemName}更新成功`)
     }
     dialogVisible.value = false
-    fetchData()
+    await fetchData()
     emit('submit', form.value, formMode.value)
   } catch (error) {
     console.error('提交失败:', error)

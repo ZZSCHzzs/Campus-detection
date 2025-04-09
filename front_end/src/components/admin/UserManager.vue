@@ -37,7 +37,6 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
 
 const columns = [

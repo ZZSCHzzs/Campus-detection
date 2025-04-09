@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, HomeFilled, OfficeBuilding } from '@element-plus/icons-vue'
 import type { AreaItem, Building } from '../types'
-import axios from '../axios'
+import { buildingService } from '../services/apiService'
 import AreaCard from '../components/AreaCard.vue'
 
 const buildings = ref<Building[]>([])
@@ -12,7 +12,7 @@ const expectStatus = ref<string | "all">("all")
 const buildingFilter = ref<number | "all">("all")
 const searchKeyword = ref("")
 
-// 添加首次加载标记
+
 const isFirstLoad = ref(true)
 
 watch(searchKeyword, (newVal) => {
@@ -47,10 +47,10 @@ const fetchBuildings = async () => {
         loading.value = true
     }
     try {
-        const { data } = await axios.get('/api/buildings')
+        const buildingsData = await buildingService.getAll()
         buildings.value = await Promise.all(
-            data.map(async (b: Building) => {
-                const { data: areas } = await axios.get(`/api/buildings/${b.id}/areas/`)
+            buildingsData.map(async (b: Building) => {
+                const areas = await buildingService.getBuildingAreas(b.id)
                 return { ...b, areas }
             })
         )
@@ -58,7 +58,7 @@ const fetchBuildings = async () => {
     } catch (error) {
         ElMessage.error('数据加载失败')
     } finally {
-            loading.value = false
+        loading.value = false
     }
 }
 
@@ -92,9 +92,9 @@ const isBuildingVisible = computed(() => (buildingId: number) => {
 })
 onMounted(() => {
     fetchBuildings()
-    // 完成首次加载后，将首次加载标记设为false
+    
     isFirstLoad.value = false
-    // 定期刷新数据不会再显示loading状态
+    
     setInterval(fetchBuildings, 30000)
 })
 </script>

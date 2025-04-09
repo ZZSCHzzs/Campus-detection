@@ -55,7 +55,8 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { nodeService,buildingService } from '../../services/apiService'
+import Jump from "./Jump.vue";
 
 const columns = [
   { prop: 'name', label: '区域名称', width: '150' },
@@ -68,7 +69,7 @@ const columns = [
   {  prop: 'status', label: '状态', width: '100', slot: true,
     formatter: (row) => {
       const node = nodes.value.find(n => n.id === row.bound_node)
-      return node && node.status ? true : false
+      return (node && node.status)
     }
   },
   {
@@ -97,8 +98,7 @@ const loadingBuildings = ref(false)
 const fetchBuildings = async (query) => {
   loadingBuildings.value = true
   try {
-    const response = await apiService.customGet(`buildings?search=${query}`)
-    buildings.value = response.data.results || response.data
+    buildings.value = await buildingService.getAll()
   } catch (error) {
     console.error('获取建筑失败:', error)
   } finally {
@@ -112,8 +112,7 @@ const loadingNodes = ref(false)
 const fetchNodes = async (query) => {
   loadingNodes.value = true
   try {
-    const response = await apiService.customGet(`nodes?search=${query}`)
-    nodes.value = response.data.results || response.data
+    nodes.value = await nodeService.getAll()
   } catch (error) {
     console.error('获取节点失败:', error)
   } finally {

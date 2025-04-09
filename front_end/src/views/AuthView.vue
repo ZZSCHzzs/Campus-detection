@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { ElMessage, ElLoading } from 'element-plus'
-import { Plus, Lock, User, Message } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Lock, User, Message } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from '../services/api'
+import authApi from '../services/authApi'
 import CryptoJS from 'crypto-js' 
-import { useAuthStore } from '../stores/auth' 
+import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
 
@@ -15,11 +15,7 @@ const route = useRoute()
 const isLogin = ref(true)
 
 const setViewMode = () => {
-    if (route.query.mode === 'register') {
-        isLogin.value = false
-    } else {
-        isLogin.value = true
-    }
+    isLogin.value = route.query.mode !== 'register';
 }
 
 onMounted(() => {
@@ -95,7 +91,6 @@ const registerFormRef = ref()
 const loading = ref(false)
 
 const encryptPassword = (password: string): string => {
-    
     return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex)
 }
 
@@ -104,7 +99,7 @@ const refreshToken = async () => {
         const refresh = localStorage.getItem('refresh')
         if (!refresh) return null
 
-        const response = await axios.post('/auth/jwt/refresh/', {
+        const response = await authApi.refreshToken({
             refresh
         })
 
@@ -122,7 +117,7 @@ const verifyToken = async () => {
         const token = localStorage.getItem('access')
         if (!token) return false
 
-        await axios.post('/auth/jwt/verify/', {
+        await authApi.verifyToken({
             token
         })
         return true
@@ -141,62 +136,81 @@ const handleLogin = async () => {
                 
                 const encryptedPassword = encryptPassword(loginForm.value.password)
 
-                
-                const response = await axios.post('/auth/jwt/create/', {
-                    username: loginForm.value.username,
-                    password: encryptedPassword
-                })
+                console.log('尝试登录...')
+                const response = await authApi.login(
+                    loginForm.value.username, 
+                    encryptedPassword
+                )
 
-                
                 const { access, refresh } = response.data
-
+                
+                console.log('登录成功，设置token')
+                
+                localStorage.removeItem('access')
+                localStorage.removeItem('refresh')
+                
                 
                 authStore.setAuth({ access, refresh })
 
                 
-                try {
-                    const userResponse = await axios.get('/auth/users/me/', {
-                        headers: {
-                            Authorization: `Bearer ${access}`
-                        }
-                    })
-                    
-                    console.log('获取到的用户信息:', userResponse.data)
-                    
-                    
-                    if (!userResponse.data.username) {
-                        console.error('API返回的用户数据缺少username字段')
-                        userResponse.data.username = loginForm.value.username
-                    }
-                    
-                    
-                    authStore.setUser(userResponse.data)
-                    
-                    
-                    console.log('存储后的用户信息:', authStore.user)
-                } catch (userError) {
-                    console.error('获取用户信息失败:', userError)
-                    
-                    authStore.setUser({ 
-                        username: loginForm.value.username,
-                        role: 'user' 
-                    })
+                await new Promise(resolve => setTimeout(resolve, 200))
+                
+                
+                const storedToken = localStorage.getItem('access')
+                if (storedToken !== access) {
+                    console.error('Token存储异常，手动同步')
+                    localStorage.setItem('access', access)
                 }
 
-                ElMessage({
-                    message: '登录成功',
-                    type: 'success',
-                    duration: 2000
-                })
-
-                
-                setTimeout(() => {
-                    router.push('/')
-                }, 1000)
+                try {
+                    console.log('获取用户信息中...')
+                    
+                    const userInfo = await authApi.getUserInfo()
+                    
+                    if (userInfo) {
+                        console.log('用户信息获取成功:', userInfo)
+                        authStore.setUser(userInfo)
+                        
+                        ElMessage({
+                            message: '登录成功',
+                            type: 'success',
+                            duration: 2000
+                        })
+                        
+                        setTimeout(() => {
+                            router.push('/')
+                        }, 1000)
+                    } else {
+                        throw new Error('无法获取用户信息')
+                    }
+                } catch (userError) {
+                    console.error('获取用户信息失败:', userError)
+                    ElMessage({
+                        message: '登录成功，但无法获取用户信息',
+                        type: 'warning',
+                        duration: 2000
+                    })
+                    
+                    setTimeout(() => {
+                        router.push('/')
+                    }, 1000)
+                }
             } catch (error) {
                 console.error('登录失败:', error)
+                let errorMessage = '登录失败，请检查用户名和密码'
+                
+                if (error.response) {
+                    if (error.response.data?.detail) {
+                        errorMessage = error.response.data.detail
+                    } else if (error.response.status === 401) {
+                        errorMessage = '用户名或密码错误'
+                    } else if (error.response.status === 400) {
+                        errorMessage = '请求参数错误，请检查输入'
+                    }
+                }
+                
                 ElMessage({
-                    message: error.response?.data?.detail || '登录失败，请稍后再试',
+                    message: errorMessage,
                     type: 'error',
                     duration: 2000
                 })
@@ -223,8 +237,7 @@ const handleRegister = async () => {
                 
                 const encryptedPassword = encryptPassword(registerForm.value.password)
 
-                
-                const response = await axios.post('/auth/users/', {
+                await authApi.register({
                     username: registerForm.value.username,
                     password: encryptedPassword,
                     email: registerForm.value.email
@@ -236,6 +249,7 @@ const handleRegister = async () => {
                     duration: 2000
                 })
 
+                loginForm.value.username = registerForm.value.username
                 
                 registerForm.value = {
                     username: '',
@@ -244,17 +258,29 @@ const handleRegister = async () => {
                     email: ''
                 }
 
-                
                 setTimeout(() => {
                     isLogin.value = true
+                    router.replace({ path: '/auth', query: { mode: 'login' } })
                 }, 1000)
             } catch (error) {
                 console.error('注册失败:', error)
-                const errorMessage = error.response?.data?.username?.[0] ||
-                    error.response?.data?.email?.[0] ||
-                    error.response?.data?.password?.[0] ||
-                    error.response?.data?.detail ||
-                    '注册失败，请稍后再试'
+                
+                let errorMessage = '注册失败，请稍后再试'
+                
+                if (error.response?.data) {
+                    const errors = error.response.data
+                    
+                    if (errors.username && errors.username.length > 0) {
+                        errorMessage = `用户名: ${errors.username[0]}`
+                    } else if (errors.email && errors.email.length > 0) {
+                        errorMessage = `邮箱: ${errors.email[0]}`
+                    } else if (errors.password && errors.password.length > 0) {
+                        errorMessage = `密码: ${errors.password[0]}`
+                    } else if (errors.detail) {
+                        errorMessage = errors.detail
+                    }
+                }
+                
                 ElMessage({
                     message: errorMessage,
                     type: 'error',
@@ -277,13 +303,10 @@ const handleRegister = async () => {
 onMounted(async () => {
     setViewMode()
 
-    
     const isValid = await authStore.verifyToken()
     if (!isValid) {
-        
         const refreshSuccess = await authStore.refreshAccessToken()
         if (!refreshSuccess) {
-            
             authStore.logout()
         }
     }

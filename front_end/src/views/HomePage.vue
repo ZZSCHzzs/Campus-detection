@@ -1,10 +1,10 @@
 <script lang="ts" setup>
-import {ref, onMounted, computed, nextTick} from 'vue'
+import {ref, onMounted} from 'vue'
 import * as echarts from 'echarts'
 import {ElMessage} from 'element-plus'
 import type {AreaItem, Alert, Notice} from '../types'
-import axios from '../axios'
 import { useAuthStore } from '../stores/auth'
+import { areaService, noticeService, alertService, summaryService, userService } from '../services/apiService'
 import AreaList from '../components/AreaList.vue'
 
 import { 
@@ -36,18 +36,9 @@ const fetchHotAreas = async () => {
     if (isFirstLoad.value) {
       loading.value = true
     }
-    const response = await axios.get('/api/areas/popular',{
-      params: {
-        count: 6
-      }
-    })
-    if (Array.isArray(response.data)) {
-      Hotareas.value = response.data
-    } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-      Hotareas.value = response.data.data
-    } else {
-      Hotareas.value = []
-    }
+    // 使用areaService获取热门区域
+    Hotareas.value = await areaService.getPopularAreas(6)
+    
     if (isFirstLoad.value) {
       setTimeout(() => {
         loading.value = false
@@ -65,23 +56,19 @@ const fetchHotAreas = async () => {
 const userStore = useAuthStore()
 const favoriteAreaIds = ref<number[]>([])
 
-
 const fetchFavoriteAreas = async () => {
   try {
     isLoggedIn.value = userStore.isAuthenticated || false
     if (isLoggedIn.value && userStore.user) {
-        axios.get('auth/users/me/').then(response => {
-          userStore.setUser(response.data)
-          favoriteAreaIds.value = response.data.favorite_areas || []
-        }).catch(error => {
-          console.error('获取用户信息失败:', error)
-        })
+        // 使用userService获取用户信息
+        const userData = await userService.getUserInfo()
+        userStore.setUser(userData)
+        favoriteAreaIds.value = userData.favorite_areas || []
     }
   } catch (error) {
     isLoggedIn.value = false
   }
 }
-
 
 const fetchFavoriteAreasDetails = async () => {
   try {
@@ -89,17 +76,11 @@ const fetchFavoriteAreasDetails = async () => {
     if (isFirstLoad.value) {
       loadingFavorites.value = true
     }
-    const promises = favoriteAreaIds.value.map(id => 
-      axios.get(`/api/areas/${id}`)
-        .then(response => response.data)
-        .catch(error => {
-          console.error(`获取区域 ${id} 信息失败:`, error)
-          return null
-        })
-    )
     
-    const areasData = await Promise.all(promises)
-    favoriteAreas.value = areasData.filter(area => area !== null)
+    // 使用userService获取收藏区域详情
+    if (favoriteAreaIds.value.length > 0) {
+      favoriteAreas.value = await userService.getFavoriteAreas(favoriteAreaIds.value)
+    }
   } catch (error) {
     ElMessage.error('收藏区域数据获取失败')
     favoriteAreas.value = []
@@ -201,8 +182,9 @@ const fetchSummary = async () => {
     if (isFirstLoad.value) {
       loadingSummary.value = true
     }
-    const response = await axios.get('/api/summary')
-    summary.value = response.data as SummaryData 
+    // 使用summaryService获取系统概览
+    const data = await summaryService.getSummary()
+    summary.value = data as SummaryData 
 
   } catch (error) {
     ElMessage.error('统计信息获取失败')
@@ -215,12 +197,10 @@ const fetchSummary = async () => {
   }
 }
 
-
 const alerts = ref<Alert[]>([])
 const notices = ref<Notice[]>([])
 const loadingAlerts = ref(false)
 const loadingNotices = ref(false)
-
 
 const fetchPublicAlerts = async () => {
   try {
@@ -228,8 +208,8 @@ const fetchPublicAlerts = async () => {
     if (isFirstLoad.value) {
       loadingAlerts.value = true
     }
-    const response = await axios.get('/api/alerts/public')
-    alerts.value = response.data
+    // 使用alertService获取公开告警
+    alerts.value = await alertService.getPublicAlerts()
   } catch (error) {
     ElMessage.error('获取告警信息失败')
     alerts.value = []
@@ -242,15 +222,14 @@ const fetchPublicAlerts = async () => {
   }
 }
 
-
 const fetchLatestNotices = async () => {
   try {
     // 只在首次加载时显示loading状态
     if (isFirstLoad.value) {
       loadingNotices.value = true
     }
-    const response = await axios.get('/api/notice/latest')
-    notices.value = response.data
+    // 使用noticeService获取最新通知
+    notices.value = await noticeService.getLatestNotices()
   } catch (error) {
     ElMessage.error('获取通知信息失败')
     notices.value = []
@@ -262,7 +241,6 @@ const fetchLatestNotices = async () => {
     }
   }
 }
-
 
 const getAlertType = (grade: number) => {
   switch (grade) {
@@ -285,9 +263,9 @@ onMounted(async () => {
   // 完成首次加载后，将首次加载标记设为false
   isFirstLoad.value = false
   
-  fetchFavoriteAreasDetails()
+  await fetchFavoriteAreasDetails()
   setTimeout(async () => {
-    initChart() 
+    await initChart()
     window.addEventListener('resize', () => {
       if (chart) {
         try {
@@ -547,7 +525,7 @@ onMounted(async () => {
   color: #666;
   max-width: 700px;
   margin: 0 auto;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   animation: fadeIn 1s ease-in-out;
 }
 
@@ -637,7 +615,7 @@ onMounted(async () => {
     :deep(.el-statistic__title) {
       font-size: 14px;
       color: #888; /* 弱化标题颜色 */
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
     }
     
     .stat-icon {
@@ -669,7 +647,7 @@ onMounted(async () => {
   .card-title {
     font-size: 18px !important; /* 加大标题 */
     color: #333;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
   }
 }
 
