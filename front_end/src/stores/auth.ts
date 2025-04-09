@@ -1,212 +1,257 @@
 import { defineStore } from 'pinia'
-import api from '../services/api'
+import authApi from '../services/authApi'
 import { ref, computed, watch } from 'vue'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
-  // 状态
+  // 状态变量
   const accessToken = ref(localStorage.getItem('access') || '')
   const refreshToken = ref(localStorage.getItem('refresh') || '')
   const user = ref<User | null>(null)
+  const isLoggingOut = ref(false)
+  const isLoading = ref(false)
   
-  // 初始化时尝试从localStorage加载用户信息
+  // 初始化时从localStorage加载用户信息
   try {
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
       user.value = JSON.parse(storedUser)
+      console.log('[AUTH-STORE] 从localStorage加载用户信息')
     }
   } catch (error) {
-    console.error('加载用户信息失败:', error)
+    console.error('[AUTH-STORE] 加载用户信息失败:', error)
     localStorage.removeItem('user')
   }
   
   // 计算属性
-  const isAuthenticated = computed(() => !!accessToken.value)
-  const username = computed(() => user.value?.username || 'Unknown')
+  const isAuthenticated = computed(() => !!accessToken.value && accessToken.value.length > 10)
+  const username = computed(() => user.value?.username || '未登录')
   
   // 监听token变化，保持同步
   watch(accessToken, (newToken) => {
-    localStorage.setItem('access', newToken)
+    if (newToken) {
+      localStorage.setItem('access', newToken)
+      console.log('[AUTH-STORE] 更新access token')
+    } else {
+      localStorage.removeItem('access')
+    }
   })
   
   watch(refreshToken, (newToken) => {
-    localStorage.setItem('refresh', newToken)
+    if (newToken) {
+      localStorage.setItem('refresh', newToken)
+      console.log('[AUTH-STORE] 更新refresh token')
+    } else {
+      localStorage.removeItem('refresh')
+    }
   })
   
-  // 监听自定义事件
-  if (typeof window !== 'undefined') {
-    // 监听token刷新事件
-    window.addEventListener('auth:token-refreshed', ((event: CustomEvent) => {
-      accessToken.value = event.detail.token
-      console.log('Token已通过事件更新')
-    }) as EventListener)
-    
-    // 监听登出事件
-    window.addEventListener('auth:logout', () => {
-      logout()
-      console.log('收到登出事件，已清除认证状态')
-    })
-  }
-  
-  // 获取当前用户信息
-  const getCurrentUser = async () => {
-    // 如果已经有用户信息且有效，直接返回
-    if (user.value && user.value.username) {
-      return user.value
-    }
-    
-    // 如果有token但没有用户信息，尝试获取
-    if (accessToken.value) {
-      try {
-        console.log('获取用户信息中，当前token:', accessToken.value.slice(0, 10) + '...')
-        const response = await api.get('/auth/users/me/')
-        if (response.data) {
-          setUser(response.data)
-          return response.data
-        }
-      } catch (error) {
-        console.error('获取用户信息失败:', error)
-        // 如果获取失败，可能是token已失效
-        const isValid = await verifyToken()
-        if (!isValid) {
-          console.warn('Token验证失败，执行登出')
-          logout()
-        }
-      }
-    }
-    return null
-  }
-  
-  // 动作
   // 设置认证信息
   const setAuth = (authData: { access: string, refresh: string }) => {
+    console.log('[AUTH-STORE] 设置认证信息')
     accessToken.value = authData.access
     refreshToken.value = authData.refresh
+    
+    // 立即同步到localStorage
     localStorage.setItem('access', authData.access)
     localStorage.setItem('refresh', authData.refresh)
-    console.log('认证信息已设置')
   }
   
   // 设置用户信息
   const setUser = (userData: any) => {
-    console.log('设置用户信息:', userData)
+    console.log('[AUTH-STORE] 设置用户信息:', userData)
     if (!userData || !userData.username) {
-      console.error('用户数据无效或缺少用户名')
+      console.error('[AUTH-STORE] 用户数据无效')
       return
     }
+    
     user.value = userData
     localStorage.setItem('user', JSON.stringify(userData))
   }
   
+  // 清除认证数据
+  const clearAuthData = () => {
+    console.log('[AUTH-STORE] 清除认证数据')
+    accessToken.value = ''
+    refreshToken.value = ''
+    user.value = null
+    
+    localStorage.removeItem('access')
+    localStorage.removeItem('refresh')
+    localStorage.removeItem('user')
+  }
+  
   // 刷新token
-  const refreshAccessToken = async () => {
-    if (!refreshToken.value) return false
+  const refreshAccessToken = async (): Promise<boolean> => {
+    if (!refreshToken.value) {
+      console.error('[AUTH-STORE] 没有refresh token，无法刷新')
+      return false
+    }
+    
     try {
-      console.log('尝试刷新token')
-      // 使用axios直接请求，避免拦截器循环
-      const response = await api.post('/auth/jwt/refresh/', {
-        refresh: refreshToken.value
-      })
+      isLoading.value = true
+      console.log('[AUTH-STORE] 刷新token...')
       
-      if (response.data.access) {
-        accessToken.value = response.data.access
-        localStorage.setItem('access', response.data.access)
-        console.log('Token刷新成功')
+      const response = await authApi.refreshToken(refreshToken.value)
+      if (response.data?.access) {
+        const newToken = response.data.access
+        accessToken.value = newToken
+        localStorage.setItem('access', newToken)
         
-        // 触发自定义事件通知token已刷新
-        window.dispatchEvent(new CustomEvent('auth:token-refreshed', {
-          detail: { token: response.data.access }
-        }))
-        
+        console.log('[AUTH-STORE] Token刷新成功')
         return true
       }
+      
+      console.error('[AUTH-STORE] 刷新token返回不含access')
       return false
     } catch (error) {
-      console.error('刷新Token失败:', error)
-      // 刷新失败，清除认证状态
-      logout()
+      console.error('[AUTH-STORE] 刷新token失败:', error)
       return false
+    } finally {
+      isLoading.value = false
     }
   }
   
   // 验证token
-  const verifyToken = async () => {
-    if (!accessToken.value) return false
+  const verifyToken = async (): Promise<boolean> => {
+    if (!accessToken.value) {
+      console.log('[AUTH-STORE] 无token，跳过验证')
+      return false
+    }
+    
     try {
-      console.log('验证token有效性')
-      await api.post('/auth/jwt/verify/', {
-        token: accessToken.value
-      })
-      console.log('Token验证成功')
+      isLoading.value = true
+      console.log('[AUTH-STORE] 验证token...')
+      
+      await authApi.verifyToken(accessToken.value)
+      console.log('[AUTH-STORE] Token有效')
       return true
     } catch (error) {
-      console.error('Token验证失败:', error)
+      console.error('[AUTH-STORE] Token验证失败', error)
       
-      // 如果验证失败，尝试刷新token
-      const refreshed = await refreshAccessToken()
-      if (!refreshed) {
+      // 尝试刷新token
+      return await refreshAccessToken()
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  // 获取用户信息
+  const getCurrentUser = async () => {
+    // 如果已有有效用户信息，直接返回
+    if (user.value && user.value.username) {
+      return user.value
+    }
+    
+    if (!accessToken.value) {
+      console.error('[AUTH-STORE] 无token，无法获取用户信息')
+      return null
+    }
+    
+    try {
+      isLoading.value = true
+      console.log('[AUTH-STORE] 获取用户信息...')
+      
+      // 确保localStorage有最新token
+      if (localStorage.getItem('access') !== accessToken.value) {
+        localStorage.setItem('access', accessToken.value)
+      }
+      
+      const response = await authApi.getUserInfo()
+      if (response.data) {
+        setUser(response.data)
+        return response.data
+      }
+      
+      return null
+    } catch (error) {
+      console.error('[AUTH-STORE] 获取用户信息失败:', error)
+      
+      // 验证token是否有效
+      const isValid = await verifyToken()
+      if (!isValid) {
         logout()
       }
-      return refreshed
+      
+      return null
+    } finally {
+      isLoading.value = false
     }
   }
   
   // 登出
   const logout = () => {
-    console.log('执行登出操作')
-    accessToken.value = ''
-    refreshToken.value = ''
-    user.value = null
-    localStorage.removeItem('access')
-    localStorage.removeItem('refresh')
-    localStorage.removeItem('user')
+    // 防止循环调用
+    if (isLoggingOut.value) return
     
-    // 触发登出事件
-    window.dispatchEvent(new Event('auth:logout'))
-  }
-  
-  // 自动验证token有效性
-  const validateSession = async () => {
-    if (accessToken.value) {
-      console.log('会话验证开始')
-      try {
-        const isValid = await verifyToken()
-        if (!isValid) {
-          console.warn('Token无效，尝试刷新')
-          const refreshed = await refreshAccessToken()
-          if (!refreshed) {
-            console.error('无法刷新token，执行登出')
-            logout()
-            return false
-          }
-        }
-        
-        // 如果验证成功但没有用户信息，获取用户信息
-        if (!user.value || !user.value.username) {
-          await getCurrentUser()
-        }
-        
-        return true
-      } catch (error) {
-        console.error('会话验证出错:', error)
-        logout()
-        return false
-      }
+    try {
+      isLoggingOut.value = true
+      console.log('[AUTH-STORE] 执行登出')
+      
+      // 清理数据
+      clearAuthData()
+      
+      // 派发登出事件
+      window.dispatchEvent(new Event('auth:logout'))
+    } finally {
+      isLoggingOut.value = false
     }
-    return false
   }
   
-  // 初始验证
+  // 验证会话
+  const validateSession = async (): Promise<boolean> => {
+    // 无token，返回false
+    if (!accessToken.value) return false
+    
+    try {
+      isLoading.value = true
+      console.log('[AUTH-STORE] 验证会话...')
+      
+      // 验证token
+      const isValid = await verifyToken()
+      if (!isValid) {
+        console.warn('[AUTH-STORE] Token验证失败，尝试刷新')
+        
+        const refreshed = await refreshAccessToken()
+        if (!refreshed) {
+          console.error('[AUTH-STORE] Token刷新失败，执行登出')
+          logout()
+          return false
+        }
+      }
+      
+      // 确保有用户信息
+      if (!user.value || !user.value.username) {
+        await getCurrentUser()
+      }
+      
+      return true
+    } catch (error) {
+      console.error('[AUTH-STORE] 会话验证失败:', error)
+      logout()
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  // 如果有token，初始化时验证会话
   if (accessToken.value) {
-    validateSession()
+    validateSession().catch(error => {
+      console.error('[AUTH-STORE] 初始会话验证失败:', error)
+    })
   }
   
   return {
+    // 状态
     accessToken,
     refreshToken,
     user,
     isAuthenticated,
     username,
+    isLoading,
+    
+    // 方法
     setAuth,
     setUser,
     refreshAccessToken,

@@ -40,8 +40,6 @@
 <script setup>
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
-import { ElMessage } from 'element-plus'
 import View from './View.vue'
 
 const columns = [

@@ -106,9 +106,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref,onMounted } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { areaService } from '../../services/apiService'
 import Jump from './Jump.vue'
 import { defineProps } from 'vue'
 
@@ -145,15 +145,13 @@ const loadingAreas = ref(false)
 const fetchAreas = async () => {
   loadingAreas.value = true
   try {
-    const response = await apiService.customGet('areas')
-    areas.value = response.data.results || response.data
+    areas.value = await areaService.getAll()
   } catch (error) {
     console.error('获取区域失败:', error)
   } finally {
     loadingAreas.value = false
   }
 }
-fetchAreas()
 
 const getAreaName = (id) => {
   const area = areas.value.find(item => item.id === id)
@@ -191,4 +189,8 @@ const getAlertTypeType = (type) => {
   }
   return typeMap[type] || 'info'
 }
+
+onMounted(() => {
+  fetchAreas()
+})
 </script>

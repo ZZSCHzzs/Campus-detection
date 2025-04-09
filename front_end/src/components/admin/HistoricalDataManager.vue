@@ -16,9 +16,6 @@
           <el-select 
             v-model="form.area" 
             placeholder="请选择区域"
-            filterable
-            remote
-            :remote-method="searchAreas"
             :loading="loadingAreas"
           >
             <el-option
@@ -50,7 +47,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { areaService } from '../../services/apiService'
 import Jump from "./Jump.vue";
 
 const columns = [
@@ -76,15 +73,14 @@ const loadingAreas = ref(false)
 const fetchAreas = async () => {
     loadingAreas.value = true
     try {
-      const response = await apiService.getAll('areas')
-      areas.value = response.data.results || response.data
+      areas.value = await areaService.getAll()
     } catch (error) {
       console.error('获取区域失败:', error)
     } finally {
       loadingAreas.value = false
     }
-  
 }
+
 onMounted(() => {
   fetchAreas()
 })

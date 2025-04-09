@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import axios from '../axios'
+
+import { areaService, alertService, noticeService } from '../services/apiService'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Warning, Document, Plus, Check, Delete, Search, Refresh, View, InfoFilled, Clock } from '@element-plus/icons-vue'
+import { Bell, Warning, Document, Plus, Check, Search, Refresh, View, Clock } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Alert, Notice, AreaItem } from '../types'
 
@@ -67,12 +68,10 @@ const fetchAreas = async () => {
   
   areasLoading.value = true
   try {
-    const response = await axios.get('/api/areas/')
-    if (Array.isArray(response.data)) {
-      areas.value = response.data
-      console.log('区域数据加载完成，共加载:', areas.value.length, '个区域')
-      return true
-    }
+    
+    areas.value = await areaService.getAll()
+    console.log('区域数据加载完成，共加载:', areas.value.length, '个区域')
+    return true
   } catch (error) {
     console.error('获取区域列表失败:', error)
     ElMessage.error('获取区域列表失败')
@@ -86,14 +85,12 @@ const fetchAreas = async () => {
 const getAreaName = (areaId: number): string => {
   if (!areaId) return '未知区域'
   
-
   const area = areas.value.find(a => a.id === areaId)
   return area ? area.name : '未知区域'
 }
 
 
 const processAlertData = (alertsData: ExtendedAlert[]) => {
-
   alertsData.forEach(alert => {
     if (alert.area) {
       alert.area_name = getAreaName(alert.area)
@@ -103,42 +100,36 @@ const processAlertData = (alertsData: ExtendedAlert[]) => {
     }
   })
   
-
   alerts.value = alertsData
 }
 
 
 const processNoticeData = (noticesData: Notice[]) => {
-
   notices.value = noticesData
 }
+
 
 
 const fetchAlerts = async () => {
   alertsLoading.value = true
   try {
-    let url = '/api/alerts/'
-    if (alertFilter.value === 'unsolved') {
-      url = '/api/alerts/unsolved/'
-    }
+    let alertsData: ExtendedAlert[] = []
     
-    const response = await axios.get(url)
-    if (Array.isArray(response.data)) {
-
-      let alertsData = response.data
+    if (alertFilter.value === 'unsolved') {
+      
+      alertsData = await alertService.getUnsolvedAlerts()
+    } else {
+      
+      alertsData = await alertService.getAll()
+      
+      
       if (alertFilter.value === 'solved') {
         alertsData = alertsData.filter(alert => alert.solved)
       }
-      
-
-      console.log(`获取到 ${alertsData.length} 条告警数据`)
-      
-
-      processAlertData(alertsData)
-    } else {
-      alerts.value = []
     }
     
+    console.log(`获取到 ${alertsData.length} 条告警数据`)
+    processAlertData(alertsData)
 
     checkUrlForDetails()
   } catch (error) {
@@ -151,17 +142,14 @@ const fetchAlerts = async () => {
 }
 
 
+
 const fetchNotices = async () => {
   noticesLoading.value = true
   try {
-    const response = await axios.get('/api/notice/')
-    if (Array.isArray(response.data)) {
-      processNoticeData(response.data)
-    } else {
-      notices.value = []
-    }
     
-
+    const noticesData = await noticeService.getAll()
+    processNoticeData(noticesData)
+    
     checkUrlForDetails()
   } catch (error) {
     console.error('获取通知失败:', error)
@@ -173,6 +161,7 @@ const fetchNotices = async () => {
 }
 
 
+
 const solveAlert = async (alertId: number) => {
   try {
     await ElMessageBox.confirm('确定将此告警标记为已解决?', '确认操作', {
@@ -181,7 +170,8 @@ const solveAlert = async (alertId: number) => {
       type: 'warning'
     })
     
-    await axios.post(`/api/alerts/${alertId}/solve/`)
+    
+    await alertService.solveAlert(alertId)
     ElMessage.success('告警已成功标记为已解决')
     await fetchAlerts()
   } catch (error: any) {
@@ -193,6 +183,7 @@ const solveAlert = async (alertId: number) => {
 }
 
 
+
 const submitNotice = async () => {
   if (!noticeForm.title.trim() || !noticeForm.content.trim()) {
     ElMessage.warning('请填写完整的通知信息')
@@ -201,11 +192,17 @@ const submitNotice = async () => {
   
   noticeSubmitting.value = true
   try {
-    await axios.post('/api/notice/', noticeForm)
+    
+    await noticeService.createNotice({
+      title: noticeForm.title,
+      content: noticeForm.content,
+      related_areas: noticeForm.related_areas
+    })
+    
     ElMessage.success('通知发布成功')
     noticeDialogVisible.value = false
     
-
+    
     noticeForm.title = ''
     noticeForm.content = ''
     noticeForm.related_areas = []
@@ -305,26 +302,24 @@ const handleTabChange = (tab: string) => {
   currentPage.value = 1
   searchText.value = ''
   
-
   updateUrl({ tab })
 }
 
 
 onMounted(async () => {
-
+  
   const tabParam = route.query.tab as string
   if (tabParam && ['alerts', 'notices'].includes(tabParam)) {
     activeTab.value = tabParam
   }
   
-
+  
   const areasLoaded = await fetchAreas()
   
-
+  
   if (areasLoaded) {
     await Promise.all([fetchAlerts(), fetchNotices()])
   } else {
-
     await Promise.all([fetchAlerts(), fetchNotices()])
     console.warn('区域数据加载失败，告警和通知的区域信息可能不完整')
   }
@@ -347,7 +342,7 @@ const refreshData = () => {
 
 
 const prepareAlertDetail = (alert: ExtendedAlert) => {
-
+  
   if (alert.area && !alert.area_name) {
     alert.area_name = getAreaName(alert.area)
   }
@@ -355,7 +350,7 @@ const prepareAlertDetail = (alert: ExtendedAlert) => {
   currentAlertDetail.value = alert
   alertDetailVisible.value = true
   
-
+  
   updateUrl({ tab: 'alerts', alertId: alert.id })
 }
 
@@ -364,7 +359,7 @@ const prepareNoticeDetail = (notice: Notice) => {
   currentNoticeDetail.value = notice
   noticeDetailVisible.value = true
   
-
+  
   updateUrl({ tab: 'notices', noticeId: notice.id })
 }
 
@@ -386,11 +381,11 @@ const updateUrl = (params: { tab?: string, alertId?: number, noticeId?: number }
     query.tab = params.tab
   }
   
-
+  
   delete query.alertId
   delete query.noticeId
   
-
+  
   if (params.alertId) {
     query.alertId = params.alertId.toString()
   }
@@ -443,7 +438,7 @@ watch(
       activeTab.value = tabParam
     }
     
-
+    
     checkUrlForDetails()
   }
 )
@@ -883,11 +878,6 @@ watch(
             <div class="info-value">#{{ currentNoticeDetail.id }}</div>
           </div>
           
-
-
-
-
-          
           <div class="info-item">
             <div class="info-label">发布时间</div>
             <div class="info-value timestamp-value">{{ formatDate(currentNoticeDetail.timestamp) }}</div>
@@ -1082,7 +1072,7 @@ watch(
 
 .level-tag {
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
 .status-tag {

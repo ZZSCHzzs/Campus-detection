@@ -70,7 +70,7 @@
 <script setup>
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { apiService } from '../../services/api'
+import { terminalService } from '../../services/apiService'
 import Jump from './Jump.vue'
 import {defineProps}  from 'vue'
 
@@ -106,8 +106,7 @@ const loadingTerminals = ref(false)
 const fetchTerminals = async () => {
     loadingTerminals.value = true
     try {
-      const response = await apiService.customGet(`terminals`)
-      terminals.value = response.data.results || response.data
+      terminals.value = await terminalService.getAll()
     } catch (error) {
       console.error('获取终端失败:', error)
     } finally {
