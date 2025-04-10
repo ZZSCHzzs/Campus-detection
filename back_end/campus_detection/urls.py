@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from webapi.views import *
 
 router = DefaultRouter()
@@ -17,6 +18,8 @@ urlpatterns = [
     path('api/upload/', DataUploadView.as_view()),
     path('api/summary/', SummaryView.as_view()),
     path('api/alert/', AlertView.as_view()),
+    path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
-    path('auth/', include('djoser.urls'))
+    path('auth/jwt/create/', TokenObtainPairView.as_view(), name='jwt-create'),
+    path('auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
 ]

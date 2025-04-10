@@ -64,7 +64,7 @@ DJOSER = {
     'USER_ID_FIELD': 'id',
     'SERIALIZERS': {
         'user': 'webapi.serializers.CustomUserSerializer',
-        'user_create': 'webapi.serializers.CustomUserSerializer',
+        'user_create': 'webapi.serializers.CustomUserCreateSerializer',
         'current_user': 'webapi.serializers.CustomUserSerializer',
     }
 }
