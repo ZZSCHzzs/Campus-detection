@@ -1,20 +1,24 @@
 <template>
-  <div class="base-manager">
+  <div class="base-manager" :class="{'mobile': isMobile}">
     <div class="manager-header">
       <div class="header-left">
-        <h2 class="manager-title">{{ title }}</h2>
+        <h2 class="manager-title" v-if="!isMobile">{{ title }}</h2>
         <div class="header-stats" v-if="showStats">
           <el-tag size="large" type="info" effect="plain">总数：{{ total }}</el-tag>
         </div>
       </div>
       <div class="header-actions">
-        <el-button type="primary" @click="handleAdd" class="add-button">
+        <el-button type="primary" @click="handleRefresh" class="refresh-button" :size="isMobile ? 'small' : 'default'" plain>
+          <el-icon><Refresh /></el-icon>
+          <span v-if="!isMobile">刷新</span>
+        </el-button>
+        <el-button type="primary" @click="handleAdd" class="add-button" :size="isMobile ? 'small' : 'default'">
           <el-icon><Plus /></el-icon>
-          添加{{ itemName }}
+          {{ isMobile ? '' : `添加${itemName}` }}
+          <span v-if="isMobile">添加</span>
         </el-button>
       </div>
     </div>
-
 
     <div class="toolbar" v-if="searchable">
       <div class="search-bar">
@@ -25,14 +29,15 @@
           @clear="handleSearchClear"
           @input="handleSearchInput"
           class="search-input"
+          :size="isMobile ? 'small' : 'default'"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button type="primary" @click="handleSearch" plain>
+        <el-button type="primary" @click="handleSearch" plain :size="isMobile ? 'small' : 'default'">
           <el-icon><Search /></el-icon>
-          搜索
+          <span v-if="!isMobile">搜索</span>
         </el-button>
       </div>
       <div class="filter-options">
@@ -40,8 +45,7 @@
       </div>
     </div>
 
-
-    <el-card class="table-card" shadow="hover" body-style="padding: 0px;">
+    <el-card class="table-card" shadow="hover" :body-style="isMobile ? 'padding: 0; margin: 0;' : 'padding: 0px;'">
       <el-table
         v-loading="loading"
         :data="paginatedData"
@@ -52,73 +56,79 @@
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
         row-key="id"
         empty-text="暂无数据"
+        :size="isMobile ? 'small' : 'default'"
+        :cell-style="isMobile ? { padding: '4px 0' } : {}"
+        :height="tableHeight"
       >
-        <el-table-column v-if="showIndex" type="index" width="50" />
+        <el-table-column v-if="showIndex && !isMobile" type="index" width="50" />
         
         <el-table-column
-          v-for="column in columns"
+          v-for="column in filteredColumns"
           :key="column.prop"
           :prop="column.prop"
           :label="column.label"
-          :width="column.width"
+          :width="isMobile && column.mobileWidth ? column.mobileWidth : column.width"
           :formatter="column.formatter"
           :align="column.align || 'left'"
           :sortable="column.sortable"
+          :show-overflow-tooltip="isMobile"
         >
           <template v-if="column.slot" #default="scope">
             <slot :name="`column-${column.prop}`" :row="scope.row"></slot>
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="180" fixed="right" align="center">
+        <el-table-column :label="isMobile ? '' : '操作'" :width="isMobile ? '80' : '180'" fixed="right" align="center">
           <template #default="scope">
-            <el-button type="primary" size="small" @click="handleEdit(scope.row)" text>
-              <el-icon><Edit /></el-icon>
-              编辑
-            </el-button>
-            <el-button type="danger" size="small" @click="handleDelete(scope.row)" text>
-              <el-icon><Delete /></el-icon>
-              删除
-            </el-button>
+            <div class="action-buttons" :class="{'mobile-actions': isMobile}">
+              <el-button type="primary" size="small" @click="handleEdit(scope.row)" :text="!isMobile">
+                <el-icon><Edit /></el-icon>
+                <span v-if="!isMobile">编辑</span>
+              </el-button>
+              <el-button type="danger" size="small" @click="handleDelete(scope.row)" :text="!isMobile">
+                <el-icon><Delete /></el-icon>
+                <span v-if="!isMobile">删除</span>
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
-
 
     <div class="pagination-container">
       <el-pagination
         v-if="pagination"
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :page-sizes="[10, 20, 30, 50]"
-        layout="total, sizes, prev, pager, next, jumper"
+        :page-sizes="isMobile ? [5, 10, 20] : [10, 20, 30, 50]"
+        :layout="isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
         :total="filteredTableData.length"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
         background
+        :small="isMobile"
       />
     </div>
-
 
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="50%"
+      :width="isMobile ? '95%' : '50%'"
       :before-close="handleDialogClose"
       destroy-on-close
       class="form-dialog"
+      :fullscreen="isMobile"
     >
-      <el-scrollbar height="500px">
+      <el-scrollbar :height="isMobile ? '75vh' : '500px'">
         <div class="dialog-content">
-          <slot name="form" :form="form" :mode="formMode"></slot>
+          <slot name="form" :form="form" :mode="formMode" :is-mobile="isMobile"></slot>
         </div>
       </el-scrollbar>
       
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitForm" :loading="submitting">
+          <el-button @click="dialogVisible = false" :size="isMobile ? 'small' : 'default'">取消</el-button>
+          <el-button type="primary" @click="submitForm" :loading="submitting" :size="isMobile ? 'small' : 'default'">
             确认
           </el-button>
         </span>
@@ -128,9 +138,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Search } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Search, Refresh } from '@element-plus/icons-vue'
 import apiService from '../../services/apiService'
 
 const props = defineProps({
@@ -181,6 +191,14 @@ const props = defineProps({
   showStats: {
     type: Boolean,
     default: true
+  },
+  isMobile: {
+    type: Boolean,
+    default: false
+  },
+  cacheDuration: {
+    type: Number,
+    default: 30000 // 默认缓存30秒
   }
 })
 
@@ -231,10 +249,37 @@ const handleSearchClear = () => {
 }
 
 onMounted(() => {
+  // 设置该资源的缓存时间
+  if (props.resourceName) {
+    apiService.setResourceCacheOptions(props.resourceName, { duration: props.cacheDuration })
+    console.log(`已为资源 ${props.resourceName} 设置缓存时间: ${props.cacheDuration}ms`)
+  }
+  
   fetchData()
 
   if (props.searchQuery) {
     localSearchQuery.value = props.searchQuery
+  }
+  
+  // 初始检测设备类型
+  checkIsMobile()
+  
+  // 添加窗口大小变化监听
+  window.addEventListener('resize', checkIsMobile)
+  
+  // 设置自动刷新定时器 (与缓存时间一致)
+  refreshTimer.value = setInterval(() => {
+    fetchData()
+  }, props.cacheDuration)
+})
+
+onUnmounted(() => {
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', checkIsMobile)
+  
+  // 清除自动刷新定时器
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
   }
 })
 
@@ -387,6 +432,39 @@ const submitForm = async () => {
 const handleDialogClose = () => {
   dialogVisible.value = false
 }
+
+const isMobile = ref(false)
+
+// 检测设备是否为移动端
+const checkIsMobile = () => {
+  isMobile.value = window.innerWidth < 768
+}
+
+// 过滤移动端下不需要显示的列
+const filteredColumns = computed(() => {
+  if (!isMobile.value) {
+    return props.columns;
+  }
+  
+  // 在移动端模式下，过滤掉标记为在移动端隐藏的列
+  return props.columns.filter(column => !column.hideOnMobile);
+});
+
+// 表格固定高度设置
+const tableHeight = computed(() => {
+  // 设置固定高度，基于每页10行数据
+  // 每行大约40px高度，表头约50px，预留一些边距
+  return isMobile.value ? 400 : 500;
+});
+
+const refreshTimer = ref(null)
+
+const handleRefresh = () => {
+  // 强制刷新，跳过缓存
+  apiService.refreshCache(props.resourceName)
+  fetchData()
+  ElMessage.success('数据已刷新')
+}
 </script>
 
 <style scoped>
@@ -466,5 +544,114 @@ const handleDialogClose = () => {
 
 .form-dialog :deep(.el-form-item__label) {
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .manager-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .header-actions {
+    width: auto;
+  }
+  
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .search-bar {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  
+  .search-input {
+    width: 100%;
+    flex: 1;
+  }
+  
+  .pagination-container {
+    overflow-x: auto;
+    justify-content: center;
+  }
+  
+  .dialog-content {
+    padding: 5px 0;
+  }
+  
+  .table-card :deep(.el-table) {
+    font-size: 12px;
+  }
+  
+  .add-button {
+    padding: 8px 12px;
+  }
+  
+  .table-card {
+    margin: 5px 0;
+  }
+  
+  .dialog-footer {
+    justify-content: space-between;
+  }
+}
+
+/* 移动端特有样式 */
+.base-manager.mobile {
+  gap: 8px;
+}
+
+.mobile .manager-title {
+  font-size: 16px;
+}
+
+.mobile-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.mobile-actions .el-button {
+  padding: 4px;
+  min-height: 24px;
+}
+
+.mobile .el-table :deep(td),
+.mobile .el-table :deep(th) {
+  padding: 6px 0;
+}
+
+.mobile .el-table :deep(.el-table__header) th {
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.mobile .el-table :deep(.el-table__row) td {
+  font-size: 12px;
+}
+
+/* 确保表格容器具有足够的高度 */
+.table-card {
+  margin: 10px 0;
+  width: 100%;
+}
+
+.el-table {
+  overflow-y: auto;
+}
+
+.refresh-button {
+  margin-right: 8px;
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  .refresh-button {
+    padding: 8px 12px;
+  }
 }
 </style>

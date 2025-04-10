@@ -2,18 +2,49 @@ import apiResourceManager from './apiResourceManager';
 import authApi from './authApi';  
 import type { ResourceType} from './apiResourceManager';
 import type { AreaItem, Building, HardwareNode, ProcessTerminal, User, Alert, Notice, HistoricalData } from '../types';
+import { useAuthStore } from '../stores/auth';
+import { ElMessage } from 'element-plus';
 
 
 const areaCustomMethods = {
-  getAreaData: (id: number) => 
-    apiResourceManager.customApiCall(`/api/areas/${id}/data/`),
     
   getPopularAreas: (count = 5) => 
-    apiResourceManager.customApiCall<AreaItem[]>(`/api/areas/popular/`, 'get', undefined, { count }),
+    apiResourceManager.customApiCall<AreaItem[]>(`/api/areas/popular/`, 'get', undefined, { count }, true, 30000),
     
   getAreaHistorical: (id: number) => 
     apiResourceManager.customApiCall(`/api/areas/${id}/historical/`),
-    
+
+  getFavoriteAreas: async ()  => {
+    const authStore = useAuthStore();
+    if(authStore.isAuthenticated === false) {
+        ElMessage.error('未登录，无法获取收藏区域');
+        return [];
+        }
+    const userInfo = await userCustomMethods.getUserInfo();
+    const favorite_areas_id = userInfo.favorite_areas || [];
+    if (favorite_areas_id.length === 0) {
+      ElMessage.warning('没有收藏的区域');
+      return [];
+    }
+    try {
+      const areas = await Promise.all(
+        favorite_areas_id.map(async (id: number) => {
+          try {
+            return await apiResourceManager.getResourceById('areas', id);
+          } catch (error) {
+            console.error(`Failed to fetch area with ID ${id}:`, error);
+            return null;
+          }
+        })
+      );
+      // Filter out any null values from failed requests
+      return areas.filter(area => area !== null);
+    } catch (error) {
+        console.error('Error fetching favorite areas:', error);
+      return [];
+    }
+  },
+
   toggleFavoriteArea: (id: number) => 
     apiResourceManager.customApiCall(`/api/areas/${id}/favor/`, 'post'),
 };
@@ -24,7 +55,8 @@ const buildingCustomMethods = {
 };
 
 const nodeCustomMethods = {
-  
+  getDatabyAreaId: (areaId: number) =>
+    apiResourceManager.customApiCall<HardwareNode[]>(`/api/areas/${areaId}/data/`, 'get', undefined, {}, true,5000),
 };
 
 const terminalCustomMethods = {
@@ -34,10 +66,10 @@ const terminalCustomMethods = {
 
 const alertCustomMethods = {  
   getUnsolvedAlerts: () => 
-    apiResourceManager.customApiCall<Alert[]>('/api/alerts/unsolved/'),
+    apiResourceManager.customApiCall<Alert[]>('/api/alerts/unsolved/', 'get', undefined, {}, true,30000),
     
   getPublicAlerts: () => 
-    apiResourceManager.customApiCall<Alert[]>('/api/alerts/public/'),
+    apiResourceManager.customApiCall<Alert[]>('/api/alerts/public/', 'get', undefined, {}, true,30000),
     
   solveAlert: (id: number) => 
     apiResourceManager.customApiCall(`/api/alerts/${id}/solve/`, 'post'),
@@ -45,7 +77,7 @@ const alertCustomMethods = {
 
 const noticeCustomMethods = {
   getLatestNotices: (count = 5) => 
-    apiResourceManager.customApiCall<Notice[]>('/api/notice/latest/', 'get', undefined, { count }),
+    apiResourceManager.customApiCall<Notice[]>('/api/notice/latest/', 'get', undefined, { count }, true, 30000),
     
   getNoticeAreas: (id: number) => 
     apiResourceManager.customApiCall<AreaItem[]>(`/api/notice/${id}/areas/`),
@@ -53,7 +85,7 @@ const noticeCustomMethods = {
 
 const summaryCustomMethods = {
   getSummary: () => 
-    apiResourceManager.customApiCall('/api/summary/'),
+    apiResourceManager.customApiCall('/api/summary/', 'get', undefined, {}, true,30000),
 };
 
 const historicalCustomMethods = {
@@ -76,9 +108,16 @@ const userCustomMethods = {
   
   getUserInfo: async () => {
     try {
-      const response = await authApi.getUserInfo();
+      const userData = await authApi.getUserInfo();
+      console.log('获取用户信息:', userData);
+      if (userData && userData.username) {
+        const authStore = useAuthStore();
+        authStore.setUser(userData);
+      } else {
+        console.error('后端返回的用户数据无效:', userData);
+      }
       
-      return response.data;
+      return userData;
     } catch (error) {
       console.error('获取用户信息失败:', error);
       throw error;
@@ -110,19 +149,6 @@ const userCustomMethods = {
       throw error;
     }
   },
-  
-  
-  getFavoriteAreas: async (favoriteIds: number[]) => {
-    if (!favoriteIds || favoriteIds.length === 0) return [];
-    
-    
-    const promises = favoriteIds.map(id => 
-      areaService.getById(id).catch(() => null)
-    );
-    
-    const results = await Promise.all(promises);
-    return results.filter(area => area !== null) as AreaItem[];
-  }
 };
 
 
@@ -250,7 +276,20 @@ const apiService = {
   getService,
   getAllServices: () => Object.fromEntries(serviceRegistry),
   
+  // 设置特定资源类型的缓存时间
+  setResourceCacheOptions: (resourceType: ResourceType, options: { duration: number }) => {
+    apiResourceManager.setResourceCacheDuration(resourceType, options.duration);
+  },
   
+  // 批量设置多个资源的缓存时间
+  setMultipleResourceCacheOptions: (settings: Record<ResourceType, number>) => {
+    apiResourceManager.setMultipleResourceCacheDurations(settings);
+  },
+  
+  // 获取特定资源的缓存时间
+  getResourceCacheDuration: (resourceType: ResourceType) => {
+    return apiResourceManager.getResourceCacheDuration(resourceType);
+  },
   
   areas: areaService,
   buildings: buildingService,

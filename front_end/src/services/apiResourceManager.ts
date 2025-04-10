@@ -31,6 +31,8 @@ const DEFAULT_CACHE_DURATION = 5 * 60 * 1000; // 5分钟
 class ApiResourceManager {
   private cache: Map<string, CacheItem<any>> = new Map();
   private globalCacheDuration: number = DEFAULT_CACHE_DURATION;
+  // 添加资源特定缓存时间配置
+  private resourceCacheDuration: Map<ResourceType, number> = new Map();
   
   // 设置全局缓存时间
   setGlobalCacheDuration(duration: number): void {
@@ -43,6 +45,25 @@ class ApiResourceManager {
     return this.globalCacheDuration;
   }
   
+  // 设置特定资源的缓存时间
+  setResourceCacheDuration(resourceType: ResourceType, duration: number): void {
+    this.resourceCacheDuration.set(resourceType, duration);
+    console.log(`[ApiResourceManager] Cache duration for ${resourceType} set to ${duration}ms`);
+  }
+  
+  // 获取特定资源的缓存时间
+  getResourceCacheDuration(resourceType: ResourceType): number {
+    return this.resourceCacheDuration.get(resourceType) || this.globalCacheDuration;
+  }
+  
+  // 批量设置多个资源的缓存时间
+  setMultipleResourceCacheDurations(settings: Record<ResourceType, number>): void {
+    for (const [resourceType, duration] of Object.entries(settings)) {
+      this.setResourceCacheDuration(resourceType as ResourceType, duration);
+    }
+    console.log(`[ApiResourceManager] Set cache durations for multiple resources:`, settings);
+  }
+
   // 从API获取资源并缓存
   async getResource<T extends keyof ResourceTypeMapping>(
     resourceType: T, 
@@ -50,8 +71,10 @@ class ApiResourceManager {
     forceRefresh = false,
     cacheDuration?: number
   ): Promise<ResourceTypeMapping[T]> {
-    // 如果未指定缓存时间，使用全局设置
-    const effectiveCacheDuration = cacheDuration || this.globalCacheDuration;
+    // 优先使用传入的缓存时间，其次是资源特定设置，最后是全局设置
+    const effectiveCacheDuration = cacheDuration || 
+      this.resourceCacheDuration.get(resourceType) || 
+      this.globalCacheDuration;
     
     const cacheKey = this.generateCacheKey(resourceType, params);
     
@@ -103,8 +126,13 @@ class ApiResourceManager {
     resourceType: T,
     id: number | string,
     forceRefresh = false,
-    cacheDuration = DEFAULT_CACHE_DURATION
+    cacheDuration?: number
   ): Promise<ResourceTypeMapping[T][0]> {
+    // 优先使用传入的缓存时间，其次是资源特定设置，最后是全局设置
+    const effectiveCacheDuration = cacheDuration || 
+      this.resourceCacheDuration.get(resourceType) || 
+      this.globalCacheDuration;
+    
     const cacheKey = `${resourceType}_${id}`;
     
     // 检查缓存
@@ -120,8 +148,8 @@ class ApiResourceManager {
       const response = await api.get(url);
       const data = response.data as ResourceTypeMapping[T][0];
       
-      // 缓存数据
-      this.setCache(cacheKey, data, cacheDuration);
+      // 使用计算得到的缓存时间
+      this.setCache(cacheKey, data, effectiveCacheDuration);
       
       return data;
     } catch (error) {
@@ -203,8 +231,11 @@ class ApiResourceManager {
     data?: any,
     params: Record<string, any> = {},
     useCache = true,
-    cacheDuration = DEFAULT_CACHE_DURATION
+    cacheDuration?: number
   ): Promise<T> {
+    // 对于自定义调用，只使用传入的缓存时间或全局设置
+    const effectiveCacheDuration = cacheDuration || this.globalCacheDuration;
+    
     // 只对GET请求进行缓存
     if (method !== 'get' || !useCache) {
       const response = await api[method](url, data, { params });
@@ -225,9 +256,9 @@ class ApiResourceManager {
       const response = await api.get(url, { params });
       const responseData = response.data as T;
       
-      // 缓存数据
+      // 缓存数据，使用计算得到的缓存时间
       if (useCache) {
-        this.setCache(cacheKey, responseData, cacheDuration);
+        this.setCache(cacheKey, responseData, effectiveCacheDuration);
       }
       
       return responseData;

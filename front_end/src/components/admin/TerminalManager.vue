@@ -43,9 +43,10 @@ import BaseManager from './BaseManager.vue'
 import View from './View.vue'
 
 const columns = [
-  { prop: 'name', label: '终端名称' },
-  { prop: 'status', label: '状态', width: '250', slot: true },
-  { prop: 'nodes_count', label: '关联节点数', width: '250', slot: true }
+  { prop: 'name', label: '终端名称', width: '200', mobileWidth: '130' },
+  { prop: 'status', label: '状态', width: '250', mobileWidth: '100', slot: true },
+  { prop: 'nodes_count', label: '关联节点数', width: '250', mobileWidth: '120', slot: true },
+  { prop:'',label:''}
 ]
 
 const defaultFormData = {

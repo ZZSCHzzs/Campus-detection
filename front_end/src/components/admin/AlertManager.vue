@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref,onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { areaService } from '../../services/apiService'
 import Jump from './Jump.vue'
@@ -120,13 +120,13 @@ const props = defineProps({
 })
 
 const columns = [
-  { prop: 'area', label: '所属区域', width: '150', slot: true },
-  { prop: 'grade', label: '告警等级', width: '120', slot: true },
-  { prop: 'alert_type', label: '告警类型', width: '120', slot: true },
-  { prop: 'message', label: '告警信息' },
-  { prop: 'publicity', label: '是否公开', width: '100', slot: true },
-  { prop: 'solved', label: '处理状态', width: '100', slot: true },
-  { prop: 'timestamp', label: '告警时间', width: '180',
+  { prop: 'area', label: '所属区域', width: '150', mobileWidth: '120', slot: true },
+  { prop: 'grade', label: '告警等级', width: '120', mobileWidth: '90', slot: true },
+  { prop: 'alert_type', label: '告警类型', width: '120', mobileWidth: '90', slot: true },
+  { prop: 'message', label: '告警信息', hideOnMobile: true },
+  { prop: 'publicity', label: '是否公开', width: '100', mobileWidth: '80', slot: true },
+  { prop: 'solved', label: '处理状态', width: '100', mobileWidth: '80', slot: true },
+  { prop: 'timestamp', label: '告警时间', width: '180', hideOnMobile: true,
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 

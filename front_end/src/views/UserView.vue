@@ -5,10 +5,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Message, Edit, Star } from '@element-plus/icons-vue'
 import authApi from '../services/authApi'
-import { areaService } from '../services/apiService'  // 只保留areaService
+import { areaService, userService } from '../services/apiService'  // 只保留areaService
 import type { User as UserType, AreaItem } from '../types'
 import CryptoJS from 'crypto-js'  // 导入CryptoJS库用于密码加密
-import { Calendar, Check, InfoFilled, Phone, Plus } from '@element-plus/icons-vue'
+import { Calendar, Check, InfoFilled, Phone, Plus, Grid, List } from '@element-plus/icons-vue'
 import AreaCard from '../components/AreaCard.vue'
 
 const authStore = useAuthStore()
@@ -33,7 +33,7 @@ const handleTabChange = (tab: string) => {
 }
 
 // 用户信息相关
-const userInfo = ref<UserType & { favorite_areas?: number[] }>({
+const userInfo = ref<UserType>({
   id: 0,
   username: '',
   role: 'user',
@@ -95,52 +95,7 @@ const passwordFormRef = ref()
 const fetchUserInfo = async () => {
   loading.value = true
   try {
-    console.log('正在获取用户信息...')
-    // 先验证会话有效性
-    const isSessionValid = await authStore.validateSession()
-    if (!isSessionValid) {
-      throw new Error('会话无效')
-    }
-
-    let userData: UserType | null = null
-    
-    try {
-      // 尝试使用 authApi 获取用户信息
-      userData = await authApi.getUserInfo()
-    } catch (error) {
-      console.error('获取用户信息失败，尝试使用 authStore 获取:', error)
-      // 如果失败，尝试从 authStore 中获取用户信息
-      userData = authStore.user || null 
-    }
-    
-    console.log('用户信息获取成功:', userData)
-    
-    // 更新用户信息
-    userInfo.value = {
-      id: userData.id || 0,
-      username: userData.username || '',
-      role: userData.role || 'user',
-      phone: userData.phone || '',
-      email: userData.email || '',
-      register_time: userData.register_time || '',
-      favorite_areas: userData.favorite_areas || []
-    }
-
-    // 复制到表单
-    userForm.value.email = userInfo.value.email || ''
-    userForm.value.phone = userInfo.value.phone || ''
-
-    // 更新store中的信息
-    if (authStore.user) {
-      authStore.user = { ...authStore.user, ...userInfo.value }
-    } else {
-      authStore.setUser(userInfo.value)
-    }
-
-    // 如果有收藏区域ID，获取详细信息
-    if (userInfo.value.favorite_areas?.length) {
-      await fetchFavoriteAreas()
-    }
+    userInfo.value = await userService.getUserInfo()
   } catch (error) {
     console.error('获取用户信息失败:', error)
 
@@ -259,22 +214,14 @@ const submitPasswordUpdate = async () => {
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
 
-// 获取收藏区域详情
+// 获取收藏区域
 const fetchFavoriteAreas = async () => {
-  if (!userInfo.value.favorite_areas?.length) return
-
   loadingFavorites.value = true
   try {
-    // 获取收藏区域
-    const promises = userInfo.value.favorite_areas.map(id => 
-      areaService.getById(id).catch(() => null)
-    );
-    
-    const results = await Promise.all(promises);
-    favoriteAreas.value = results.filter(area => area !== null) as AreaItem[];
+    favoriteAreas.value = await areaService.getFavoriteAreas()
   } catch (error) {
-    console.error('获取收藏区域详情失败:', error)
-    ElMessage.error('获取收藏区域详情失败')
+    console.error('获取收藏区域失败:', error)
+    ElMessage.error('获取收藏区域失败')
   } finally {
     loadingFavorites.value = false
   }
@@ -288,11 +235,6 @@ const handleFavoriteChange = async (event) => {
   if (!isFavorite) {
     // 从列表中移除
     favoriteAreas.value = favoriteAreas.value.filter(area => area.id !== areaId)
-
-    // 从用户信息中更新
-    if (userInfo.value.favorite_areas) {
-      userInfo.value.favorite_areas = userInfo.value.favorite_areas.filter(id => id !== areaId)
-    }
 
     ElMessage.success('已取消收藏')
   } else {
@@ -342,8 +284,27 @@ const updatePasswordStrength = (password) => {
   else passwordStrengthStatus.value = 'success'
 }
 
+// 添加布局切换状态 - 默认跟随页面整体状态
+const isCompactView = ref(false)
+
+// 检查设备类型并设置默认布局
+const checkScreenSize = () => {
+  const isMobile = window.innerWidth < 768
+  // 移动端默认使用紧凑视图
+  isCompactView.value = isMobile
+}
+
+const toggleLayoutMode = () => {
+  isCompactView.value = !isCompactView.value
+}
+
 onMounted(async () => {
   console.log('UserView组件已挂载，准备获取用户信息')
+  
+  // 检查设备类型并设置默认布局
+  checkScreenSize()
+  window.addEventListener('resize', checkScreenSize)
+  
   // 检查登录状态
   if (!authStore.isAuthenticated) {
     ElMessage.warning('请先登录')
@@ -355,6 +316,8 @@ onMounted(async () => {
   }
 
   await fetchUserInfo()
+  await fetchFavoriteAreas()
+
 })
 
 // 格式化日期时间显示
@@ -688,12 +651,25 @@ const getRoleTagType = (role: string) => {
                 </el-icon>
                 <h2>我收藏的区域</h2>
               </div>
-              <el-button type="primary" @click="router.push('/areas')">
-                <el-icon>
-                  <Plus />
-                </el-icon>
-                <span>浏览所有区域</span>
-              </el-button>
+              
+              <div class="header-actions">
+                <!-- 添加布局切换按钮 -->
+                <el-button 
+                  class="toggle-view-btn"
+                  plain
+                  @click="toggleLayoutMode"
+                >
+                  <el-icon class="toggle-icon"><component :is="isCompactView ? Grid : List" /></el-icon>
+                  {{ isCompactView ? '卡片视图' : '紧凑视图' }}
+                </el-button>
+                
+                <el-button type="primary" @click="router.push('/areas')">
+                  <el-icon>
+                    <Plus />
+                  </el-icon>
+                  <span>浏览所有区域</span>
+                </el-button>
+              </div>
             </div>
 
             <div v-if="favoriteAreas.length > 0" class="favorites-container">
@@ -710,9 +686,21 @@ const getRoleTagType = (role: string) => {
               </el-skeleton>
 
               <el-row v-else :gutter="20">
-                <el-col v-for="area in favoriteAreas" :key="area.id" :lg="8" :md="8" :sm="12" :xs="24"
-                  class="favorite-col">
-                  <AreaCard :area="area" :isFavorite="true" @favorite-change="handleFavoriteChange" />
+                <el-col 
+                  v-for="area in favoriteAreas" 
+                  :key="area.id" 
+                  :lg="isCompactView ? 6 : 8"
+                  :md="isCompactView ? 6 : 8"
+                  :sm="isCompactView ? 8 : 12"
+                  :xs="isCompactView ? 12 : 24"
+                  class="favorite-col"
+                >
+                  <AreaCard 
+                    :area="area" 
+                    :compact="isCompactView"
+                    :isFavorite="true" 
+                    @favorite-change="handleFavoriteChange" 
+                  />
                 </el-col>
               </el-row>
             </div>
@@ -1152,11 +1140,20 @@ const getRoleTagType = (role: string) => {
   gap: 10px;
 }
 
-.header-title h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-color);
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.toggle-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toggle-icon {
+  margin-right: 2px;
 }
 
 .favorites-container {
@@ -1237,6 +1234,15 @@ const getRoleTagType = (role: string) => {
     align-items: flex-start;
     gap: 15px;
   }
+  
+  .header-actions {
+    width: 100%;
+  }
+  
+  .toggle-view-btn,
+  .header-actions .el-button {
+    flex: 1;
+  }
 }
 
 /* 动画效果 */
@@ -1252,4 +1258,3 @@ const getRoleTagType = (role: string) => {
   }
 }
 </style>
-``` 

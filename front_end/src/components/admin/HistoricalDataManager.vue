@@ -51,10 +51,11 @@ import { areaService } from '../../services/apiService'
 import Jump from "./Jump.vue";
 
 const columns = [
-  { prop: 'area_name', label: '区域名称', width: '250', slot:true },
-  { prop: 'detected_count', label: '检测人数', width: '200' },
-  { prop: 'timestamp', label: '时间戳',
+  { prop: 'area_name', label: '区域名称', width: '250', mobileWidth: '150', slot: true },
+  { prop: 'detected_count', label: '检测人数', width: '200', mobileWidth: '100' },
+  { prop: 'timestamp', label: '时间戳', mobileWidth: '150',width: '200',
     formatter: (row) => new Date(row.timestamp).toLocaleString() },
+  {prop: '', label: '',}
 ]
 const getAreaName = (row) => {
   const area = areas.value.find(a => a.id === row.area)
