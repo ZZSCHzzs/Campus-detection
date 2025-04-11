@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import * as echarts from 'echarts'
-import { areaService, alertService, noticeService, summaryService } from '../services/apiService'
-import type { AreaItem, HistoricalData } from '../types'
+import { areaService, alertService, noticeService, summaryService, historicalService } from '../services/apiService'
+import type { AreaItem, HistoricalData,SummaryData } from '../types'
 
-// 添加新的响应式数据
-const totalFlow = ref(0)
-const onlineNodes = ref(0)
-const warningCount = ref(0)
+// 添加统计数据
+const summary = ref<SummaryData>({
+  nodes_count: 0,
+  terminals_count: 0,
+  buildings_count: 0,
+  areas_count: 0,
+  historical_data_count: 0,
+  people_count: 0,
+  notice_count: 0,
+  alerts_count: 0
+})
+
 const currentTime = ref('')
-
 const areas = ref<AreaItem[]>([])
 const chartRef = ref<HTMLElement>()
 
@@ -69,34 +76,6 @@ const updateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleString()
 }
-
-// 更新消息处理逻辑
-const updateMessages = () => {
-  const types: MessageType[] = ['emergency', 'warning', 'info']
-  const newMessages = [
-    '🚨 实验楼B区人流量已达上限',
-    '⚠️ 体育馆东门临时关闭',
-    'ℹ️ 图书馆阅览室余座更新',
-    '🚨 教学楼电梯检修通知',
-    '⚠️ 食堂就餐高峰预警'
-  ]
-  
-  const newMessage: Message = {
-    id: Date.now(),
-    text: newMessages[Math.floor(Math.random() * newMessages.length)],
-    type: types[Math.floor(Math.random() * types.length)],
-    timestamp: new Date().toLocaleTimeString(),
-    sourceType: 'alert',
-    sourceId: Math.floor(Math.random() * 100)
-  }
-  
-  // 保持最多8条消息
-  if (messages.value.length >= 8) {
-    messages.value.shift()
-  }
-  messages.value.push(newMessage)
-}
-
 // 获取最新告警和通知
 const fetchLatestMessages = async () => {
   try {
@@ -131,7 +110,6 @@ const fetchLatestMessages = async () => {
     console.error('获取消息失败:', error)
   }
 }
-
 // 告警等级转换为消息类型
 const getAlertType = (grade: number): MessageType => {
   const gradeMap: { [key: number]: MessageType } = {
@@ -147,16 +125,13 @@ const getAlertType = (grade: number): MessageType => {
 const updateStats = async () => {
   try {
     // 获取统计数据
-    const summary = await summaryService.getSummary()
-    totalFlow.value = summary[5] || 0
-    onlineNodes.value = summary[0] || 0
-    warningCount.value = summary[] || 0
+    const data = await summaryService.getSummary()
+    summary.value = data as SummaryData
     updateTime()
   } catch (error) {
     console.error('获取统计数据失败:', error)
   }
 }
-
 // 修改 onMounted 中的区域获取逻辑
 onMounted(async () => {
   try {
@@ -211,6 +186,7 @@ onMounted(async () => {
     setInterval(updateStats, 3000)
     setInterval(updateChart, 5000)
     setInterval(fetchLatestMessages, 5000)
+    setInterval(updateTime, 1000)
 
     // 监听全屏变化
     document.addEventListener('fullscreenchange', () => {
@@ -243,15 +219,19 @@ const formatTime = (timestamp: string) => {
     <div class="overview">
       <div class="overview-item">
         <h3>今日总客流</h3>
-        <div class="number">{{ totalFlow }}</div>
+        <div class="number">{{ summary.people_count }}</div>
       </div>
       <div class="overview-item">
         <h3>在线节点数</h3>
-        <div class="number">{{ onlineNodes }}</div>
+        <div class="number">{{ summary.nodes_count }}</div>
       </div>
       <div class="overview-item">
         <h3>告警事件数</h3>
-        <div class="number warning">{{ warningCount }}</div>
+        <div class="number warning">{{ summary.alerts_count }}</div>
+      </div>
+      <div class="overview-item">
+        <h3>通知事件数</h3>
+        <div class="number warning">{{ summary.notice_count }}</div>
       </div>
       <div class="overview-item">
         <h3>当前时间</h3>
@@ -424,44 +404,47 @@ const formatTime = (timestamp: string) => {
   bottom: 2px;
 }
 
+/* 修改 overview 的样式 */
 .overview {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(5, 1fr); /* 修改为5列 */
+  gap: 15px; /* 适当减小间距 */
   margin-bottom: 30px;
 }
 
+/* 调整卡片内部样式使其更紧凑 */
 .overview-item {
   background: rgba(255, 255, 255, 0.1);
-  padding: 20px;
+  padding: 15px; /* 减小内边距 */
   border-radius: 10px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: transform 0.3s;
 }
 
-.overview-item:hover {
-  transform: translateY(-5px);
-}
-
-.overview-item h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: #88ccff;
-}
-
+/* 调整数字大小 */
 .number {
-  font-size: 2.5rem;
+  font-size: 2rem; /* 稍微减小字号 */
   font-weight: bold;
-  margin-top: 10px;
+  margin-top: 8px;
   background: linear-gradient(45deg, #88ccff, #00ff88);
   -webkit-background-clip: text;
   color: transparent;
 }
 
-.number.warning {
-  background: linear-gradient(45deg, #ff8888, #ffaa00);
-  -webkit-background-clipin: text;
+/* 调整标题大小 */
+.overview-item h3 {
+  margin: 0;
+  font-size: 0.9rem; /* 稍微减小字号 */
+  color: #88ccff;
+}
+
+/* 时间显示的特殊样式 */
+.time {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-top: 8px;
+  color: #88ccff;
 }
 
 .main-content {
