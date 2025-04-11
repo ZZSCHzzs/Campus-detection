@@ -111,29 +111,53 @@
     </div>
 
     <el-dialog
+      v-if="!isMobile"
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '95%' : '50%'"
+      width="50%"
       :before-close="handleDialogClose"
       destroy-on-close
       class="form-dialog"
-      :fullscreen="isMobile"
     >
-      <el-scrollbar :height="isMobile ? '75vh' : '500px'">
         <div class="dialog-content">
           <slot name="form" :form="form" :mode="formMode" :is-mobile="isMobile"></slot>
         </div>
-      </el-scrollbar>
       
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="dialogVisible = false" :size="isMobile ? 'small' : 'default'">取消</el-button>
-          <el-button type="primary" @click="submitForm" :loading="submitting" :size="isMobile ? 'small' : 'default'">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitForm" :loading="submitting">
             确认
           </el-button>
         </span>
       </template>
     </el-dialog>
+
+    <!-- 移动端使用抽屉组件 -->
+    <el-drawer
+      v-else
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      direction="btt"
+      size="70%"
+      :before-close="handleDialogClose"
+      destroy-on-close
+      class="mobile-drawer"
+    >
+        <div class="drawer-content">
+          <slot name="form" :form="form" :mode="formMode" :is-mobile="isMobile"></slot>
+        </div>
+
+      
+      <template #footer>
+        <div class="drawer-footer">
+          <el-button @click="dialogVisible = false" size="medium" class="drawer-btn">取消</el-button>
+          <el-button type="primary" @click="submitForm" :loading="submitting" size="medium" class="drawer-btn">
+            确认
+          </el-button>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -653,5 +677,65 @@ const handleRefresh = () => {
   .refresh-button {
     padding: 8px 12px;
   }
+}
+
+/* 移动端抽屉样式 */
+.mobile-drawer :deep(.el-drawer__header) {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e4e7ed;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.drawer-content {
+  padding: 0;
+}
+
+/* 完全覆盖el-drawer的footer样式 */
+.mobile-drawer :deep(.el-drawer__footer) {
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #e4e7ed;
+  gap: 10px;
+  padding: 10px 0;
+  width: 100%;
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+/* 确保按钮不会溢出 */
+.drawer-footer .el-button {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.mobile .el-table :deep(.el-table__row) td {
+  font-size: 12px;
+}
+
+/* 确保表格容器具有足够的高度 */
+.table-card {
+  margin: 0;
+  width: 100%;
+}
+
+.drawer-btn {
+  flex: 1;
+  margin: 0 5px;
 }
 </style>
