@@ -81,7 +81,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   User, Monitor, OfficeBuilding, Location, Histogram, Camera,
-  Bell, Document
+  Bell, Document, Upload
 } from '@element-plus/icons-vue'
 import UserManager from '../components/admin/UserManager.vue'
 import NodeManager from '../components/admin/NodeManager.vue'
@@ -91,6 +91,7 @@ import AreaManager from '../components/admin/AreaManager.vue'
 import HistoricalDataManager from '../components/admin/HistoricalDataManager.vue'
 import AlertManager from '../components/admin/AlertManager.vue'
 import NoticeManager from '../components/admin/NoticeManager.vue'
+import UploadManager from '../components/admin/UploadManager.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -160,13 +161,14 @@ const toggleCollapse = () => {
 
 const modules = [
   { name: 'users', label: '用户管理', icon: markRaw(User), component: UserManager },
-  { name: 'nodes', label: '硬件节点', icon: markRaw(Camera), component: NodeManager },
+  { name: 'nodes', label: '节点管理', icon: markRaw(Camera), component: NodeManager },
   { name: 'terminals', label: '终端管理', icon: markRaw(Monitor), component: TerminalManager },
   { name: 'buildings', label: '建筑管理', icon: markRaw(OfficeBuilding), component: BuildingManager },
   { name: 'areas', label: '区域管理', icon: markRaw(Location), component: AreaManager },
   { name: 'historical', label: '历史数据', icon: markRaw(Histogram), component: HistoricalDataManager },
   { name: 'alerts', label: '告警管理', icon: markRaw(Bell), component: AlertManager },
-  { name: 'notice', label: '公告管理', icon: markRaw(Document), component: NoticeManager }
+  { name: 'notice', label: '通知管理', icon: markRaw(Document), component: NoticeManager },
+  { name: 'upload', label: '上传接口', icon: markRaw(Upload), component: UploadManager }
 ]
 
 

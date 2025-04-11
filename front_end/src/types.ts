@@ -80,3 +80,15 @@ export interface Notice {
     timestamp: string       // 发布时间
     related_areas?: number[] // 相关区域ID列表
 }
+
+// 系统摘要数据类型
+export interface SummaryData {
+    nodes_count: number           // 监测节点数量
+    terminals_count: number       // 接入终端数量
+    buildings_count: number       // 楼宇数量
+    areas_count: number           // 监测区域数量
+    historical_data_count: number // 历史记录数量
+    people_count: number          // 系统总人数
+    notice_count: number          // 通知数量
+    alerts_count: number          // 告警数量
+}

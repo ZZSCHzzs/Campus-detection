@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import type { AreaItem, Alert, Notice } from '../types'
+import type { AreaItem, Alert, Notice, SummaryData } from '../types'
 import { useAuthStore } from '../stores/auth'
 import { areaService, noticeService, alertService, summaryService } from '../services/apiService'
 import apiService from '../services/apiService'
@@ -32,7 +32,9 @@ const STATS_LABELS = {
   buildings_count: '楼宇数量',
   areas_count: '监测区域',
   historical_data_count: '历史记录',
-  people_count: '系统总人数'
+  people_count: '系统总人数',
+  notice_count: '系统通知',
+  alerts_count: '安全告警'
 } as const
 
 const fetchHotAreas = async () => {
@@ -139,22 +141,15 @@ const initChart = async () => {
   }
 }
 
-interface SummaryData {
-  nodes_count: number
-  terminals_count: number
-  buildings_count: number
-  areas_count: number
-  historical_data_count: number
-  people_count: number
-}
-
 const summary = ref<SummaryData>({
   nodes_count: 0,
   terminals_count: 0,
   buildings_count: 0,
   areas_count: 0,
   historical_data_count: 0,
-  people_count: 0
+  people_count: 0,
+  notice_count: 0,
+  alerts_count: 0
 })
 const loadingSummary = ref(false)
 
@@ -333,6 +328,12 @@ onBeforeUnmount(() => {
                     <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
                       <DataAnalysis />
                     </el-icon>
+                    <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
+                      <Bell />
+                    </el-icon>
+                    <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
+                      <Warning />
+                    </el-icon>
                   </template>
                 </el-statistic>
               </el-col>
@@ -500,6 +501,7 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
   background: linear-gradient(90deg, #3352a3, #409EFF);
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
   letter-spacing: 2px;
   text-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
@@ -636,6 +638,7 @@ onBeforeUnmount(() => {
       font-weight: 600;
       background: linear-gradient(45deg, #409eff, #36b5ff);
       -webkit-background-clip: text;
+      background-clip: text;
       color: transparent;
       display: flex;
       align-items: center;

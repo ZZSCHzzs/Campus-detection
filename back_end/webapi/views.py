@@ -203,7 +203,7 @@ class AlertView(APIView):
 
         # 获取上传的数据
         try:
-            area = serializer.validated_data['area']
+            node = serializer.validated_data['id']
             alert_type = serializer.validated_data['alert_type']
             grade = serializer.validated_data['grade']
             publicity = serializer.validated_data['publicity']
@@ -213,7 +213,7 @@ class AlertView(APIView):
 
         # 创建告警记录
         alert = Alert(
-            area=area,
+            area=Area.objects.get(bound_node=node),
             alert_type=alert_type,
             grade=grade,
             publicity=publicity,
@@ -272,11 +272,15 @@ class SummaryView(APIView):
         areas_count = Area.objects.count()
         historical_data_count = HistoricalData.objects.count()
         people_count = get_summary_people_count()
+        notice_count = Notice.objects.count()
+        alerts_count = Alert.objects.count()
         return Response({
             "nodes_count": nodes_count,
             "terminals_count": terminals_count,
             "buildings_count": buildings_count,
             "areas_count": areas_count,
             "historical_data_count": historical_data_count,
-            "people_count": people_count
+            "people_count": people_count,
+            "notice_count": notice_count,
+            "alerts_count": alerts_count
         })

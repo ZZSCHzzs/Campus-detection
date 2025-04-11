@@ -61,7 +61,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { buildingService, areaService } from '../../services/apiService'
+import { buildingService, areaService, nodeService } from '../../services/apiService'
 import Jump from "./Jump.vue";
 
 const columns = [
@@ -88,11 +88,11 @@ const defaultFormData = {
 const buildings = ref([])
 const loadingBuildings = ref(false)
 
-// 存储区域绑定的节点数据
-const areaNodesMap = ref(new Map())
-const loadingAreaData = ref(false)
+// 存储所有节点数据
+const nodes = ref([])
+const loadingNodes = ref(false)
 
-const fetchBuildings = async (query) => {
+const fetchBuildings = async () => {
   loadingBuildings.value = true
   try {
     buildings.value = await buildingService.getAll()
@@ -103,28 +103,21 @@ const fetchBuildings = async (query) => {
   }
 }
 
-// 获取指定区域的节点数据
-const fetchAreaData = async (areaId) => {
-  if (!areaId || areaNodesMap.value.has(areaId)) return
-  
-  loadingAreaData.value = true
+// 获取所有节点数据
+const fetchNodes = async () => {
+  loadingNodes.value = true
   try {
-    const nodeData = await areaService.getAreaData(areaId)
-    if (nodeData) {
-      areaNodesMap.value.set(areaId, nodeData)
-    }
+    nodes.value = await nodeService.getAll()
   } catch (error) {
-    console.error('获取区域节点数据失败:', error)
+    console.error('获取节点列表失败:', error)
   } finally {
-    loadingAreaData.value = false
+    loadingNodes.value = false
   }
 }
 
-// 处理行点击事件，获取对应区域的节点数据
+// 简化后的行点击处理函数
 const handleRowClick = (row) => {
-  if (row && row.bound_node) {
-    fetchAreaData(row.bound_node)
-  }
+  // 不需要再次获取节点数据，所有需要的数据已经在 nodes 中
 }
 
 const getBuildingName = (buildingId) => {
@@ -135,49 +128,28 @@ const getBuildingName = (buildingId) => {
 const getNodeName = (nodeId) => {
   if (!nodeId) return '未绑定'
   
-  const nodeData = areaNodesMap.value.get(nodeId)
-  if (nodeData) return nodeData.name
-  
-  // 如果还没有获取数据，触发获取
-  fetchAreaData(nodeId)
-  return '加载中...'
+  const node = nodes.value.find(n => n.id === nodeId)
+  return node ? node.name : '未知节点'
 }
 
 const getNodeStatus = (nodeId) => {
   if (!nodeId) return false
   
-  const nodeData = areaNodesMap.value.get(nodeId)
-  return nodeData ? nodeData.status : false
+  const node = nodes.value.find(n => n.id === nodeId)
+  return node ? node.status : false
 }
 
 const getNodeUpdateTime = (nodeId) => {
   if (!nodeId) return '未知'
   
-  const nodeData = areaNodesMap.value.get(nodeId)
-  return nodeData && nodeData.updated_at 
-    ? new Date(nodeData.updated_at).toLocaleString() 
+  const node = nodes.value.find(n => n.id === nodeId)
+  return node && node.updated_at 
+    ? new Date(node.updated_at).toLocaleString() 
     : '未知'
 }
 
 onMounted(() => {
   fetchBuildings()
-  fetchNodes() // 仍然需要获取所有节点用于表单选择
+  fetchNodes() // 只需要获取一次所有节点数据
 })
-
-// 表单仍需要节点列表数据用于选择节点
-const nodes = ref([])
-const loadingNodes = ref(false)
-
-const fetchNodes = async () => {
-  loadingNodes.value = true
-  try {
-    // 这里假设有一个获取所有节点的API
-    const response = await areaService.getAllNodes()
-    nodes.value = response || []
-  } catch (error) {
-    console.error('获取节点列表失败:', error)
-  } finally {
-    loadingNodes.value = false
-  }
-}
 </script>
