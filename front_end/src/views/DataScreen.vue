@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import * as echarts from 'echarts'
-import axios from '../axios'
+import { areaService, alertService, noticeService, summaryService } from '../services/apiService'
 import type { AreaItem, HistoricalData } from '../types'
 
 // 添加新的响应式数据
@@ -20,27 +20,34 @@ type Message = {
   text: string
   type: MessageType
   timestamp: string
+  sourceType: 'alert' | 'notice' // 添加来源类型
+  sourceId: number // 添加源数据ID
 }
 
-// 模拟消息数据
 const messages = ref<Message[]>([
   {
     id: 1,
     text: '🚨 图书馆东区人流量超过预警值',
     type: 'emergency',
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
+    sourceType: 'alert',
+    sourceId: 1
   },
   {
     id: 2,
     text: '⚠️ 食堂即将进入午餐高峰期',
     type: 'warning',
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
+    sourceType: 'notice',
+    sourceId: 2
   },
   {
     id: 3,
     text: 'ℹ️ 教学楼检测设备例行维护中',
     type: 'info',
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
+    sourceType: 'notice',
+    sourceId: 3
   }
 ])
 
@@ -78,7 +85,9 @@ const updateMessages = () => {
     id: Date.now(),
     text: newMessages[Math.floor(Math.random() * newMessages.length)],
     type: types[Math.floor(Math.random() * types.length)],
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
+    sourceType: 'alert',
+    sourceId: Math.floor(Math.random() * 100)
   }
   
   // 保持最多8条消息
@@ -88,63 +97,139 @@ const updateMessages = () => {
   messages.value.push(newMessage)
 }
 
-// 初始化时获取区域数据
-onMounted(async () => {
-  // 获取区域基本信息
-  const { data: areaData } = await axios.get('/api/areas')
-  areas.value = areaData.data.map((a: AreaItem) => ({
-    ...a,
-    max_capacity: 50 // 根据实际业务需求设置或从API获取
-  }))
-
-  // 图表初始化及历史数据获取
-  const chart = echarts.init(chartRef.value!)
-  
-  const option = {
-    dataset: {
-      source: [] as Array<[string, number]>
-    },
-    title: { text: '区域人流趋势' },
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'time' },
-    yAxis: { type: 'value' },
-    series: [{
-      type: 'line',
-      encode: {
-        x: 'timestamp',
-        y: 'detected_count'
-      },
-      smooth: true
-    }]
+// 获取最新告警和通知
+const fetchLatestMessages = async () => {
+  try {
+    const [alerts, notices] = await Promise.all([
+      alertService.getUnsolvedAlerts(),
+      noticeService.getLatestNotices(5)
+    ])
+    
+    const newMessages: Message[] = [
+      ...alerts.map(alert => ({
+        id: alert.id,
+        text: `🚨 ${alert.message}`,
+        type: getAlertType(alert.grade),
+        timestamp: alert.timestamp,
+        sourceType: 'alert',
+        sourceId: alert.id
+      })),
+      ...notices.map(notice => ({
+        id: notice.id,
+        text: `ℹ️ ${notice.title}`,
+        type: 'info',
+        timestamp: notice.timestamp,
+        sourceType: 'notice',
+        sourceId: notice.id
+      }))
+    ]
+    
+    messages.value = newMessages.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    ).slice(0, 8)
+  } catch (error) {
+    console.error('获取消息失败:', error)
   }
+}
 
-  // 定时更新图表数据
-  setInterval(async () => {
-    const { data } = await axios.get<HistoricalData[]>('/api/historical')
-    // 修改为直接使用 data 数组，因为 HistoricalData[] 上不存在属性 data
-    option.dataset.source = data.map(d => ([
-      d.timestamp,
-      d.detected_count
-    ]))
-    chart.setOption(option)
-  }, 5000)
+// 告警等级转换为消息类型
+const getAlertType = (grade: number): MessageType => {
+  const gradeMap: { [key: number]: MessageType } = {
+    3: 'emergency', // 严重
+    2: 'warning',   // 警告
+    1: 'warning',   // 注意
+    0: 'info'       // 普通
+  }
+  return gradeMap[grade] || 'info'
+}
 
-  // 每5秒更新一次消息
-  setInterval(updateMessages, 5000)
-
-  // 添加数字滚动效果
-  setInterval(() => {
-    totalFlow.value = Math.floor(Math.random() * 10000)
-    onlineNodes.value = Math.floor(Math.random() * 50)
-    warningCount.value = Math.floor(Math.random() * 20)
+// 更新实时统计数据
+const updateStats = async () => {
+  try {
+    // 获取统计数据
+    const summary = await summaryService.getSummary()
+    totalFlow.value = summary[5] || 0
+    onlineNodes.value = summary[0] || 0
+    warningCount.value = summary[] || 0
     updateTime()
-  }, 3000)
+  } catch (error) {
+    console.error('获取统计数据失败:', error)
+  }
+}
 
-  // 监听全屏变化
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen.value = !!document.fullscreenElement
-  })
+// 修改 onMounted 中的区域获取逻辑
+onMounted(async () => {
+  try {
+    // 获取区域数据
+    areas.value = await areaService.getAll()
+
+    // 图表初始化及历史数据获取
+    const chart = echarts.init(chartRef.value!)
+    
+    const option = {
+      dataset: {
+        source: [] as Array<[string, number]>
+      },
+      title: { text: '区域人流趋势' },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'time' },
+      yAxis: { type: 'value' },
+      series: [{
+        type: 'line',
+        encode: {
+          x: 'timestamp',
+          y: 'detected_count'
+        },
+        smooth: true
+      }]
+    }
+
+    // 更新图表数据
+    const updateChart = async () => {
+      try {
+        if (areas.value && areas.value.length > 0) {
+          const historicalData = await historicalService.getAreaHistorical(areas.value[0].id)
+          option.dataset.source = historicalData.map(d => ([
+            d.timestamp,
+            d.detected_count
+          ]))
+          chart.setOption(option)
+        }
+      } catch (error) {
+        console.error('获取历史数据失败:', error)
+      }
+    }
+
+    // 初始获取数据
+    await Promise.all([
+      updateStats(),
+      updateChart(),
+      fetchLatestMessages()
+    ])
+
+    // 设置定时更新
+    setInterval(updateStats, 3000)
+    setInterval(updateChart, 5000)
+    setInterval(fetchLatestMessages, 5000)
+
+    // 监听全屏变化
+    document.addEventListener('fullscreenchange', () => {
+      isFullscreen.value = !!document.fullscreenElement
+    })
+
+  } catch (error) {
+    console.error('数据加载失败:', error)
+  }
 })
+
+const formatTime = (timestamp: string) => {
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
 </script>
 
 <template>
@@ -182,14 +267,14 @@ onMounted(async () => {
         <el-card v-for="area in areas" :key="area.id" class="area-card">
           <div class="area-header">
             <h4>{{ area.name }}</h4>
-            <span class="status-badge" :class="{'status-active': Math.random() > 0.5}">
-              {{ Math.random() > 0.5 ? '正常' : '告警' }}
+            <span class="status-badge" :class="{'status-active': area.status}">
+              {{ area.status ? '正常' : '告警' }}
             </span>
           </div>
           <div class="area-stats">
             <div class="stat-item">
               <span>当前人数</span>
-              <span>{{ Math.floor(Math.random() * 100) }}</span>
+              <span>{{ area.detected_count || 0 }}</span>
             </div>
             <div class="stat-item">
               <span>容量上限</span>
@@ -205,11 +290,11 @@ onMounted(async () => {
       <div class="message-container">
         <div 
           v-for="msg in messages" 
-          :key="msg.id"
+          :key="`${msg.sourceType}-${msg.sourceId}`"
           class="message-bubble"
           :class="[`type-${msg.type}`]"
         >
-          <span class="message-time">{{ msg.timestamp }}</span>
+          <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
           <span class="message-text">{{ msg.text }}</span>
         </div>
       </div>
@@ -473,6 +558,11 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(5px);
   flex-shrink: 0;
+  transition: transform 0.3s;
+}
+
+.message-bubble:hover {
+  transform: translateY(-2px);
 }
 
 @keyframes scrollMessages {
@@ -487,6 +577,19 @@ onMounted(async () => {
 /* 当鼠标悬停时暂停动画 */
 .message-container:hover {
   animation-play-state: paused;
+}
+
+/* 更新消息类型样式 */
+.type-emergency {
+  border-left: 4px solid #ff4444;
+}
+
+.type-warning {
+  border-left: 4px solid #ffaa00;
+}
+
+.type-info {
+  border-left: 4px solid #00aaff;
 }
 
 /* 更新消息样式 */
