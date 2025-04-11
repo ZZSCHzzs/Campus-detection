@@ -1,10 +1,13 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 from rest_framework.response import Response
 from rest_framework import status
+from .permissions import StaffEditSelected
+
 
 
 def get_summary_people_count():
@@ -19,16 +22,48 @@ def get_summary_people_count():
 class CustomUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = CustomUserSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return []  # 开放注册
+        elif self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAdminUser()]  # 写操作仅限管理员
+        return super().get_permissions()
+
+    def destroy(self, request, *args, **kwargs):
+        """安全删除（标记禁用而非真删除）"""
+        instance = self.get_object()
+        if instance.is_superuser:
+            return Response(
+                {"detail": "不能删除超级管理员"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        instance.is_active = False
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """获取当前用户信息"""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
 
 
 class HardwareNodeViewSet(viewsets.ModelViewSet):
     queryset = HardwareNode.objects.all()
     serializer_class = HardwareNodeSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
 
 
 class ProcessTerminalViewSet(viewsets.ModelViewSet):
     queryset = ProcessTerminal.objects.all()
     serializer_class = ProcessTerminalSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
 
     @action(detail=True, methods=['get'])
     def nodes(self, request, pk=None):
@@ -41,6 +76,8 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
 class BuildingViewSet(viewsets.ModelViewSet):
     queryset = Building.objects.all()
     serializer_class = BuildingSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
     @action(detail=True, methods=['get'])
     def areas(self, request, pk=None):
         building = self.get_object()
@@ -52,6 +89,8 @@ class BuildingViewSet(viewsets.ModelViewSet):
 class AreaViewSet(viewsets.ModelViewSet):
     queryset = Area.objects.all()
     serializer_class = AreaSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
 
     @action(detail=True, methods=['get'])
     def data(self, request,  pk=None):
@@ -68,7 +107,7 @@ class AreaViewSet(viewsets.ModelViewSet):
         serializer = AreaSerializer(areas, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
     def historical(self, request, pk=None):
         area = self.get_object()
         historical_data = HistoricalData.objects.filter(area=area)
@@ -77,8 +116,7 @@ class AreaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def favor(self, request, pk=None):
-        if not request.user.is_authenticated:
-            return Response({"detail": "请先登录"}, status=status.HTTP_401_UNAUTHORIZED)
+
         area = self.get_object()
         if request.user.favorite_areas.filter(id=area.id).exists():
             request.user.favorite_areas.remove(area)
@@ -96,6 +134,8 @@ class AreaViewSet(viewsets.ModelViewSet):
 class HistoricalDataViewSet(viewsets.ModelViewSet):
     queryset = HistoricalData.objects.all()
     serializer_class = HistoricalDataSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False  # 标记该资源允许 Staff 编辑
 
     @action(detail=False, methods=['get'])
     def latest(self, request):
@@ -108,6 +148,8 @@ class HistoricalDataViewSet(viewsets.ModelViewSet):
 class AlertViewSet(viewsets.ModelViewSet):
     queryset = Alert.objects.all()
     serializer_class = AlertSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = True  # 标记该资源允许 Staff 编辑
 
     @action(detail=False, methods=['get'])
     def unsolved(self, request):
@@ -134,6 +176,8 @@ class AlertViewSet(viewsets.ModelViewSet):
 class NoticeViewSet(viewsets.ModelViewSet):
     queryset = Notice.objects.all()
     serializer_class = NoticeSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = True
 
     @action(detail=False, methods=['get'])
     def latest(self, request):
@@ -220,6 +264,7 @@ class DataUploadView(APIView):
 
 
 class SummaryView(APIView):
+
     def get(self, request):
         nodes_count = HardwareNode.objects.count()
         terminals_count = ProcessTerminal.objects.count()

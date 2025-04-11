@@ -1,8 +1,9 @@
 import axios from 'axios'
+import type { AxiosRequestHeaders } from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://smarthit.top:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top'
 
 /**
  * 创建标准化的API实例
@@ -25,10 +26,14 @@ api.interceptors.request.use(config => {
     config.url += '/'
   }
   
-  
   const token = localStorage.getItem('access')
   if (token) {
-    config.headers = config.headers || {}
+    if (!config.headers) {
+      config.headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      } as AxiosRequestHeaders;
+    }
     config.headers['Authorization'] = `JWT ${token.trim()}`
   }
   

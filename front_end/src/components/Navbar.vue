@@ -1,6 +1,109 @@
 <template>
-  <div class="nav-container header">
-    <el-menu :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
+  <div class="nav-container header" :class="{'mobile-header': isMobile}">
+    <div v-if="isMobile" class="mobile-nav-container">
+      <!-- 移动端导航栏 -->
+      <div class="mobile-header-row">
+        <!-- 左侧汉堡按钮 -->
+        <el-button class="hamburger-btn" @click="toggleMobileMenu">
+          <el-icon size="20"><Menu /></el-icon>
+        </el-button>
+        
+        <!-- 中间Logo -->
+        <div class="logo-container">
+          <img alt="Logo" class="logo" src="/favicon256.ico"/>
+          <span class="site-name">校园慧感</span>
+        </div>
+        
+        <!-- 右侧用户中心/登录按钮 -->
+        <div v-if="authStore.isAuthenticated" class="mobile-user-button">
+          <el-avatar 
+            :icon="UserFilled" 
+            :size="32" 
+            class="user-avatar"
+            @click="navigateToProfile"
+          ></el-avatar>
+        </div>
+        <div v-else class="mobile-auth-button">
+          <el-button circle size="small" type="primary" @click="navigateToLogin">
+            <el-icon><UserFilled /></el-icon>
+          </el-button>
+        </div>
+      </div>
+      
+      <!-- 左侧滑出菜单 -->
+      <div v-show="mobileMenuVisible" class="mobile-menu-overlay" @click="closeMobileMenu"></div>
+      <div 
+        class="mobile-side-menu" 
+        :class="{'mobile-menu-open': mobileMenuVisible}"
+      >
+        <!-- 菜单头部 -->
+        <div class="side-menu-header">
+          <div class="logo-container">
+            <img alt="Logo" class="logo" src="/favicon256.ico"/>
+            <span class="site-name">校园慧感</span>
+          </div>
+          <el-button class="close-menu-btn" @click="closeMobileMenu">
+            <el-icon size="20"><Close /></el-icon>
+          </el-button>
+        </div>
+        
+        <!-- 菜单导航项 -->
+        <el-menu 
+          :default-active="activeIndex" 
+          mode="vertical" 
+          class="mobile-el-menu" 
+          @select="handleSelect"
+        >
+          <el-menu-item 
+            v-for="item in content" 
+            :key="item.index" 
+            :index="item.index" 
+            class="nav-item"
+            v-show="(!item.adminOnly || isAdmin) && !item.hideOnMobile"
+          >
+            <el-icon v-if="item.icon" :size="18" class="nav-icon">
+              <component :is="getIconComponent(item.icon)"></component>
+            </el-icon>
+            <div class="nav-text">{{ item.title }}</div>
+          </el-menu-item>
+        </el-menu>
+        
+        <!-- 用户相关菜单项 -->
+        <div v-if="authStore.isAuthenticated" class="mobile-user-area">
+          <div class="user-info">
+            <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
+            <span class="username">{{ authStore.username }}</span>
+          </div>
+          
+          <div class="user-menu-items">
+            <div class="user-menu-item" @click="goToProfile('profile')">
+              <el-icon><UserFilled /></el-icon>
+              <span>个人信息</span>
+            </div>
+            <div class="user-menu-item" @click="goToProfile('password')">
+              <el-icon><Lock /></el-icon>
+              <span>修改密码</span>
+            </div>
+            <div class="user-menu-item" @click="goToProfile('favorites')">
+              <el-icon><Star /></el-icon>
+              <span>我的收藏</span>
+            </div>
+            <div class="user-menu-item logout-item" @click="confirmLogout">
+              <el-icon><SwitchButton /></el-icon>
+              <span>退出登录</span>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="mobile-auth-buttons">
+          <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
+          <el-button size="small" type="primary" class="register-btn" @click="navigateToRegister">注册</el-button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 桌面版导航栏 - 保持不变 -->
+    <el-menu v-else :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
              @select="handleSelect">
       <div class="logo-container">
         <img
@@ -68,7 +171,10 @@ import {ref, onMounted, watch, computed} from 'vue'
 import router from '../router'
 import {useRoute} from 'vue-router'
 import {useAuthStore} from '../stores/auth'
-import {UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine, SwitchButton, Operation, Lock, Star, Bell} from '@element-plus/icons-vue'
+import {
+  UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine,
+  SwitchButton, Operation, Lock, Star, Bell, Menu, Close
+} from '@element-plus/icons-vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 
 const authStore = useAuthStore()
@@ -107,7 +213,8 @@ const content = ref([
     index: '2',
     title: '数据大屏',
     path: '/screen',
-    icon: 'DataLine'
+    icon: 'DataLine',
+    hideOnMobile: true  // 添加在移动端隐藏标记
   },
   {
     index: '3',
@@ -152,7 +259,6 @@ const isProfileRoute = computed(() => {
 const updateActiveIndex = () => {
   const currentPath = route.path
 
-  
   if (currentPath.includes('/profile')) {
     activeIndex.value = ''
     return
@@ -186,18 +292,18 @@ const handleSelect = (key: string) => {
   if (path) {
     console.log('Navigating to:', path)
     router.push(path)
-    
+    mobileMenuVisible.value = false // 关闭移动菜单
   } else {
     console.warn('No path found for key:', key)
   }
 }
 
 const navigateToLogin = () => {
-  router.push({path: '/auth', query: {mode: 'login'}})
+  router.push('/login')
 }
 
 const navigateToRegister = () => {
-  router.push({path: '/auth', query: {mode: 'register'}})
+  router.push('/register')
 }
 
 const handleCommand = (command: string) => {
@@ -225,14 +331,13 @@ const handleCommand = (command: string) => {
       )
           .then(async () => {
             try {
-              
               authStore.logout()
               ElMessage({
                 message: '成功退出登录',
                 type: 'success',
                 duration: 2000
               })
-              
+              mobileMenuVisible.value = false
               await router.push('/')
             } catch (error) {
               console.error('退出失败:', error)
@@ -253,6 +358,77 @@ const handleCommand = (command: string) => {
       break
   }
 }
+
+// 添加移动端相关变量和方法
+const isMobile = ref(false)
+const mobileMenuVisible = ref(false)
+
+const checkScreenSize = () => {
+  isMobile.value = window.innerWidth < 992
+  if (!isMobile.value) {
+    mobileMenuVisible.value = false
+  }
+}
+
+const toggleMobileMenu = () => {
+  mobileMenuVisible.value = !mobileMenuVisible.value
+}
+
+const goToProfile = (tab: string) => {
+  router.push({ path: '/profile', query: { tab } })
+  mobileMenuVisible.value = false
+}
+
+const confirmLogout = () => {
+  ElMessageBox.confirm(
+    '确定要退出登录吗?',
+    '提示',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      center: true,
+      customClass: 'logout-confirm-box'
+    }
+  ).then(async () => {
+    try {
+      authStore.logout()
+      ElMessage({
+        message: '成功退出登录',
+        type: 'success',
+        duration: 2000
+      })
+      mobileMenuVisible.value = false
+      await router.push('/')
+    } catch (error) {
+      console.error('退出失败:', error)
+      ElMessage({
+        message: '退出登录失败，请重试',
+        type: 'error',
+        duration: 2000
+      })
+    }
+  }).catch(() => {
+    ElMessage({
+      message: '取消退出登录',
+      type: 'info',
+      duration: 2000
+    })
+  })
+}
+
+const closeMobileMenu = () => {
+  mobileMenuVisible.value = false
+}
+
+const navigateToProfile = () => {
+  router.push({ path: '/profile', query: { tab: 'profile' } })
+}
+
+onMounted(() => {
+  checkScreenSize()
+  window.addEventListener('resize', checkScreenSize)
+})
 </script>
 
 <style>
@@ -511,5 +687,225 @@ el-menu-item {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
+
+/* 移动端适配样式 */
+.mobile-header {
+  width: 100%;
+  padding: 0;
+}
+
+.mobile-nav-container {
+  width: 100%;
+  background-color: #fff;
+}
+
+.mobile-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #eef1ff;
+  position: relative;
+}
+
+/* 汉堡按钮 */
+.hamburger-btn {
+  border: none;
+  background: transparent;
+  padding: 8px;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+/* 关闭按钮 */
+.close-menu-btn {
+  border: none;
+  background: transparent;
+  padding: 8px;
+  cursor: pointer;
+}
+
+/* 移动端头像按钮 */
+.mobile-user-button {
+  cursor: pointer;
+}
+
+.mobile-user-button .user-avatar {
+  transition: all 0.3s ease;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-user-button .user-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mobile-auth-button {
+  display: flex;
+  align-items: center;
+}
+
+/* 侧边菜单遮罩 */
+.mobile-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  transition: opacity 0.3s ease;
+}
+
+/* 侧边滑出菜单 */
+.mobile-side-menu {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  height: 100%;
+  width: 260px;
+  background: white;
+  z-index: 1001;
+  transition: left 0.3s ease;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-menu-open {
+  left: 0;
+}
+
+/* 菜单头部 */
+.side-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px;
+  border-bottom: 1px solid #eef1ff;
+}
+
+/* 菜单本身 */
+.mobile-el-menu {
+  border-right: none;
+  flex: 1;
+}
+
+.mobile-el-menu .el-menu-item {
+  height: 50px;
+  line-height: 50px;
+}
+
+/* 用户区域 */
+.mobile-user-area {
+  padding: 15px;
+  border-top: 1px solid #eaeaea;
+}
+
+.mobile-user-area .user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: #f0f7ff;
+}
+
+.user-menu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-menu-item:hover {
+  background-color: #f5f7fa;
+}
+
+.user-menu-item .el-icon {
+  font-size: 16px;
+  color: #409EFF;
+}
+
+.logout-item {
+  color: #F56C6C;
+}
+
+.logout-item .el-icon {
+  color: #F56C6C;
+}
+
+.mobile-auth-buttons {
+  display: flex;
+  padding: 15px;
+  gap: 10px;
+  justify-content: center;
+  border-top: 1px solid #eaeaea;
+}
+
+/* 确保移动端菜单中的激活项样式正确 */
+.mobile-el-menu .el-menu-item.is-active {
+  color: #409EFF !important;
+  font-weight: 700;
+}
+
+.mobile-el-menu .el-menu-item.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background-color: #409EFF;
+  box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
+}
+
+@media (max-width: 992px) {
+  .nav-container {
+    width: 100%;
+  }
+  
+  .logo {
+    height: 30px;
+  }
+  
+  .site-name {
+    font-size: 16px;
+  }
+  
+  .mobile-menu .nav-item {
+    height: 50px;
+    line-height: 50px;
+  }
+  
+  .mobile-menu .nav-item::after {
+    display: none;
+  }
+  
+  .mobile-menu .el-menu-item.is-active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    background-color: #409EFF;
+    box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
+  }
+}
 </style>
-``` 

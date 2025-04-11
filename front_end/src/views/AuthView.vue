@@ -15,22 +15,26 @@ const route = useRoute()
 const isLogin = ref(true)
 
 const setViewMode = () => {
-    isLogin.value = route.query.mode !== 'register';
+    isLogin.value = route.path !== '/register';
 }
 
 onMounted(() => {
     setViewMode()
 })
 
-watch(() => route.query.mode, (newMode) => {
+watch(() => route.path, () => {
     setViewMode()
 }, { immediate: true })
 
 const toggleView = () => {
     isLogin.value = !isLogin.value
     
-    const mode = isLogin.value ? 'login' : 'register'
-    router.replace({ path: '/auth', query: { mode } })
+    const path = isLogin.value ? '/login' : '/register'
+    const redirect = route.query.redirect
+    router.replace({ 
+        path: path, 
+        query: redirect ? { redirect: redirect.toString() } : {} 
+    })
 }
 
 const loginForm = ref({
@@ -178,7 +182,8 @@ const handleLogin = async () => {
                         })
                         
                         setTimeout(() => {
-                            router.push('/')
+                            const redirectPath = route.query.redirect?.toString() || '/'
+                            router.push(redirectPath)
                         }, 1000)
                     } else {
                         throw new Error('无法获取用户信息')
@@ -192,7 +197,8 @@ const handleLogin = async () => {
                     })
                     
                     setTimeout(() => {
-                        router.push('/')
+                        const redirectPath = route.query.redirect?.toString() || '/'
+                        router.push(redirectPath)
                     }, 1000)
                 }
             } catch (error) {
@@ -260,7 +266,7 @@ const handleRegister = async () => {
 
                 setTimeout(() => {
                     isLogin.value = true
-                    router.replace({ path: '/auth', query: { mode: 'login' } })
+                    router.replace({ path: '/login' })
                 }, 1000)
             } catch (error) {
                 console.error('注册失败:', error)
