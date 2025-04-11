@@ -422,6 +422,10 @@ const viewModeInfo = computed(() => {
   }
   return modes[viewMode.value]
 })
+
+// 针对不同设备显示dialog或drawer
+const drawerDirection = ref('btt') // 默认从底部弹出
+const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
 </script>
 
 <template>
@@ -840,13 +844,14 @@ const viewModeInfo = computed(() => {
       </el-tabs>
     </div>
 
-    <!-- 对话框保持不变 -->
+    <!-- PC端展示对话框，移动端隐藏 -->
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
       width="600px"
       destroy-on-close
       class="detail-dialog"
+      v-if="!isMobileView"
     >
       <el-form :model="noticeForm" label-width="80px">
         <el-form-item label="标题">
@@ -886,13 +891,62 @@ const viewModeInfo = computed(() => {
       </template>
     </el-dialog>
     
+    <!-- 移动端展示抽屉，PC端隐藏 -->
+    <el-drawer
+      v-model="noticeDialogVisible"
+      title="发布新通知"
+      :direction="drawerDirection"
+      :size="drawerSize"
+      destroy-on-close
+      class="mobile-drawer"
+      v-if="isMobileView"
+    >
+      <div class="drawer-content compact-drawer">
+        <el-form :model="noticeForm" label-width="70px" class="compact-form">
+          <el-form-item label="标题">
+            <el-input v-model="noticeForm.title" placeholder="请输入通知标题" />
+          </el-form-item>
+          <el-form-item label="内容">
+            <el-input
+              v-model="noticeForm.content"
+              type="textarea"
+              :rows="4"
+              placeholder="请输入通知内容"
+            />
+          </el-form-item>
+          <el-form-item label="关联区域">
+            <el-select
+              v-model="noticeForm.related_areas"
+              multiple
+              placeholder="选择关联区域（可多选，不选则为全校通知）"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="area in areas"
+                :key="area.id"
+                :label="area.name"
+                :value="area.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div class="drawer-footer">
+          <el-button @click="noticeDialogVisible = false" class="drawer-btn">取消</el-button>
+          <el-button type="primary" @click="submitNotice" :loading="noticeSubmitting" class="drawer-btn">
+            发布
+          </el-button>
+        </div>
+      </div>
+    </el-drawer>
 
+    <!-- PC端告警详情对话框 -->
     <el-dialog
       v-model="alertDetailVisible"
       title="告警详情"
       width="700px"
       @closed="closeAlertDetail"
       class="detail-dialog"
+      v-if="!isMobileView"
     >
       <div v-if="currentAlertDetail" class="detail-content">
         <div class="detail-header">
@@ -974,13 +1028,103 @@ const viewModeInfo = computed(() => {
       </div>
     </el-dialog>
     
+    <!-- 移动端告警详情抽屉 -->
+    <el-drawer
+      v-model="alertDetailVisible"
+      title="告警详情"
+      :direction="drawerDirection"
+      :size="drawerSize"
+      @closed="closeAlertDetail"
+      class="mobile-drawer"
+      v-if="isMobileView"
+    >
+      <div v-if="currentAlertDetail" class="detail-content drawer-content compact-drawer">
+        <div class="compact-header">
+          <div class="compact-header-row">
+            <el-tag 
+              :type="getAlertGrade(currentAlertDetail.grade).type" 
+              effect="dark"
+              size="small"
+              class="detail-tag"
+            >
+              {{ getAlertGrade(currentAlertDetail.grade).label }}
+            </el-tag>
+            <span class="detail-type compact-type">{{ getAlertTypeName(currentAlertDetail.alert_type) }}</span>
+            <el-tag 
+              :type="currentAlertDetail.solved ? 'success' : 'danger'"
+              effect="light"
+              size="small"
+              class="status-compact-tag"
+            >
+              {{ currentAlertDetail.solved ? '已处理' : '未处理' }}
+            </el-tag>
+          </div>
+        </div>
+        
+        <el-divider content-position="left" class="compact-divider">基本信息</el-divider>
+        
+        <div class="compact-info-grid">
+          <div class="compact-info-item">
+            <span class="compact-info-label">告警ID:</span>
+            <span class="compact-info-value">#{{ currentAlertDetail.id }}</span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">区域:</span>
+            <span class="compact-info-value">
+              <el-tag v-if="currentAlertDetail.area_name" size="small" effect="plain" class="area-detail-tag">
+                {{ currentAlertDetail.area_name }}
+              </el-tag>
+              <span v-else class="no-area">未指定区域</span>
+            </span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">时间:</span>
+            <span class="compact-info-value timestamp-value">{{ formatDate(currentAlertDetail.timestamp) }}</span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">公开性:</span>
+            <span class="compact-info-value">
+              <el-tag 
+                :type="currentAlertDetail.publicity ? 'success' : 'info'" 
+                effect="light"
+                size="small"
+              >
+                {{ currentAlertDetail.publicity ? '公开' : '内部' }}
+              </el-tag>
+            </span>
+          </div>
+        </div>
+        
+        <el-divider content-position="left" class="compact-divider">告警详情</el-divider>
+        
+        <div class="compact-message-container">
+          <div class="message-content">{{ currentAlertDetail.message }}</div>
+        </div>
+        
+        <div class="actions-container" v-if="!currentAlertDetail.solved && isStaffOrAdmin">
+          <el-button 
+            type="success" 
+            @click="solveAlert(currentAlertDetail.id)"
+            :icon="Check"
+            class="detail-action-button mobile-action-button"
+          >
+            标记为已解决
+          </el-button>
+        </div>
+      </div>
+    </el-drawer>
 
+    <!-- PC端通知详情对话框 -->
     <el-dialog
       v-model="noticeDetailVisible"
       title="通知详情"
       width="700px"
       @closed="closeNoticeDetail"
       class="detail-dialog"
+      v-if="!isMobileView"
     >
       <div v-if="currentNoticeDetail" class="detail-content">
         <div class="notice-detail-header">
@@ -1026,6 +1170,59 @@ const viewModeInfo = computed(() => {
         </div>
       </div>
     </el-dialog>
+    
+    <!-- 移动端通知详情抽屉 -->
+    <el-drawer
+      v-model="noticeDetailVisible"
+      title="通知详情"
+      :direction="drawerDirection"
+      :size="drawerSize"
+      @closed="closeNoticeDetail"
+      class="mobile-drawer"
+      v-if="isMobileView"
+    >
+      <div v-if="currentNoticeDetail" class="detail-content drawer-content compact-drawer">
+        <h3 class="compact-notice-title">{{ currentNoticeDetail.title }}</h3>
+        
+        <el-divider content-position="left" class="compact-divider">基本信息</el-divider>
+        
+        <div class="compact-info-grid">
+          <div class="compact-info-item">
+            <span class="compact-info-label">通知ID:</span>
+            <span class="compact-info-value">#{{ currentNoticeDetail.id }}</span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">时间:</span>
+            <span class="compact-info-value timestamp-value">{{ formatDate(currentNoticeDetail.timestamp) }}</span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">区域:</span>
+            <span class="compact-info-value">
+              <div v-if="currentNoticeDetail.related_areas && currentNoticeDetail.related_areas.length" class="area-detail-tags">
+                <el-tag 
+                  v-for="areaId in currentNoticeDetail.related_areas" 
+                  :key="areaId"
+                  size="small" 
+                  effect="plain"
+                  class="area-detail-tag"
+                >
+                  {{ getAreaName(areaId) }}
+                </el-tag>
+              </div>
+              <span v-else class="no-area">全校范围</span>
+            </span>
+          </div>
+        </div>
+        
+        <el-divider content-position="left" class="compact-divider">通知内容</el-divider>
+        
+        <div class="compact-message-container">
+          <div class="message-content">{{ currentNoticeDetail.content }}</div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -1397,6 +1594,7 @@ const viewModeInfo = computed(() => {
   margin-bottom: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1782,5 +1980,156 @@ const viewModeInfo = computed(() => {
 /* 优化表格和卡片切换的过渡效果 */
 .cards-container, .table-container {
   transition: opacity 0.3s ease;
+}
+
+/* ------------ 移动端抽屉适配样式 ------------ */
+.mobile-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding: 10px 15px;
+  background-color: #f4f7fc;
+  border-bottom: 1px solid #e4e7ed;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.drawer-content {
+  padding: 0 15px 15px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* 紧凑型抽屉样式 */
+.compact-drawer {
+  padding: 0 12px 12px;
+}
+
+.compact-form :deep(.el-form-item) {
+  margin-bottom: 12px;
+}
+
+.compact-header {
+  margin-bottom: 10px;
+}
+
+.compact-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+}
+
+.compact-type {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.status-compact-tag {
+  font-size: 12px;
+  padding: 0 8px;
+  margin-left: auto;
+}
+
+.compact-divider {
+  margin: 10px 0;
+  padding: 0 10px;
+}
+
+.compact-divider :deep(.el-divider__text) {
+  font-size: 14px;
+  padding: 0 10px;
+  background-color: #fff;
+}
+
+.compact-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.compact-info-item {
+  background-color: #f9fafc;
+  border-radius: 6px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compact-info-label {
+  color: #606266;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.compact-info-value {
+  color: #303133;
+  font-size: 14px;
+}
+
+.compact-message-container {
+  background-color: #f9fafc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px;
+  border-left: 3px solid #409EFF;
+}
+
+.compact-notice-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  margin: 8px 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #409EFF;
+  display: inline-block;
+}
+
+.mobile-detail-header, .mobile-notice-header {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-detail-header .header-right {
+  margin-top: 10px;
+  align-self: flex-start;
+}
+
+.mobile-action-button {
+  width: 100%;
+  margin-top: 15px;
+  height: 40px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+}
+
+.drawer-btn {
+  flex: 1;
+  margin: 0 5px;
+}
+
+@media (max-width: 768px) {  
+  .mobile-drawer :deep(.el-drawer__body) {
+    padding: 0;
+  }
+  
+  .compact-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .compact-info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
