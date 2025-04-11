@@ -40,18 +40,19 @@
 import BaseManager from './BaseManager.vue'
 
 const columns = [
-  { prop: 'username', label: '用户名', width: '200' },
-  { prop: 'email', label: '邮箱', width: '250' },
-  { prop: 'phone', label: '手机号', width: '200' },
-  { prop: 'role', label: '权限', width: '150', 
+  { prop: 'username', label: '用户名', width: '200', mobileWidth: '120' },
+  { prop: 'email', label: '邮箱', width: '250', mobileWidth: '150' },
+  { prop: 'phone', label: '手机号', width: '200', mobileWidth: '120' },
+  { prop: 'role', label: '权限', width: '150', mobileWidth: '80',
     formatter: (row) => {
       if (row.role === 'admin') return '管理员'
       if (row.role === 'staff') return '工作人员'
       return '普通用户'
     }
   },
-  { prop: 'register_time', label: '注册时间',
-    formatter: (row) => new Date(row.register_time).toLocaleString() }
+  { prop: 'register_time', label: '注册时间', width: '200', mobileWidth: '150',
+    formatter: (row) => new Date(row.register_time).toLocaleString() },
+  { prop: '',label: ''}  
 ]
 
 const defaultFormData = {

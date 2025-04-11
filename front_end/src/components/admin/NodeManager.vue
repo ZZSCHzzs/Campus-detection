@@ -83,13 +83,13 @@ const props = defineProps({
 const dataLink = ref()
 
 const columns = [
-  { prop: 'name', label: '节点名称', width: '200' },
-  { prop: 'detected_count', label: '检测人数', width: '150' },
-  { prop: 'terminal', label: '所属终端', width: '150', slot: true },
-  { prop: 'status', label: '状态', width: '100', slot: true },
-  { prop: 'updated_at', label: '更新时间', width: '200',
+  { prop: 'name', label: '节点名称', width: '200', mobileWidth: '130' },
+  { prop: 'detected_count', label: '检测人数', width: '150', mobileWidth: '80' },
+  { prop: 'terminal', label: '所属终端', width: '150', mobileWidth: '150', slot: true },
+  { prop: 'status', label: '状态', width: '100', mobileWidth: '65', slot: true },
+  { prop: 'updated_at', label: '更新时间', width: '200', 
     formatter: (row) => new Date(row.updated_at).toLocaleString() },
-  { prop: 'description', label: '描述' }
+  { prop: 'description', label: '描述', hideOnMobile: true }
 ]
 
 const defaultFormData = {

@@ -1,8 +1,34 @@
 <template>
   <div class="admin-container">
-    <div class="admin-layout">
+    <!-- 移动端模块选择器 -->
+    <div class="mobile-header" v-if="isMobile">
+      <div class="mobile-title">
+        <h2>系统管理</h2>
+      </div>
+      <!-- 修改选择框绑定和事件处理方式 -->
+      <el-select 
+        :model-value="activeModule"
+        class="mobile-module-select"
+        @change="handleMobileModuleChange"
+        placeholder="选择管理模块"
+      >
+        <el-option
+          v-for="item in modules"
+          :key="item.name"
+          :label="item.label"
+          :value="item.name"
+        >
+          <div class="module-option">
+            <el-icon><component :is="item.icon"></component></el-icon>
+            <span>{{ item.label }}</span>
+          </div>
+        </el-option>
+      </el-select>
+    </div>
 
-      <div class="sidebar-container" :class="sidebarWidthClass">
+    <div class="admin-layout">
+      <!-- 桌面端侧边栏 -->
+      <div class="sidebar-container" :class="sidebarWidthClass" v-if="!isMobile">
         <div class="admin-sidebar">
           <div class="sidebar-header">
             <h2 class="admin-title" v-if="!isCollapse">系统管理</h2>
@@ -25,15 +51,15 @@
         </div>  
       </div>
       
-
-      <div class="content-container">
+      <div class="content-container" :class="{'mobile-content': isMobile}">
         <div class="admin-content">
           <div class="content-header">
-            <el-breadcrumb separator="/">
+            <el-breadcrumb separator="/" v-if="!isMobile">
               <el-breadcrumb-item :to="{path:'/'}">首页</el-breadcrumb-item>
               <el-breadcrumb-item :to="{path:'/admin'}">系统管理</el-breadcrumb-item>
               <el-breadcrumb-item>{{ currentModuleTitle }}</el-breadcrumb-item>
             </el-breadcrumb>
+            <h3 v-else class="mobile-breadcrumb">{{ currentModuleTitle }}</h3>
           </div>
           <component 
             :is="currentComponent" 
@@ -41,6 +67,7 @@
             :search-query="searchQuery"
             @update-search="updateSearchQuery"
             :data-link="dataLink"
+            :is-mobile="isMobile"
           ></component>
         </div>
       </div>
@@ -49,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, computed, markRaw, onMounted, shallowRef, watch } from 'vue'
+import { ref, computed, markRaw, onMounted, shallowRef, watch, onUnmounted, nextTick } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
@@ -79,21 +106,47 @@ onMounted(() => {
     router.push('/auth?mode=login')
   }
   
+  // 初始检测设备类型
+  checkIsMobile()
+  
+  // 添加窗口大小变化监听
+  window.addEventListener('resize', checkIsMobile)
 
   if (route.query.module && modules.some(m => m.name === route.query.module)) {
     activeModule.value = route.query.module
     updateCurrentComponent(route.query.module)
   }
-  
 
   if (route.query.search) {
     searchQuery.value = route.query.search
   }
 })
 
+onUnmounted(() => {
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', checkIsMobile)
+})
 
 const isCollapse = ref(false)
+const isMobile = ref(false)
 
+// 向子组件传递isMobile状态
+const emitMobileStatus = () => {
+  // 这里可以添加广播移动状态的逻辑，如果需要的话
+}
+
+// 检测设备是否为移动端
+const checkIsMobile = () => {
+  const screenWidth = window.innerWidth
+  isMobile.value = screenWidth < 768
+  
+  // 如果是移动端，则自动折叠侧边栏
+  if (isMobile.value) {
+    isCollapse.value = true
+  }
+  
+  emitMobileStatus()
+}
 
 const sidebarWidthClass = computed(() => {
   return isCollapse.value ? 'collapse-width' : 'uncollapse-width'
@@ -136,23 +189,59 @@ const updateCurrentComponent = (moduleName) => {
   }
 }
 
+// 专门为移动端选择框添加处理函数 - 增强版
+const handleMobileModuleChange = (value) => {
+  console.log('Mobile module changed to:', value);
+  
+  if (!value || activeModule.value === value) return;
+  
+  // 直接修改数据
+  activeModule.value = value;
+  updateCurrentComponent(value);
+  
+  // 更新路由
+  setTimeout(() => {
+    console.log('Updating route to module:', value);
+    router.replace({
+      path: '/admin',
+      query: { module: value }
+    }).then(() => {
+      console.log('Route updated successfully');
+      // 确保组件已更新
+      nextTick(() => {
+        // 清空搜索
+        searchQuery.value = '';
+        dataLink.value = '';
+      });
+    }).catch(err => {
+      console.error('Route update failed:', err);
+    });
+  }, 0);
+}
 
+// 保留原有的桌面端菜单处理函数
 const handleModuleChange = (name) => {
-
+  console.log('Module change triggered with:', name);
+  
   if (activeModule.value === name) return;
   
-
+  // 清空搜索和数据链接
   searchQuery.value = '';
   dataLink.value = '';
+  
+  // 更新当前活动模块
   activeModule.value = name;
   updateCurrentComponent(name);
   
-
-  router.replace({
-    path: route.path,
+  // 确保路由参数更新
+  router.push({
+    path: '/admin',
     query: { 
-      module: name
-
+      module: name 
+    }
+  }).catch(err => {
+    if (err.name !== 'NavigationDuplicated') {
+      console.error('Navigation error:', err);
     }
   });
 }
@@ -361,8 +450,9 @@ watch(() => route.query, (newQuery) => {
   }
   
   .admin-layout {
-    height: calc(100vh - 80px);
+    height: auto;
     gap: 10px;
+    flex-direction: column;
   }
   
   .content-header {
@@ -370,12 +460,58 @@ watch(() => route.query, (newQuery) => {
   }
   
   .admin-content > :last-child {
-    padding: 16px;
+    padding: 10px;
   }
+  
+  .content-container {
+    height: auto;
+  }
+  
+  .admin-content {
+    height: auto;
+  }
+}
 
-  .sidebar-container {
-    min-width: 50px;
-    max-width: 160px;
-  }
+/* 移动端特定样式 */
+.mobile-header {
+  background-color: white;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,.1);
+}
+
+.mobile-title {
+  margin-bottom: 15px;
+}
+
+.mobile-title h2 {
+  margin: 0;
+  color: var(--el-color-primary);
+  font-size: 1.5rem;
+}
+
+.mobile-module-select {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.module-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.mobile-breadcrumb {
+  margin: 0;
+  color: var(--el-color-primary);
+  font-size: 1.2rem;
+}
+
+.mobile-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
 }
 </style>

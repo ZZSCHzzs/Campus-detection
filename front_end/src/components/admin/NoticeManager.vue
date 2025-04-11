@@ -59,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref , onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import BaseManager from './BaseManager.vue'
 import { areaService } from '../../services/apiService'
 import { defineProps } from 'vue'
@@ -73,10 +73,10 @@ const props = defineProps({
 })
 
 const columns = [
-  { prop: 'title', label: '公告标题', width: '200' },
-  { prop: 'content', label: '公告内容' },
-  { prop: 'related_areas', label: '相关区域', width: '200', slot: true },
-  { prop: 'timestamp', label: '发布时间', width: '180',
+  { prop: 'title', label: '公告标题', width: '200', mobileWidth: '150' },
+  { prop: 'content', label: '公告内容', mobileWidth: '200' },
+  { prop: 'related_areas', label: '相关区域', width: '200', mobileWidth: '150', slot: true },
+  { prop: 'timestamp', label: '发布时间', width: '180', hideOnMobile: true,
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 

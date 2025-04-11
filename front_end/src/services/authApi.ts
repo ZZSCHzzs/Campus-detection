@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://smarthit.top:8000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top'
 
 
 const authAxios = axios.create({

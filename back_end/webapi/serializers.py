@@ -1,6 +1,17 @@
 from .models import *
 from rest_framework import serializers
+from djoser.serializers import UserCreateSerializer
 
+class CustomUserCreateSerializer(UserCreateSerializer):
+    class Meta(UserCreateSerializer.Meta):
+        model = CustomUser
+        fields = ('id', 'username', 'email', 'password', 'role', 'phone')
+
+    def create(self, validated_data):
+        # 确保新用户被激活
+        validated_data['is_active'] = True
+        user = super().create(validated_data)
+        return user
 
 class CustomUserSerializer(serializers.ModelSerializer):
     favorite_areas = serializers.PrimaryKeyRelatedField(
@@ -13,7 +24,6 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'role', 'phone', 'email', 'register_time', 'favorite_areas',]
-
 
 class HardwareNodeSerializer(serializers.ModelSerializer):
     class Meta:

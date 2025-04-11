@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(os.path.join(BASE_DIR, '.env'))  # 添加这行
 
 AUTH_USER_MODEL = 'webapi.CustomUser'
 # Quick-start development settings - unsuitable for production
@@ -24,7 +25,12 @@ AUTH_USER_MODEL = 'webapi.CustomUser'
 SECRET_KEY = os.getenv('SECRET_KEY')  # 从环境变量读取
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = ['smarthit.top']
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+# 允许的 Hosts 添加更多选项
+ALLOWED_HOSTS = ['smarthit.top', 'localhost', '127.0.0.1']
 
 TIME_ZONE = 'Asia/Shanghai'
 
@@ -58,7 +64,7 @@ DJOSER = {
     'USER_ID_FIELD': 'id',
     'SERIALIZERS': {
         'user': 'webapi.serializers.CustomUserSerializer',
-        'user_create': 'webapi.serializers.CustomUserSerializer',
+        'user_create': 'webapi.serializers.CustomUserCreateSerializer',
         'current_user': 'webapi.serializers.CustomUserSerializer',
     }
 }
@@ -68,7 +74,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -103,6 +109,40 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'campus_detection.wsgi.application'
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',  # 控制记录日志的最低级别
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'django.log'),  # 设置日志文件路径
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -111,8 +151,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'campus_detection',  # 数据库名
-        'USER': 'root',        # 数据库用户名
-        # 'PASSWORD': '',        # 数据库密码(未设置)
+        'USER': os.getenv('DB_USER'),  # 数据库用户名
+        'PASSWORD': os.getenv('DB_PASSWORD'),  # 数据库密码
         'HOST': 'localhost',  # 数据库主机地址
         'PORT': '3306',       # 数据库端口号
         'OPTIONS': {
@@ -146,7 +186,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
@@ -157,6 +196,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

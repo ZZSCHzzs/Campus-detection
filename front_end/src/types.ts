@@ -8,7 +8,7 @@ export interface AreaItem {
     capacity: number            // 区域容量
     floor: number            // 所属楼层
     status?: boolean          // 区域状态
-    current_count?: number    // 当前人数
+    detected_count?: number    // 当前人数
     updated_at?: string       // 最后更新时间
     is_favorite?: boolean  // 是否收藏
 }

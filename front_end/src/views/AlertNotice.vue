@@ -1,36 +1,29 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, onBeforeMount } from 'vue'
 import { useAuthStore } from '../stores/auth'
-
 import { areaService, alertService, noticeService } from '../services/apiService'
+import apiService from '../services/apiService'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Warning, Document, Plus, Check, Search, Refresh, View, Clock } from '@element-plus/icons-vue'
+import { Bell, Warning, Document, Plus, Check, Search, Refresh, View, Clock, Grid, List } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Alert, Notice, AreaItem } from '../types'
 
-
 const route = useRoute()
 const router = useRouter()
-
-
 const authStore = useAuthStore()
 const userRole = computed(() => authStore.user?.role || '')
 const isStaffOrAdmin = computed(() => ['staff', 'admin'].includes(userRole.value))
-
 
 interface ExtendedAlert extends Alert {
   area_name?: string;
 }
 
-
 const areas = ref<AreaItem[]>([])
 const areasLoading = ref(false)
-
 
 const activeTab = ref('alerts')
 const alertsLoading = ref(false)
 const noticesLoading = ref(false)
-
 
 const alerts = ref<ExtendedAlert[]>([])
 const alertFilter = ref('unsolved')
@@ -39,7 +32,6 @@ const alertFilterOptions = [
   { value: 'unsolved', label: '未处理告警' },
   { value: 'solved', label: '已处理告警' }
 ]
-
 
 const notices = ref<Notice[]>([])
 const noticeForm = reactive({
@@ -50,22 +42,17 @@ const noticeForm = reactive({
 const noticeDialogVisible = ref(false)
 const noticeSubmitting = ref(false)
 
-
 const searchText = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
-
 
 const alertDetailVisible = ref(false)
 const noticeDetailVisible = ref(false)
 const currentAlertDetail = ref<ExtendedAlert | null>(null)
 const currentNoticeDetail = ref<Notice | null>(null)
 
-
-
 const fetchAreas = async () => {
   if (areasLoading.value) return
-  
   areasLoading.value = true
   try {
     
@@ -81,14 +68,11 @@ const fetchAreas = async () => {
   }
 }
 
-
 const getAreaName = (areaId: number): string => {
   if (!areaId) return '未知区域'
-  
   const area = areas.value.find(a => a.id === areaId)
   return area ? area.name : '未知区域'
 }
-
 
 const processAlertData = (alertsData: ExtendedAlert[]) => {
   alertsData.forEach(alert => {
@@ -99,30 +83,21 @@ const processAlertData = (alertsData: ExtendedAlert[]) => {
       console.log(`告警 ID: ${alert.id} 没有关联区域`)
     }
   })
-  
   alerts.value = alertsData
 }
-
 
 const processNoticeData = (noticesData: Notice[]) => {
   notices.value = noticesData
 }
 
-
-
 const fetchAlerts = async () => {
   alertsLoading.value = true
   try {
     let alertsData: ExtendedAlert[] = []
-    
     if (alertFilter.value === 'unsolved') {
-      
       alertsData = await alertService.getUnsolvedAlerts()
     } else {
-      
       alertsData = await alertService.getAll()
-      
-      
       if (alertFilter.value === 'solved') {
         alertsData = alertsData.filter(alert => alert.solved)
       }
@@ -141,15 +116,11 @@ const fetchAlerts = async () => {
   }
 }
 
-
-
 const fetchNotices = async () => {
   noticesLoading.value = true
   try {
-    
     const noticesData = await noticeService.getAll()
     processNoticeData(noticesData)
-    
     checkUrlForDetails()
   } catch (error) {
     console.error('获取通知失败:', error)
@@ -160,8 +131,6 @@ const fetchNotices = async () => {
   }
 }
 
-
-
 const solveAlert = async (alertId: number) => {
   try {
     await ElMessageBox.confirm('确定将此告警标记为已解决?', '确认操作', {
@@ -169,8 +138,6 @@ const solveAlert = async (alertId: number) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    
-    
     await alertService.solveAlert(alertId)
     ElMessage.success('告警已成功标记为已解决')
     await fetchAlerts()
@@ -182,14 +149,11 @@ const solveAlert = async (alertId: number) => {
   }
 }
 
-
-
 const submitNotice = async () => {
   if (!noticeForm.title.trim() || !noticeForm.content.trim()) {
     ElMessage.warning('请填写完整的通知信息')
     return
   }
-  
   noticeSubmitting.value = true
   try {
     
@@ -216,7 +180,6 @@ const submitNotice = async () => {
   }
 }
 
-
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
   return date.toLocaleString('zh-CN', {
@@ -229,7 +192,6 @@ const formatDate = (dateString: string) => {
   })
 }
 
-
 const getAlertTypeName = (type: string) => {
     const alertTypeMap: { [key: string]: string } = {
         fire: '火灾',
@@ -241,7 +203,6 @@ const getAlertTypeName = (type: string) => {
   return alertTypeMap[type] || '未知类型'
 }
 
-
 const getAlertGrade = (grade: number) => {
     const alertGradeMap: { [key: number]: { label: string, type: string } } = {
         0: { label: '普通', type: 'info' },
@@ -252,10 +213,8 @@ const getAlertGrade = (grade: number) => {
   return alertGradeMap[grade] || { label: '未知', type: 'info' }
 }
 
-
 const filteredAlerts = computed(() => {
   if (!searchText.value) return alerts.value
-  
   const keyword = searchText.value.toLowerCase()
   return alerts.value.filter(alert => 
     alert.message.toLowerCase().includes(keyword) || 
@@ -265,14 +224,12 @@ const filteredAlerts = computed(() => {
 
 const filteredNotices = computed(() => {
   if (!searchText.value) return notices.value
-  
   const keyword = searchText.value.toLowerCase()
   return notices.value.filter(notice => 
     notice.title.toLowerCase().includes(keyword) || 
     notice.content.toLowerCase().includes(keyword)
   )
 })
-
 
 const paginatedAlerts = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -292,45 +249,44 @@ const total = computed(() => {
     : filteredNotices.value.length
 })
 
-
 const handlePageChange = (page: number) => {
   currentPage.value = page
 }
 
-
 const handleTabChange = (tab: string) => {
   currentPage.value = 1
   searchText.value = ''
-  
   updateUrl({ tab })
 }
 
-
 onMounted(async () => {
-  
   const tabParam = route.query.tab as string
+  apiService.setResourceCacheOptions('alerts', { duration: 30000 });
+  apiService.setResourceCacheOptions('notice', { duration: 30000 });
   if (tabParam && ['alerts', 'notices'].includes(tabParam)) {
     activeTab.value = tabParam
   }
-  
-  
   const areasLoaded = await fetchAreas()
-  
-  
   if (areasLoaded) {
     await Promise.all([fetchAlerts(), fetchNotices()])
   } else {
     await Promise.all([fetchAlerts(), fetchNotices()])
     console.warn('区域数据加载失败，告警和通知的区域信息可能不完整')
   }
+  
+  refreshIntervalId = setInterval(() => {
+    if (activeTab.value === 'alerts') {
+      fetchAlerts()
+    } else {
+      fetchNotices()
+    }
+  }, 30000)
 })
-
 
 const handleFilterChange = () => {
   currentPage.value = 1
   fetchAlerts()
 }
-
 
 const refreshData = () => {
   if (activeTab.value === 'alerts') {
@@ -340,67 +296,47 @@ const refreshData = () => {
   }
 }
 
-
 const prepareAlertDetail = (alert: ExtendedAlert) => {
-  
   if (alert.area && !alert.area_name) {
     alert.area_name = getAreaName(alert.area)
   }
-  
   currentAlertDetail.value = alert
   alertDetailVisible.value = true
-  
-  
   updateUrl({ tab: 'alerts', alertId: alert.id })
 }
-
 
 const prepareNoticeDetail = (notice: Notice) => {
   currentNoticeDetail.value = notice
   noticeDetailVisible.value = true
-  
-  
   updateUrl({ tab: 'notices', noticeId: notice.id })
 }
-
 
 const showAlertDetail = (alert: ExtendedAlert) => {
   prepareAlertDetail(alert)
 }
 
-
 const showNoticeDetail = (notice: Notice) => {
   prepareNoticeDetail(notice)
 }
 
-
 const updateUrl = (params: { tab?: string, alertId?: number, noticeId?: number }) => {
   const query = { ...route.query }
-  
   if (params.tab) {
     query.tab = params.tab
   }
-  
-  
   delete query.alertId
   delete query.noticeId
-  
-  
   if (params.alertId) {
     query.alertId = params.alertId.toString()
   }
-  
   if (params.noticeId) {
     query.noticeId = params.noticeId.toString()
   }
-  
   router.replace({ query })
 }
 
-
 const checkUrlForDetails = () => {
   const { tab, alertId, noticeId } = route.query
-  
   if (tab === 'alerts' && alertId && alerts.value.length > 0) {
     const id = parseInt(alertId as string)
     const alert = alerts.value.find(a => a.id === id)
@@ -408,7 +344,6 @@ const checkUrlForDetails = () => {
       showAlertDetail(alert)
     }
   }
-  
   if (tab === 'notices' && noticeId && notices.value.length > 0) {
     const id = parseInt(noticeId as string)
     const notice = notices.value.find(n => n.id === id)
@@ -417,7 +352,6 @@ const checkUrlForDetails = () => {
     }
   }
 }
-
 
 const closeAlertDetail = () => {
   alertDetailVisible.value = false
@@ -428,7 +362,6 @@ const closeNoticeDetail = () => {
   noticeDetailVisible.value = false
   updateUrl({ tab: 'notices' })
 }
-
 
 watch(
   () => route.query,
@@ -442,33 +375,92 @@ watch(
     checkUrlForDetails()
   }
 )
+
+// 添加响应式布局支持
+const isMobileView = ref(false)
+let refreshIntervalId: number | null = null
+
+// 检测屏幕尺寸并设置视图模式
+const checkScreenSize = () => {
+  isMobileView.value = window.innerWidth < 768
+}
+
+onBeforeMount(() => {
+  checkScreenSize()
+  window.addEventListener('resize', checkScreenSize)
+  // 根据屏幕尺寸自动选择初始视图模式
+  viewMode.value = isMobileView.value ? 'card' : 'table'
+})
+
+onBeforeUnmount(() => {
+  // 清除自动刷新定时器
+  if (refreshIntervalId !== null) {
+    clearInterval(refreshIntervalId)
+    refreshIntervalId = null
+  }
+  
+  // 移除事件监听器
+  window.removeEventListener('resize', checkScreenSize)
+})
+
+// 视图模式选择（表格/卡片）
+const viewMode = ref('table') // 'table' 或 'card'
+
+// 计算实际显示模式
+const actualViewMode = computed(() => viewMode.value)
+
+// 切换视图模式
+const toggleViewMode = () => {
+  viewMode.value = viewMode.value === 'table' ? 'card' : 'table'
+}
+
+// 获取当前视图模式的图标和文本
+const viewModeInfo = computed(() => {
+  const modes = {
+    table: { icon: Grid, text: '表格视图' },
+    card: { icon: List, text: '卡片视图' }
+  }
+  return modes[viewMode.value]
+})
 </script>
 
 <template>
   <div class="alert-notice-container">
-    <el-card class="main-card">
-      <template #header>
-        <div class="card-header">
-          <h2 class="title">
-            <el-icon class="header-icon"><Bell /></el-icon>
-            告警与通知中心
-          </h2>
-          <div class="header-actions">
-            <el-button type="primary" :icon="Refresh" circle @click="refreshData" />
-          </div>
-        </div>
-      </template>
-      
+    <!-- 标题和操作区域 -->
+    <div class="page-header">
+      <div class="title-section">
+        <h2 class="page-title">
+          <el-icon class="header-icon"><Bell /></el-icon>
+          告警与通知中心
+        </h2>
+      </div>
+      <div class="header-actions">
+        <el-tooltip :content="viewModeInfo.text" placement="top">
+          <el-button 
+            type="default"
+            @click="toggleViewMode" 
+            circle
+            class="view-mode-button"
+          >
+            <el-icon><component :is="viewModeInfo.icon" /></el-icon>
+          </el-button>
+        </el-tooltip>
+        <el-button type="primary" :icon="Refresh" circle @click="refreshData" />
+      </div>
+    </div>
+    
+    <!-- 主内容区域 -->
+    <div class="main-content">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="custom-tabs">
 
         <el-tab-pane name="alerts" lazy>
           <template #label>
-            <span class="tab-label">
+            <div class="tab-label">
               <el-icon><Warning /></el-icon>
-              告警管理
-            </span>
+              <span>告警信息</span>
+            </div>
           </template>
-          
+          <!-- 过滤栏保持不变 -->
           <div class="filter-bar">
             <div class="left-section">
               <el-select 
@@ -499,7 +491,8 @@ watch(
             </div>
           </div>
           
-          <div class="table-container">
+          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+          <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedAlerts"
               stripe
@@ -589,17 +582,87 @@ watch(
                 </template>
               </el-table-column>
             </el-table>
+            
+            <div class="empty-placeholder" v-if="paginatedAlerts.length === 0 && !alertsLoading">
+              <el-empty description="暂无告警数据" />
+            </div>
           </div>
           
-          <div class="empty-placeholder" v-if="paginatedAlerts.length === 0 && !alertsLoading">
-            <el-empty description="暂无告警数据" />
+          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+          <div v-if="actualViewMode === 'card'" class="cards-container">
+            <div v-if="alertsLoading" class="cards-loading">
+              <el-skeleton :rows="3" animated />
+              <el-skeleton :rows="3" animated style="margin-top: 20px" />
+            </div>
+            <div v-else-if="paginatedAlerts.length === 0" class="empty-placeholder">
+              <el-empty description="暂无告警数据" />
+            </div>
+            <div v-else class="alert-cards">
+              <div 
+                v-for="alert in paginatedAlerts" 
+                :key="alert.id"
+                class="alert-card"
+                :data-grade="alert.grade"
+                @click="showAlertDetail(alert)"
+              >
+                <div class="card-header">
+                  <div class="card-header-left">
+                    <div class="card-id">#{{ alert.id }}</div>
+                    <el-tag 
+                      :type="getAlertGrade(alert.grade).type" 
+                      effect="dark"
+                      size="small"
+                      class="card-tag level-tag"
+                    >
+                      {{ getAlertGrade(alert.grade).label }}
+                    </el-tag>
+                    <span class="alert-type-badge">{{ getAlertTypeName(alert.alert_type) }}</span>
+                  </div>
+                  <el-tag 
+                    :type="alert.solved ? 'success' : 'danger'"
+                    size="small"
+                    class="card-tag status-tag"
+                  >
+                    {{ alert.solved ? '已处理' : '未处理' }}
+                  </el-tag>
+                </div>
+                
+                <div class="card-content">
+                  {{ alert.message }}
+                </div>
+                
+                <div class="card-footer">
+                  <div class="card-footer-left">
+                    <div class="card-area">
+                      <i class="el-icon-location"></i>
+                      {{ alert.area_name || '未指定区域' }}
+                    </div>
+                    <div class="card-time">
+                      <el-icon><Clock /></el-icon>
+                      {{ formatDate(alert.timestamp).split(' ').join(' ') }}
+                    </div>
+                  </div>
+                  <div class="card-actions">
+                    <el-button 
+                      v-if="!alert.solved && isStaffOrAdmin"
+                      type="success" 
+                      size="small"
+                      @click.stop="solveAlert(alert.id)"
+                      class="solve-button-compact"
+                    >
+                      解决
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="pagination-container" v-if="filteredAlerts.length > 0">
             <el-pagination
               v-model:current-page="currentPage"
               :page-size="pageSize"
-              layout="total, prev, pager, next, jumper"
+              :layout="isMobileView ? 'prev, pager, next' : 'total, prev, pager, next, jumper'"
               :total="filteredAlerts.length"
               @current-change="handlePageChange"
               background
@@ -607,15 +670,14 @@ watch(
           </div>
         </el-tab-pane>
         
-
         <el-tab-pane name="notices" lazy>
           <template #label>
-            <span class="tab-label">
+            <div class="tab-label">
               <el-icon><Document /></el-icon>
-              通知管理
-            </span>
+              <span>通知公告</span>
+            </div>
           </template>
-          
+          <!-- 过滤栏保持不变 -->
           <div class="filter-bar">
             <div class="left-section">
               <el-button 
@@ -642,7 +704,8 @@ watch(
             </div>
           </div>
           
-          <div class="table-container">
+          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+          <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedNotices"
               stripe
@@ -703,17 +766,71 @@ watch(
                 </template>
               </el-table-column>
             </el-table>
+            
+            <div class="empty-placeholder" v-if="paginatedNotices.length === 0 && !noticesLoading">
+              <el-empty description="暂无通知数据" />
+            </div>
           </div>
           
-          <div class="empty-placeholder" v-if="paginatedNotices.length === 0 && !noticesLoading">
-            <el-empty description="暂无通知数据" />
+          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+          <div v-if="actualViewMode === 'card'" class="cards-container">
+            <div v-if="noticesLoading" class="cards-loading">
+              <el-skeleton :rows="3" animated />
+              <el-skeleton :rows="3" animated style="margin-top: 20px" />
+            </div>
+            <div v-else-if="paginatedNotices.length === 0" class="empty-placeholder">
+              <el-empty description="暂无通知数据" />
+            </div>
+            <div v-else class="notice-cards">
+              <div 
+                v-for="notice in paginatedNotices" 
+                :key="notice.id"
+                class="notice-card"
+                @click="showNoticeDetail(notice)"
+              >
+                <div class="card-header">
+                  <h3 class="notice-card-title">{{ notice.title }}</h3>
+                
+                </div>
+                
+                <div class="card-content notice-content">
+                  {{ notice.content }}
+                </div>
+                
+                <div class="card-footer">
+                  <div class="card-footer-left">
+                    <div class="card-area">
+                      <template v-if="notice.related_areas && notice.related_areas.length">
+                        <el-tag 
+                          v-for="areaId in notice.related_areas.slice(0, 1)" 
+                          :key="areaId"
+                          size="small" 
+                          effect="plain"
+                          class="card-tag area-tag"
+                        >
+                          {{ getAreaName(areaId) }}
+                        </el-tag>
+                        <template v-if="notice.related_areas.length > 1">
+                          <span class="more-areas">+{{ notice.related_areas.length - 1 }}</span>
+                        </template>
+                      </template>
+                      <template v-else>全校范围</template>
+                    </div>
+                    <div class="card-time">
+                      <el-icon><Clock /></el-icon>
+                      {{ formatDate(notice.timestamp).split(' ').join(' ') }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="pagination-container" v-if="filteredNotices.length > 0">
             <el-pagination
               v-model:current-page="currentPage"
               :page-size="pageSize"
-              layout="total, prev, pager, next, jumper"
+              :layout="isMobileView ? 'prev, pager, next' : 'total, prev, pager, next, jumper'"
               :total="filteredNotices.length"
               @current-change="handlePageChange"
               background
@@ -721,9 +838,9 @@ watch(
           </div>
         </el-tab-pane>
       </el-tabs>
-    </el-card>
-    
+    </div>
 
+    <!-- 对话框保持不变 -->
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -913,27 +1030,31 @@ watch(
 </template>
 
 <style scoped>
+/* ------------ 基础布局 ------------ */
 .alert-notice-container {
   max-width: 1400px;
   margin: 20px auto;
   padding: 0 20px;
 }
 
-.main-card {
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
-  overflow: hidden;
-  min-height: 600px; /* 添加最小高度 */
-}
-
-.card-header {
+/* 页面标题区域 */
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  margin-bottom: 20px;
+  padding: 16px 24px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
 }
 
-.title {
+.title-section {
+  display: flex;
+  align-items: center;
+}
+
+.page-title {
   margin: 0;
   font-size: 22px;
   display: flex;
@@ -944,11 +1065,39 @@ watch(
 }
 
 .header-icon {
-  font-size: 26px;
+  font-size: 24px;
   color: #409EFF;
 }
 
-/* 标签页样式 */
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.view-mode-button {
+  background-color: #f4f6fa;
+  border-color: #ebeef5;
+}
+
+/* 主内容区域 */
+.main-content {
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
+  padding: 24px;
+  min-height: 600px;
+}
+
+/* ------------ 标签页样式 ------------ */
+.custom-tabs :deep(.el-tabs__header) {
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e8eaec;
+}
+
+.custom-tabs :deep(.el-tabs__nav-wrap::after) {
+  background-color: transparent;
+}
+
 .custom-tabs :deep(.el-tabs__nav) {
   border-radius: 4px;
 }
@@ -958,11 +1107,12 @@ watch(
   height: 50px;
   line-height: 50px;
   transition: all 0.3s;
+  padding: 0 20px;
 }
 
 .custom-tabs :deep(.el-tabs__item.is-active) {
   font-weight: 600;
-  transform: translateY(-2px);
+  color: #409EFF;
 }
 
 .tab-label {
@@ -972,14 +1122,14 @@ watch(
   font-size: 16px;
 }
 
-/* 过滤栏样式 */
+/* ------------ 过滤栏样式 ------------ */
 .filter-bar {
   display: flex;
   justify-content: space-between;
   margin-bottom: 20px;
   align-items: center;
   background-color: #f8f9fa;
-  padding: 15px;
+  padding: 15px 20px;
   border-radius: 8px;
 }
 
@@ -997,20 +1147,18 @@ watch(
   width: 280px;
 }
 
-/* 表格容器样式 */
+/* ------------ 表格视图样式 ------------ */
 .table-container {
   background-color: #fff;
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  min-height: 350px; /* 添加最小高度 */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  min-height: 350px;
 }
 
-/* 表格样式 */
 .data-table {
-  border-radius: 8px;
-  overflow: hidden;
+  width: 100%;
 }
 
 .custom-table-header {
@@ -1020,17 +1168,16 @@ watch(
 }
 
 .hover-effect-row {
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .hover-effect-row:hover {
   background-color: #f0f9ff !important;
-  transform: translateY(-2px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* 表格内容样式 */
 .alert-message-cell, .notice-title-cell, .notice-content-cell {
   font-size: 14px;
   color: #303133;
@@ -1063,6 +1210,7 @@ watch(
   display: inline-block;
 }
 
+/* ------------ 标签样式 ------------ */
 .card-tag {
   margin: 2px;
   padding: 2px 8px;
@@ -1072,7 +1220,7 @@ watch(
 
 .level-tag {
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
 .status-tag {
@@ -1105,6 +1253,7 @@ watch(
   padding: 2px 0;
 }
 
+/* ------------ 按钮样式 ------------ */
 .action-buttons {
   display: flex;
   justify-content: center;
@@ -1133,7 +1282,195 @@ watch(
   color: #67C23A;
 }
 
-/* 分页和空状态 */
+/* ------------ 卡片视图样式 ------------ */
+.cards-container {
+  padding: 5px 0;
+  min-height: 350px;
+}
+
+.alert-cards, .notice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.alert-card, .notice-card {
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border-left: 3px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.alert-card:hover, .notice-card:hover {
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.alert-card[data-grade="3"] {
+  border-left-color: #F56C6C;
+}
+
+.alert-card[data-grade="2"] {
+  border-left-color: #E6A23C;
+}
+
+.alert-card[data-grade="1"] {
+  border-left-color: #67C23A;
+}
+
+.alert-card[data-grade="0"] {
+  border-left-color: #909399;
+}
+
+/* 卡片头部 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.card-id {
+  font-weight: 600;
+  color: #606266;
+  font-size: 13px;
+}
+
+.card-publisher {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
+}
+
+/* 卡片标签优化 */
+.card-tag {
+  margin: 0;
+  padding: 0 6px;
+  height: 20px;
+  line-height: 20px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.level-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-tag {
+  padding: 0 8px;
+}
+
+.alert-type-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #409EFF;
+  background-color: #ecf5ff;
+  padding: 0 6px;
+  height: 20px;
+  line-height: 20px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+/* 卡片内容 */
+.card-content {
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.notice-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 卡片底部 */
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #909399;
+  border-top: 1px dashed #ebeef5;
+  padding-top: 8px;
+}
+
+.card-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-area {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.card-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #909399;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+}
+
+.solve-button-compact {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.more-areas {
+  font-size: 11px;
+  color: #909399;
+  background: #f5f7fa;
+  padding: 0 4px;
+  border-radius: 10px;
+}
+
+.area-tag {
+  background-color: #f0f7ff;
+  color: #4b83d2;
+  border-color: #d3e5fc;
+}
+
+/* ------------ 分页和空状态 ------------ */
 .pagination-container {
   display: flex;
   justify-content: center;
@@ -1147,10 +1484,10 @@ watch(
   background-color: #fafafa;
   border-radius: 8px;
   margin: 20px 0;
-  min-height: 300px; /* 添加最小高度 */
+  min-height: 200px;
 }
 
-/* 详情对话框样式 */
+/* ------------ 详情对话框样式 ------------ */
 .detail-dialog :deep(.el-dialog__header) {
   background-color: #f4f7fc;
   border-bottom: 1px solid #e4e7ed;
@@ -1259,7 +1596,7 @@ watch(
   padding: 20px;
   margin: 20px 0;
   border-left: 4px solid #409EFF;
-  min-height: 100px; /* 添加最小高度 */
+  min-height: 100px;
 }
 
 .message-content {
@@ -1316,41 +1653,134 @@ watch(
   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* 滚动条样式 */
-.detail-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
-  width: 6px;
-}
-
-.detail-dialog :deep(.el-dialog__body::-webkit-scrollbar-thumb) {
-  background-color: #c0c4cc;
-  border-radius: 6px;
-}
-
-/* 分割线样式 */
-:deep(.el-divider__text) {
-  color: #606266;
-  font-weight: 600;
-  font-size: 16px;
-  background-color: #fff;
-}
-
-/* 响应式调整 */
+/* ------------ 响应式调整 ------------ */
 @media (max-width: 768px) {
+  .alert-notice-container {
+    padding: 0 10px;
+    margin: 10px auto;
+  }
+  
+  .page-header {
+    padding: 12px 15px;
+    margin-bottom: 10px;
+  }
+  
+  .page-title {
+    font-size: 18px;
+  }
+  
+  .header-icon {
+    font-size: 20px;
+  }
+  
+  .main-content {
+    padding: 15px;
+    border-radius: 8px;
+  }
+  
   .filter-bar {
     flex-direction: column;
     gap: 15px;
+    padding: 12px;
   }
   
   .left-section, .right-section {
     width: 100%;
   }
   
-  .search-input {
+  .filter-select, .search-input {
     width: 100%;
+  }
+  
+  .custom-tabs :deep(.el-tabs__item) {
+    font-size: 14px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 10px;
+  }
+  
+  .tab-label {
+    font-size: 14px;
+    gap: 5px;
+  }
+  
+  .detail-dialog :deep(.el-dialog) {
+    width: 95% !important;
+    margin: 0 auto !important;
+  }
+  
+  .detail-dialog :deep(.el-dialog__body) {
+    padding: 15px;
   }
   
   .info-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
   }
+  
+  .detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .header-right {
+    align-self: flex-end;
+  }
+  
+  .detail-tag, .status-detail-tag {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  
+  .detail-type {
+    font-size: 16px;
+  }
+  
+  .notice-detail-title {
+    font-size: 18px;
+  }
+  
+  .message-container {
+    padding: 15px;
+  }
+  
+  .message-content {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  
+  .pagination-container :deep(.el-pagination) {
+    padding: 5px 0;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+/* 优化卡片视图在移动端的显示 */
+@media (max-width: 576px) {
+  .card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .card-area {
+    max-width: 100%;
+  }
+  
+  .card-time {
+    align-items: flex-start;
+  }
+}
+
+/* 优化动画效果 */
+.alert-card, .notice-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 优化表格和卡片切换的过渡效果 */
+.cards-container, .table-container {
+  transition: opacity 0.3s ease;
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AreaItem } from '../types'
+import { computed } from 'vue'
 
 const props = defineProps({
   areas: {
@@ -20,7 +21,16 @@ const props = defineProps({
   }
 })
 
+// 统一计算人数比率，处理capacity=0的特殊情况
+const calculateRatio = (count: number | undefined | null, capacity: number | undefined | null) => {
+  // 当容量为0或未设置时，视为未设置容量
+  if (!capacity) return -1; // 返回-1表示未设置容量
+  return (count || 0) / capacity;
+}
+
 const getProgressColor = (rate: number) => {
+  // 处理未设置容量的情况
+  if (rate === -1) return '#909399'
   if (rate > 0.9) return '#F56C6C'
   if (rate > 0.7) return '#E6A23C'
   if (rate > 0.5) return '#409EFF'
@@ -28,27 +38,47 @@ const getProgressColor = (rate: number) => {
 }
 
 const getTagType = (rate: number) => {
+  // 处理未设置容量的情况
+  if (rate === -1) return 'info'
   if (rate > 0.9) return 'danger'
   if (rate > 0.7) return 'warning'
   if (rate > 0.5) return 'info'
   return 'success'
 }
 
-const getStatusText = (count: number, capacity: number) => {
-  const ratio = count / (capacity || 100);
-  if (ratio >= 0.9) return '拥挤';
-  if (ratio >= 0.7) return '较拥挤';
-  if (ratio >= 0.5) return '适中';
+const getStatusText = (rate: number) => {
+  // 处理未设置容量的情况
+  if (rate === -1) return '未设置容量';
+  if (rate >= 0.9) return '拥挤';
+  if (rate >= 0.7) return '较拥挤';
+  if (rate >= 0.5) return '适中';
   return '空闲';
 }
 
-const getStatusIcon = (count: number, capacity: number) => {
-  const ratio = count / (capacity || 100);
-  if (ratio >= 0.9) return 'el-icon-warning-filled';
-  if (ratio >= 0.7) return 'el-icon-warning';
-  if (ratio >= 0.5) return 'el-icon-info-filled';
+const getStatusIcon = (rate: number) => {
+  // 处理未设置容量的情况
+  if (rate === -1) return 'el-icon-info';
+  if (rate >= 0.9) return 'el-icon-warning-filled';
+  if (rate >= 0.7) return 'el-icon-warning';
+  if (rate >= 0.5) return 'el-icon-info-filled';
   return 'el-icon-success-filled';
 }
+
+// 预处理区域数据
+const processedAreas = computed(() => {
+  return props.areas.map(area => {
+    const ratio = calculateRatio(area.detected_count, area.capacity);
+    return {
+      ...area,
+      ratio,
+      progressColor: getProgressColor(ratio),
+      tagType: getTagType(ratio),
+      statusText: getStatusText(ratio),
+      statusIcon: getStatusIcon(ratio),
+      percentDisplay: ratio === -1 ? '未知' : `${Math.floor(ratio * 100)}%`
+    };
+  });
+});
 </script>
 
 <template>
@@ -59,7 +89,7 @@ const getStatusIcon = (count: number, capacity: number) => {
         <el-scrollbar :height="maxHeight === 'auto' ? undefined : maxHeight">
           <div class="area-grid" :style="{ 'grid-template-rows': 'auto' }">
             <div 
-              v-for="area in areas" 
+              v-for="area in processedAreas" 
               :key="area.id" 
               class="area-card"
             >
@@ -76,12 +106,12 @@ const getStatusIcon = (count: number, capacity: number) => {
 
                 <div class="area-data-section">
                   <div class="data-chip">
-                    <span class="count-value" :style="{ color: getProgressColor(area.detected_count / (area.capacity || 100)) }">
+                    <span class="count-value" :style="{ color: area.progressColor }">
                       {{ area.detected_count || 0 }}
                     </span>
                     <span v-if="area.capacity" class="capacity-indicator">/ {{ area.capacity }}</span>
-                    <span class="stat-badge" :class="getTagType(area.detected_count / (area.capacity || 100))">
-                      {{ Math.floor((area.detected_count / (area.capacity || 100)) * 100) }}%
+                    <span class="stat-badge" :class="area.tagType">
+                      {{ area.percentDisplay }}
                     </span>
                   </div>
                 </div>
@@ -92,8 +122,8 @@ const getStatusIcon = (count: number, capacity: number) => {
                 <div 
                   class="progress-border" 
                   :style="{
-                    width: Math.floor((area.detected_count / (area.capacity || 100)) * 100) + '%',
-                    backgroundColor: getProgressColor(area.detected_count / (area.capacity || 100))
+                    width: area.ratio === -1 ? '0%' : Math.floor(area.ratio * 100) + '%',
+                    backgroundColor: area.progressColor
                   }"
                 ></div>
               </div>
