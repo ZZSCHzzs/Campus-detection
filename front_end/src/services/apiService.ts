@@ -23,8 +23,15 @@ const areaCustomMethods = {
     const userInfo = await userCustomMethods.getUserInfo();
     const favorite_areas_id = userInfo.favorite_areas || [];
     if (favorite_areas_id.length === 0) {
-      ElMessage.warning('没有收藏的区域');
-      return [];
+      userCustomMethods.getUserInfo().then((userInfo) => {
+        const favorite_areas_id = userInfo.favorite_areas || [];
+        if (favorite_areas_id.length === 0) {
+          ElMessage.error('没有收藏的区域');
+          return [];
+        } else {
+          ElMessage.success('获取收藏区域成功');
+        }
+      });
     }
     try {
       const areas = await Promise.all(
