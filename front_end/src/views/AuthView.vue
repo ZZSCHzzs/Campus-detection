@@ -420,6 +420,7 @@ onMounted(async () => {
     align-items: center;
     min-height: 90vh;
     background-color: #ffffff;
+    padding: 15px;
 }
 
 /* 翻转容器 */
@@ -427,6 +428,7 @@ onMounted(async () => {
     perspective: 1000px;
     width: 450px;
     height: 600px;
+    max-width: 100%;
 }
 
 /* 翻转动画类 */
@@ -587,5 +589,142 @@ onMounted(async () => {
     flex-direction: column;
     justify-content: space-between;
     height: calc(100% - 60px); /* 减去header高度 */
+}
+
+/* 移动端适配样式 */
+@media (max-width: 768px) {
+    .flip-container {
+        width: 100%;
+        height: auto;
+        min-height: 550px;
+    }
+    
+    .login-card {
+        height: auto;
+        min-height: 550px;
+    }
+    
+    .form-container {
+        padding: 15px 20px;
+    }
+    
+    .campus-logo {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .welcome-text h3 {
+        font-size: 16px;
+    }
+    
+    .welcome-text p {
+        font-size: 12px;
+    }
+    
+    .card-header {
+        padding: 15px;
+    }
+    
+    .submit-btn {
+        padding: 10px 0;
+    }
+    
+    .el-form-item {
+        margin-bottom: 15px !important;
+    }
+}
+
+/* 超小屏幕适配 */
+@media (max-width: 480px) {
+    .user-container {
+        padding: 10px;
+        min-height: 85vh;
+    }
+    
+    .flip-container {
+        min-height: 520px;
+    }
+    
+    .login-card {
+        min-height: 520px;
+    }
+    
+    .form-container {
+        padding: 10px 15px;
+    }
+    
+    .card-header h2 {
+        font-size: 18px;
+    }
+    
+    .campus-logo {
+        width: 50px;
+        height: 50px;
+        margin-bottom: 10px;
+    }
+    
+    .welcome-section {
+        margin-bottom: 10px;
+    }
+    
+    .toggle-view {
+        font-size: 14px;
+    }
+    
+    /* 确保输入框在小屏幕上更易点击 */
+    :deep(.el-input__inner) {
+        height: 40px;
+        font-size: 14px;
+    }
+    
+    :deep(.el-form-item__label) {
+        font-size: 14px;
+        padding-bottom: 4px;
+    }
+}
+
+/* 横屏模式适配 */
+@media (max-height: 600px) and (orientation: landscape) {
+    .user-container {
+        padding: 5px;
+    }
+    
+    .flip-container {
+        height: auto;
+        min-height: 450px;
+    }
+    
+    .login-card {
+        height: auto;
+        min-height: 450px;
+    }
+    
+    .welcome-section {
+        margin-bottom: 5px;
+    }
+    
+    .campus-logo {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 5px;
+    }
+    
+    .welcome-text h3 {
+        margin-bottom: 2px;
+        font-size: 14px;
+    }
+    
+    .welcome-text p {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+    
+    .form-container .el-form-item {
+        margin-bottom: 8px !important;
+    }
+    
+    .forgot-password {
+        margin: -3px 0 8px;
+    }
 }
 </style>
