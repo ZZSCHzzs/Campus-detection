@@ -44,7 +44,7 @@ const fetchHotAreas = async () => {
       loading.value = true
     }
 
-    Hotareas.value = await areaService.getPopularAreas(6)
+    Hotareas.value = await areaService.getPopularAreas(8)
 
     if (isFirstLoad.value) {
       setTimeout(() => {
@@ -306,8 +306,8 @@ onBeforeUnmount(() => {
         <template #default>
           <div v-if="Object.values(summary).some(value => value > 0)">
             <el-row :gutter="20">
-              <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="12" :sm="8" :md="6"
-                :lg="4">
+              <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
+                :lg="3">
                 <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
                   <template #suffix>
                     <el-icon v-if="key === 'people_count'" class="stat-icon">
@@ -353,7 +353,7 @@ onBeforeUnmount(() => {
             <span class="card-title pulse">🏃 热门区域实时排行</span>
           </template>
           <AreaList :areas="Hotareas" :loading="loading" empty-text="暂无热门区域数据"
-            :max-height="Hotareas.length > 6 ? '150px' : 'auto'" />
+            :max-height="Hotareas.length > 8 ? '150px' : 'auto'" />
         </el-card>
         <el-card v-if="isAuthenticated" class="dashboard-card">
           <template #header>

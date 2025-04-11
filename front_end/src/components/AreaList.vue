@@ -86,52 +86,57 @@ const processedAreas = computed(() => {
     <template #default>
 
       <div v-if="areas && areas.length > 0" class="area-list-container">
-        <el-scrollbar :height="maxHeight === 'auto' ? undefined : maxHeight">
-          <div class="area-grid" :style="{ 'grid-template-rows': 'auto' }">
-            <div 
-              v-for="area in processedAreas" 
-              :key="area.id" 
-              class="area-card"
-            >
+        <el-scrollbar :height="maxHeight === 'auto' ? undefined : maxHeight" class="no-horizontal-scroll">
+          <div class="row-container">
+            <el-row :gutter="10">
+              <el-col 
+                v-for="area in processedAreas" 
+                :key="area.id"
+                :xs="24" 
+                :sm="12" 
+                :md="8" 
+                :lg="6" 
+                :xl="6"
+                class="area-col"
+              >
+                <div class="area-card">
+                  <div class="card-line">
 
-              <div class="card-line">
-
-                <div class="area-name-section">
-                  <h4 class="area-name">{{ area.name }}</h4>
-                  <el-tag v-if="area.building" size="small" type="info" effect="plain" class="area-building-tag">
-                    {{ area.building }}
-                  </el-tag>
-                </div>
-                
-
-                <div class="area-data-section">
-                  <div class="data-chip">
-                    <span class="count-value" :style="{ color: area.progressColor }">
-                      {{ area.detected_count || 0 }}
-                    </span>
-                    <span v-if="area.capacity" class="capacity-indicator">/ {{ area.capacity }}</span>
-                    <span class="stat-badge" :class="area.tagType">
-                      {{ area.percentDisplay }}
-                    </span>
+                  <div class="area-name-section">
+                    <h4 class="area-name">{{ area.name }}</h4>
+                    <el-tag v-if="area.building" size="small" type="info" effect="plain" class="area-building-tag">
+                      {{ area.building }}
+                    </el-tag>
+                  </div>
+                  
+                  <div class="area-data-section">
+                    <div class="data-chip">
+                      <span class="count-value" :style="{ color: area.progressColor }">
+                        {{ area.detected_count || 0 }}
+                      </span>
+                      <span v-if="area.capacity" class="capacity-indicator">/ {{ area.capacity }}</span>
+                      <span class="stat-badge" :class="area.tagType">
+                        {{ area.percentDisplay }}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-
-              <div class="progress-border-container">
-                <div 
-                  class="progress-border" 
-                  :style="{
-                    width: area.ratio === -1 ? '0%' : Math.floor(area.ratio * 100) + '%',
-                    backgroundColor: area.progressColor
-                  }"
-                ></div>
-              </div>
-            </div>
+                
+                <div class="progress-border-container">
+                  <div 
+                    class="progress-border" 
+                    :style="{
+                      width: area.ratio === -1 ? '0%' : Math.floor(area.ratio * 100) + '%',
+                      backgroundColor: area.progressColor
+                    }"
+                  ></div>
+                </div>
+                </div>
+              </el-col>
+            </el-row>
           </div>
         </el-scrollbar>
       </div>
-      
 
       <div v-else class="no-data-message">
         <el-empty :description="emptyText" />
@@ -147,13 +152,21 @@ const processedAreas = computed(() => {
   height: 100%;
 }
 
-/* 调整网格布局 */
-.area-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  grid-auto-rows: min-content;
-  gap: 10px;
-  padding: 5px;
+/* 添加一个包装容器来修复滚动条问题 */
+.row-container {
+  width: 100%;
+  padding: 0 5px;
+  box-sizing: border-box;
+}
+
+/* 禁用水平滚动条 */
+.no-horizontal-scroll {
+  overflow-x: hidden !important;
+}
+
+/* 删除原来的网格布局样式 */
+.area-col {
+  margin-bottom: 10px;
 }
 
 /* 紧凑型卡片 */
@@ -166,13 +179,8 @@ const processedAreas = computed(() => {
   display: flex;
   flex-direction: column;
   border: 2px solid #ebeef5;
-  margin-bottom: 5px;
   position: relative; /* 为进度条设置相对定位 */
-}
-
-.area-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  height: 100%;
 }
 
 /* 卡片主行 - 所有信息在一行内 */
