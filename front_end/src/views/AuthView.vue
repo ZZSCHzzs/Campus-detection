@@ -321,35 +321,32 @@ onMounted(async () => {
 
 <template>
     <div class="user-container">
-        <div class="flip-container" :class="{ 'flipped': !isLogin }">
-            <div class="flipper">
+        <div class="auth-card" :class="{'login-form': isLogin, 'register-form': !isLogin}">
+            <div class="image-side">
+                <img src="/hit1.jpg" alt="校园风景" />
+                <div class="image-overlay">
+                    <div class="campus-logo">
+                        <img src="/favicon256.ico" alt="校园标志"/>
+                    </div>
+                    <h2>校园慧感</h2>
+                    <p>为您提供安全、便捷的校园服务</p>
+                </div>
+            </div>
 
-                <div class="front">
-                    <el-card class="login-card" :body-style="{ padding: '0px' }">
-                        <div class="card-header">
+            <div class="form-side">
+                <div class="form-container">
+                    <transition name="form-fade" mode="out-in">
+                        <div v-if="isLogin" key="login" class="form-wrapper">
                             <h2>登录</h2>
-                        </div>
-                        <div class="form-container">
-                            <div class="welcome-section">
-                                <div class="campus-logo">
-                                    <img src="/favicon256.ico" alt="校园标志"/>
-                                </div>
-                                <div class=welcome-text>
-                                    <h3>欢迎回来</h3>
-                                    <p>校园检测系统将为您提供安全、便捷的服务</p>
-                                </div>
-                            </div>
-                            
                             <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" label-position="top">
                                 <el-form-item label="用户名" prop="username">
                                     <el-input v-model="loginForm.username" placeholder="请输入用户名" :prefix-icon="User" />
                                 </el-form-item>
 
                                 <el-form-item label="密码" prop="password">
-                                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock"
-                                        show-password />
+                                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" 
+                                        :prefix-icon="Lock" show-password />
                                 </el-form-item>
-
 
                                 <div class="forgot-password">
                                     <el-button type="text" size="small">忘记密码?</el-button>
@@ -366,16 +363,9 @@ onMounted(async () => {
                                 还没有账号？<el-button type="text" @click="toggleView">立即注册</el-button>
                             </div>
                         </div>
-                    </el-card>
-                </div>
 
-
-                <div class="back">
-                    <el-card class="login-card" :body-style="{ padding: '0px' }">
-                        <div class="card-header">
+                        <div v-else key="register" class="form-wrapper">
                             <h2>注册</h2>
-                        </div>
-                        <div class="form-container">
                             <el-form ref="registerFormRef" :model="registerForm" :rules="registerRules" label-position="top">
                                 <el-form-item label="用户名" prop="username">
                                     <el-input v-model="registerForm.username" placeholder="请输入用户名" :prefix-icon="User" />
@@ -406,7 +396,7 @@ onMounted(async () => {
                                 已有账号？<el-button type="text" @click="toggleView">立即登录</el-button>
                             </div>
                         </div>
-                    </el-card>
+                    </transition>
                 </div>
             </div>
         </div>
@@ -416,97 +406,109 @@ onMounted(async () => {
 <style scoped>
 .user-container {
     display: flex;
-    justify-content: center; /* 在移动端居中 */
-    align-items: center;
-    min-height: 100vh; /* 使容器至少填满视口高度 */
-    height: 100%; /* 填满父容器高度 */
-    padding: 20px; /* 添加一些内边距防止内容贴边 */
-    overflow: hidden; /* 禁用滚动 */
-    position: fixed; /* 固定位置防止内容滚动 */
-    box-sizing: border-box; /* 确保内边距不会增加元素尺寸 */
-    background-image: linear-gradient(to right, rgba(24, 78, 155, 0.8), rgba(30, 100, 200, 0.6)), url('/hit1.jpg');
-    background-size: cover;
-    top: 5%;
-    background-position: center center; /* 居中背景图片 */
-    background-repeat: no-repeat;
-    background-attachment: fixed; /* 固定背景，确保铺满 */
+    justify-content: center;
+    
+    height: 100%;
+    overflow: hidden;
+    padding: 0 40px;
+    position: fixed;
+    box-sizing: border-box;
+    background-color: #f5f7fa;
     width: 100%;
 }
 
-/* 桌面端布局 - 卡片靠右 */
-@media (min-width: 992px) {
-    .user-container {
-        justify-content: flex-end; /* 将卡片移动到右侧 */
-        padding-right: 10%; /* 右侧留出一定空间 */
-    }
-}
-
-/* 翻转容器 */
-.flip-container {
-    perspective: 1000px;
-    width: 450px;
+.auth-card {
+    display: flex;
+    width: 900px;
     height: 600px;
     max-width: 100%;
+    margin-top: 30px;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    transition: height 0.5s ease 0.1s, margin-top 0.3s ease 0.1s; /* 添加过渡动画并设置延时 */
 }
 
-/* 翻转动画类 */
-.flip-container.flipped .flipper {
-    transform: rotateY(180deg);
-}
-
-/* 非翻转状态的动画 - 新增 */
-.flip-container:not(.flipped) {
-    animation: pulse 0.5s ease-out;
-}
-
-/* 翻转器 */
-.flipper {
-    transition: 0.4s;
-    transform-style: preserve-3d;
+.image-side {
     position: relative;
+    width: 45%;
+    overflow: hidden;
+    transition: height 0.2s ease 0.1s, width 0.2s ease; /* 添加内部元素高度变化动画 */
+}
+
+.image-side img {
     width: 100%;
     height: 100%;
+    object-fit: cover;
 }
 
-/* 前后两面共同样式 */
-.front, .back {
-    backface-visibility: hidden;
+.image-overlay {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-}
-
-/* 前面样式 */
-.front {
-    z-index: 2;
-    transform: rotateY(0deg);
-}
-
-/* 背面样式 */
-.back {
-    transform: rotateY(180deg);
-}
-
-.login-card {
-    width: 100%;
-    height: 100%;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-
-.card-header {
+    background-color: rgba(24, 78, 155, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
     padding: 20px;
-    background-color: var(--el-color-primary-light-8);
+    text-align: center;
+}
+
+.image-overlay h2 {
+    font-size: 28px;
+    margin: 15px 0;
+}
+
+.image-overlay p {
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.campus-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: white;
+    padding: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: flex; /* 确保图标居中 */
+    justify-content: center;
+    align-items: center;
+}
+
+.campus-logo img {
+    width: 90%;
+    height: 90%;
+    object-fit: contain; /* 改为contain确保图标不变形 */
+}
+
+.form-side {
+    width: 55%;
+    background-color: white;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: height 0.3s ease 0.1s, padding 0.2s ease, width 0.3s ease; /* 添加内部元素高度变化动画 */
+}
+
+.form-wrapper {
+    max-width: 400px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.form-wrapper h2 {
     text-align: center;
     color: var(--el-color-primary);
-    border-bottom: 1px solid var(--el-border-color-light);
-}
-
-.form-container {
-    padding: 30px;
+    margin-bottom: 30px;
+    font-size: 24px;
 }
 
 .submit-btn {
@@ -516,233 +518,118 @@ onMounted(async () => {
     margin-top: 10px;
 }
 
+.forgot-password {
+    text-align: right;
+    margin: -5px 0 15px;
+}
+
 .toggle-view {
     margin-top: 20px;
     text-align: center;
     color: var(--el-text-color-secondary);
 }
 
-/* 添加一些动画效果强调 */
-.flip-container.flipped {
-    animation: pulse 0.5s ease-out;
-}
-
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.03); }
-    100% { transform: scale(1); }
-}
-
-/* 确保表单元素在翻转时更流畅 */
+/* 表单切换动画 */
 .form-container {
-    transition: opacity 0.3s;
-}
-
-.flipped .front .form-container {
-    opacity: 0;
-}
-
-.flipped .back .form-container {
-    opacity: 1;
-}
-
-/* 新增样式以优化登录表单空间 */
-.welcome-section {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.campus-logo {
-    margin: 0 auto 15px;
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    overflow: hidden;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.campus-logo img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-}
-
-.welcome-text h3 {
-    color: var(--el-color-primary);
-    margin-bottom: 8px;
-    font-size: 18px;
-}
-
-.welcome-text p {
-    color: var(--el-text-color-secondary);
-    font-size: 14px;
-    line-height: 1.5;
-    margin-bottom: 15px;
-}
-
-.forgot-password {
-    text-align: right;
-    margin: -5px 0 15px;
-}
-
-/* 调整登录表单间距，让内容更均匀分布 */
-.front .form-container .el-form-item {
-    margin-bottom: 20px;
-}
-
-.front .submit-btn {
-    margin-top: 5px;
-}
-
-.toggle-view {
-    margin-top: 15px;
-    text-align: center;
-    color: var(--el-text-color-secondary);
-}
-
-/* 确保前后两面保持对齐 */
-.form-container {
-    padding: 20px 30px;
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: calc(100% - 60px); /* 减去header高度 */
+    align-items: center;
+    justify-content: center;
+    transition: height 0.6s ease 0.5s;
 }
 
-/* 移动端适配样式 */
+.form-fade-enter-active,
+.form-fade-leave-active {
+    transition: all 0.3s ease;
+}
+
+.form-fade-enter-from {
+    opacity: 0;
+    transform: translateX(50px);
+}
+
+.form-fade-leave-to {
+    opacity: 0;
+    transform: translateX(-50px);
+}
+
+/* 响应式布局 */
 @media (max-width: 768px) {
-    .flip-container {
+    .user-container {
+        padding: 20px; /* 恢复适当的内边距 */
+    }
+    
+    .auth-card {
+        flex-direction: column;
+        border-radius: 10px;
+    }
+    
+    .image-side {
         width: 100%;
-        height: auto;
-        min-height: 550px;
+        height: 180px; /* 减小图片区域高度 */
     }
     
-    .login-card {
-        height: auto;
-        min-height: 550px;
+    .form-side {
+        width: 100%;
+        padding: 25px 20px;
     }
     
-    .form-container {
-        padding: 15px 20px;
+    .image-overlay h2 {
+        font-size: 24px;
+        margin: 10px 0;
     }
     
     .campus-logo {
         width: 60px;
         height: 60px;
+        min-height: 60px; /* 确保最小高度 */
+        margin-bottom: 10px;
+        padding: 3px;
+    }
+
+    /* 移动端下的登录表单样式 */
+    .auth-card.login-form {
+        height: 570px;
+        margin-top: 30px;
     }
     
-    .welcome-text h3 {
-        font-size: 16px;
-    }
-    
-    .welcome-text p {
-        font-size: 12px;
-    }
-    
-    .card-header {
-        padding: 15px;
-    }
-    
-    .submit-btn {
-        padding: 10px 0;
-    }
-    
-    .el-form-item {
-        margin-bottom: 15px !important;
+    /* 移动端下的注册表单样式 */
+    .auth-card.register-form {
+        height: 700px;
+        margin-top: 20px;
     }
 }
 
 /* 超小屏幕适配 */
 @media (max-width: 480px) {
-    .user-container {
-        padding: 10px;
-        min-height: 85vh;
+
+    
+    .form-side {
+        padding: 20px 15px;
     }
     
-    .flip-container {
-        min-height: 520px;
+    .image-side {
+        height: 150px;
     }
     
-    .login-card {
-        min-height: 520px;
-    }
-    
-    .form-container {
-        padding: 10px 15px;
-    }
-    
-    .card-header h2 {
-        font-size: 18px;
+    .form-wrapper h2 {
+        font-size: 20px;
+        margin-bottom: 20px;
     }
     
     .campus-logo {
         width: 50px;
         height: 50px;
-        margin-bottom: 10px;
+        min-height: 50px; /* 确保最小高度 */
     }
     
-    .welcome-section {
-        margin-bottom: 10px;
+    .image-overlay h2 {
+        font-size: 20px;
     }
     
-    .toggle-view {
+    .image-overlay p {
         font-size: 14px;
-    }
-    
-    /* 确保输入框在小屏幕上更易点击 */
-    :deep(.el-input__inner) {
-        height: 40px;
-        font-size: 14px;
-    }
-    
-    :deep(.el-form-item__label) {
-        font-size: 14px;
-        padding-bottom: 4px;
-    }
-}
-
-/* 横屏模式适配 */
-@media (max-height: 600px) and (orientation: landscape) {
-    .user-container {
-        padding: 5px;
-    }
-    
-    .flip-container {
-        height: auto;
-        min-height: 450px;
-    }
-    
-    .login-card {
-        height: auto;
-        min-height: 450px;
-    }
-    
-    .welcome-section {
-        margin-bottom: 5px;
-    }
-    
-    .campus-logo {
-        width: 40px;
-        height: 40px;
-        margin-bottom: 5px;
-    }
-    
-    .welcome-text h3 {
-        margin-bottom: 2px;
-        font-size: 14px;
-    }
-    
-    .welcome-text p {
-        font-size: 12px;
-        margin-bottom: 5px;
-    }
-    
-    .form-container .el-form-item {
-        margin-bottom: 8px !important;
-    }
-    
-    .forgot-password {
-        margin: -3px 0 8px;
     }
 }
 </style>
