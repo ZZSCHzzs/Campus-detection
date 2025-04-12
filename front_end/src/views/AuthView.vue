@@ -416,11 +416,29 @@ onMounted(async () => {
 <style scoped>
 .user-container {
     display: flex;
-    justify-content: center;
+    justify-content: center; /* 在移动端居中 */
     align-items: center;
-    min-height: 90vh;
-    background-color: #ffffff;
-    padding: 15px;
+    min-height: 100vh; /* 使容器至少填满视口高度 */
+    height: 100%; /* 填满父容器高度 */
+    padding: 20px; /* 添加一些内边距防止内容贴边 */
+    overflow: hidden; /* 禁用滚动 */
+    position: fixed; /* 固定位置防止内容滚动 */
+    box-sizing: border-box; /* 确保内边距不会增加元素尺寸 */
+    background-image: linear-gradient(to right, rgba(24, 78, 155, 0.8), rgba(30, 100, 200, 0.6)), url('/hit1.jpg');
+    background-size: cover;
+    top: 5%;
+    background-position: center center; /* 居中背景图片 */
+    background-repeat: no-repeat;
+    background-attachment: fixed; /* 固定背景，确保铺满 */
+    width: 100%;
+}
+
+/* 桌面端布局 - 卡片靠右 */
+@media (min-width: 992px) {
+    .user-container {
+        justify-content: flex-end; /* 将卡片移动到右侧 */
+        padding-right: 10%; /* 右侧留出一定空间 */
+    }
 }
 
 /* 翻转容器 */
