@@ -182,7 +182,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def latest(self, request):
         count = int(request.query_params.get('count', 5))
-        notices = self.queryset.order_by('-timestamp')[:count]
+        notices = self.queryset.filter(outdated=False).order_by('-timestamp')[:count]
         serializer = NoticeSerializer(notices, many=True)
         return Response(serializer.data)
 

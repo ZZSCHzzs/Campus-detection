@@ -259,6 +259,12 @@ const isProfileRoute = computed(() => {
 const updateActiveIndex = () => {
   const currentPath = route.path
 
+  // 登录/注册页面时不激活任何导航项
+  if (currentPath.includes('/login') || currentPath.includes('/register')) {
+    activeIndex.value = ''
+    return
+  }
+
   if (currentPath.includes('/profile')) {
     activeIndex.value = ''
     return
@@ -591,14 +597,38 @@ el-menu-item {
 .auth-buttons {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 0 20px;
 }
 
-/* 为按钮添加悬停效果 */
-.auth-buttons .el-button:hover {
+.auth-buttons .el-button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.login-btn {
+  transition: all 0.3s ease;
+  border: 1px solid #409EFF;
+  background-color: white;
+}
+
+.login-btn:hover {
   transform: translateY(-2px);
-  transition: transform 0.3s ease;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+.register-btn {
+  transition: all 0.3s ease;
+  background: linear-gradient(45deg, #409EFF, #66b1ff);
+}
+
+.register-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+  background: linear-gradient(45deg, #3a8ee6, #53a8ff);
 }
 
 /* 用户信息区域样式 */
@@ -613,8 +643,8 @@ el-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
-  border-radius: 20px;
+  padding: 6px 16px;
+  border-radius: 24px;
   transition: all 0.3s ease;
   background-color: #f9f9f9;
   border: 1px solid transparent;
@@ -623,8 +653,8 @@ el-menu-item {
 /* 个人中心页面激活状态 */
 .user-info-active {
   background-color: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.3);
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.2);
 }
 
 .user-avatar {
@@ -637,6 +667,10 @@ el-menu-item {
 .avatar-active {
   border: 2px solid var(--el-color-primary);
   transform: scale(1.05);
+}
+
+.user-info:hover {
+  background-color: var(--el-color-primary-light-9);
 }
 
 .user-info:hover .user-avatar {
@@ -666,26 +700,6 @@ el-menu-item {
 .logout-confirm-box {
   border-radius: 8px;
   overflow: hidden;
-}
-
-.login-btn {
-  transition: all 0.3s ease;
-  border: 1px solid #409EFF;
-}
-
-.login-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
-  background-color: rgba(64, 158, 255, 0.1);
-}
-
-.register-btn {
-  transition: all 0.3s ease;
-}
-
-.register-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
 
 /* 移动端适配样式 */
@@ -825,14 +839,15 @@ el-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 10px;
-  border-radius: 6px;
+  padding: 14px 12px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-bottom: 4px;
 }
 
 .user-menu-item:hover {
-  background-color: #f5f7fa;
+  background-color: #f0f7ff;
 }
 
 .user-menu-item .el-icon {
@@ -851,9 +866,15 @@ el-menu-item {
 .mobile-auth-buttons {
   display: flex;
   padding: 15px;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
   border-top: 1px solid #eaeaea;
+}
+
+.mobile-auth-buttons .el-button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 20px;
 }
 
 /* 确保移动端菜单中的激活项样式正确 */
