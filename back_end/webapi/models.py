@@ -153,6 +153,7 @@ class Notice(models.Model):
     content = models.TextField(verbose_name="公告内容")
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name="发布时间")
     related_areas = models.ManyToManyField(Area, blank=True, verbose_name="相关区域", related_name="notices")
+    outdated = models.BooleanField(default=False, verbose_name="是否过期")
     def __str__(self):
         return self.title
 
