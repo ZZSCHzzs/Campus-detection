@@ -433,9 +433,11 @@ const submitForm = async () => {
   try {
     if (formMode.value === 'add') {
       await apiService[props.resourceName].create(form.value)
+      await apiService[props.resourceName].refreshAll()
       ElMessage.success(`${props.itemName}添加成功`)
     } else {
       await apiService[props.resourceName].update(form.value.id, form.value)
+      await apiService[props.resourceName].refreshById(form.value.id)
       ElMessage.success(`${props.itemName}更新成功`)
     }
     dialogVisible.value = false
@@ -445,7 +447,6 @@ const submitForm = async () => {
     console.error('提交失败:', error)
     ElMessage.error(`${formMode.value === 'add' ? '添加' : '更新'}失败: ${error.response?.data?.message || '未知错误'}`)
   } finally {
-    await apiService[props.resourceName].refreshById(form.value.id)
     await fetchData()
     submitting.value = false
   }

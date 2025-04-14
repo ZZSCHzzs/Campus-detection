@@ -111,7 +111,9 @@ class ApiResourceManager {
     forceRefresh = false,
     cacheDuration?: number
   ): Promise<ResourceTypeMapping[T][0]> {
-
+    if (id === undefined) {
+      throw new Error(`ID undefined`);
+    }
     const effectiveCacheDuration = cacheDuration || 
       this.resourceCacheDuration.get(resourceType) || 
       this.globalCacheDuration;
@@ -150,10 +152,7 @@ class ApiResourceManager {
     data: Partial<ResourceTypeMapping[T][0]>
   ): Promise<ResourceTypeMapping[T][0]> {
     const url = `/api/${resourceType}/`;
-    const response = await api.post(url, data);
-
-    this.invalidateCache(resourceType);
-    
+    const response = await api.post(url, data); 
     return response.data as ResourceTypeMapping[T][0];
   }
 
@@ -164,10 +163,8 @@ class ApiResourceManager {
   ): Promise<ResourceTypeMapping[T][0]> {
     const url = `/api/${resourceType}/${id}/`;
     const response = await api.put(url, data);
-
-    this.invalidateCache(resourceType);
     this.invalidateCache(`${resourceType}_${id}`);
-    
+    this.getResourceById(resourceType, id, true);
     return response.data as ResourceTypeMapping[T][0];
   }
 
@@ -253,9 +250,10 @@ class ApiResourceManager {
     id: number | string,
     params: Record<string, any> = {}
   ): Promise<ResourceTypeMapping[T][0]> {
-
+    if(id === undefined) {
+      throw new Error(`Invalid ID: ${id}`);
+    }
     this.invalidateCache(`${resourceType}_${id}`);
-
     console.log(`[ApiResourceManager] Refreshing ${resourceType}/${id}`);
     return this.getResourceById(resourceType, id, true);
   }
