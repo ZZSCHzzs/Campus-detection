@@ -5,8 +5,7 @@
 <template>
   <div class="map-container">
     <div class="map" id="campus-map"></div>
-    
-    
+
   </div>
 </template>
 

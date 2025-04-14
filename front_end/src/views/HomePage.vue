@@ -18,9 +18,7 @@ const loading = ref(false)
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
 
-
 const isFirstLoad = ref(true)
-
 
 const userStore = useAuthStore()
 const isAuthenticated = computed(() => userStore.isAuthenticated)
@@ -226,7 +224,6 @@ const getAlertType = (grade: number) => {
   }
 }
 
-
 const isMobile = ref(false)
 
 const checkScreenSize = () => {
@@ -277,15 +274,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  // 清除所有定时器
+
   if (intervalTimer1) clearInterval(intervalTimer1)
   if (intervalTimer2) clearInterval(intervalTimer2)
-  
-  // 移除所有事件监听器
+
   window.removeEventListener('resize', checkScreenSize)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-  
-  // 销毁图表实例
+
   if (chart) {
     chart.dispose()
     chart = null
@@ -461,7 +456,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* 新增标题居中样式 */
+
 .header-card {
   text-align: center !important;
   background: linear-gradient(135deg, #f6f9ff 0%, #f0f5ff 100%) !important;
@@ -542,7 +537,6 @@ onBeforeUnmount(() => {
   animation: fadeIn 1s ease-in-out;
 }
 
-/* 动画 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -590,12 +584,11 @@ onBeforeUnmount(() => {
   transform: translateX(5px);
 }
 
-/* 卡片统一样式 */
 .el-card {
   border-radius: 12px !important;
-  /* 增加圆角 */
+
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-  /* 柔和阴影 */
+
   border: 1px solid #ebeef5;
   transition: all 0.3s;
 
@@ -605,10 +598,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 统计卡片优化 */
 .stats-card {
   margin-bottom: 30px;
-  /* 增大间距 */
 
   .stat-item {
     padding: 16px;
@@ -634,7 +625,7 @@ onBeforeUnmount(() => {
 
     :deep(.el-statistic__content) {
       font-size: 28px !important;
-      /* 加大字号 */
+
       font-weight: 600;
       background: linear-gradient(45deg, #409eff, #36b5ff);
       -webkit-background-clip: text;
@@ -648,7 +639,7 @@ onBeforeUnmount(() => {
     :deep(.el-statistic__title) {
       font-size: 14px;
       color: #888;
-      /* 弱化标题颜色 */
+
       letter-spacing: 1px;
     }
 
@@ -660,7 +651,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 仪表盘卡片 */
 .dashboard-card {
   margin-bottom: 25px;
   display: flex;
@@ -680,13 +670,12 @@ onBeforeUnmount(() => {
 
   .card-title {
     font-size: 18px !important;
-    /* 加大标题 */
+
     color: #333;
     letter-spacing: 1px;
   }
 }
 
-/* 表格优化 */
 .el-table {
   :deep(th) {
     background-color: #f8f9fa !important;
@@ -694,7 +683,7 @@ onBeforeUnmount(() => {
 
   :deep(td) {
     padding: 12px 0 !important;
-    /* 增加行高 */
+
   }
 
   :deep(.cell) {
@@ -702,17 +691,16 @@ onBeforeUnmount(() => {
   }
 
   &::before {
-    /* 移除默认分隔线 */
+
     display: none;
   }
 }
 
-/* 图表容器 */
 #trend-chart {
   width: 100%;
   height: 320px !important;
   padding: 15px;
-  /* 增加内边距 */
+
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   background-color: #fdfdfd;
@@ -734,14 +722,12 @@ onBeforeUnmount(() => {
   border: 1px dashed #dcdfe6;
 }
 
-/* 修正CSS语法错误 */
 .el-alert--error {
   background-color: #fff0f0 !important;
-  /* 修正为!important */
+
   border: 1px solid rgba(245, 108, 108, 0.3);
 }
 
-/* 间距系统 */
 .mb-20 {
   margin-bottom: 20px;
 }
@@ -771,19 +757,16 @@ onBeforeUnmount(() => {
 }
 
 .home-container {
-  max-width: 1400px;
-  /* 调整容器宽度为1400px */
-  margin: 20px auto;
+  max-width: 1300px;
+  margin: 0 auto;
   padding: 30px;
 }
 
-/* 新增空数据提示样式 */
 .no-data-message {
   padding: 30px 0;
   text-align: center;
 }
 
-/* 告警和通知样式 */
 .alert-link {
   margin-left: 10px;
   font-size: 12px;
@@ -802,7 +785,6 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
-/* 移动端响应式适配 */
 @media (max-width: 768px) {
   .home-container {
     padding: 15px;
@@ -855,7 +837,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 小型移动设备适配 */
 @media (max-width: 480px) {
   .header-title {
     font-size: 1.5rem;

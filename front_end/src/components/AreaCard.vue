@@ -10,7 +10,7 @@ const props = defineProps<{
   buildingName?: string
   displayBuilding?: boolean
   expectStatus?: string
-  compact?: boolean // 新增紧凑模式
+  compact?: boolean
 }>()
 
 const nodeData = ref<HardwareNode | null>(null)
@@ -22,7 +22,7 @@ let intervalId: number | null = null
 
 const fetchNodeData = async () => {
   try {
-    // 使用areaService获取区域数据
+
     nodeData.value = await nodeService.getDatabyAreaId(props.area.id)
   } catch (error) {
     console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
@@ -50,7 +50,7 @@ watch(isVisible, (newVal) => {
 const toggleFavorite = async () => {
   favoriteLoading.value = true
   try {
-    // 使用areaService切换收藏状态
+
     await areaService.toggleFavoriteArea(props.area.id)
     isFavorite.value = !isFavorite.value
     emit('favorite-change', {
@@ -88,7 +88,6 @@ const loadStatus = computed(() => {
   return '空闲'
 })
 
-// 紧凑模式下显示百分比
 const loadPercentage = computed(() => {
   if (loadRatio.value === -1) return '未知'
   return Math.round(loadRatio.value * 100) + '%'
@@ -106,13 +105,12 @@ onBeforeUnmount(() => {
   }
 })
 
-
 </script>
 
 <template>
-  <!-- 改进后的紧凑模式卡片 - 更像卡片而不是条状 -->
+
   <div v-if="compact && displayCard()" class="area-card-compact" :class="{'offline': !nodeData?.status}">
-    <!-- 卡片顶部信息区域 -->
+
     <div class="card-header-compact">
       <div class="header-main">
         <h4 class="area-name">{{ area.name }}</h4>
@@ -141,8 +139,7 @@ onBeforeUnmount(() => {
         ></el-button>
       </div>
     </div>
-    
-    <!-- 卡片中部数据区域 - 简化版，移除了进度条 -->
+
     <div class="card-body-compact">
       <div class="count-display-compact">
         <div class="count-and-capacity">
@@ -158,14 +155,12 @@ onBeforeUnmount(() => {
         {{ loadStatus }}
       </div>
     </div>
-    
-    <!-- 加载指示器 -->
+
     <div v-if="loading" class="compact-loading-overlay">
       <div class="compact-loading-spinner"></div>
     </div>
   </div>
 
-  <!-- 标准模式卡片 - 保持原有设计 -->
   <el-card v-else-if="displayCard()" :body-style="{ padding: '0px' }" class="area-card">
     <div :style="{ background: `linear-gradient(135deg, ${loadColor}22, ${loadColor}44)` }" class="card-header">
       <h3>{{ area.name }}</h3>
@@ -350,7 +345,6 @@ onBeforeUnmount(() => {
   transform: scale(1.1);
 }
 
-/* 紧凑卡片样式 */
 .area-card-compact {
   background-color: #ffffff;
   border-radius: 8px;
@@ -363,7 +357,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 120px; /* 减小高度，因为移除了进度条和更新时间 */
+  height: 120px;
 }
 
 .area-card-compact:hover {
@@ -378,7 +372,6 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
-/* 卡片顶部区域 */
 .card-header-compact {
   padding: 12px 15px 8px;
   border-bottom: 1px solid #f0f2f5;
@@ -444,7 +437,6 @@ onBeforeUnmount(() => {
   width: 24px;
 }
 
-/* 卡片中部区域 - 简化版 */
 .card-body-compact {
   flex: 1;
   padding: 10px 15px;
@@ -492,7 +484,6 @@ onBeforeUnmount(() => {
   margin-top: 5px;
 }
 
-/* 加载样式 */
 .compact-loading-overlay {
   position: absolute;
   top: 0;
@@ -518,10 +509,9 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 移动端适配 */
 @media (max-width: 768px) {
   .area-card-compact {
-    height: 110px; /* 移动端更小的高度 */
+    height: 110px;
   }
   
   .card-header-compact {

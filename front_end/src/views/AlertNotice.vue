@@ -165,12 +165,11 @@ const submitNotice = async () => {
     
     ElMessage.success('通知发布成功')
     noticeDialogVisible.value = false
-    
-    
+
     noticeForm.title = ''
     noticeForm.content = ''
     noticeForm.related_areas = []
-    
+    await noticeService.refreshAll()
     await fetchNotices()
   } catch (error) {
     console.error('发布通知失败:', error)
@@ -370,17 +369,13 @@ watch(
     if (tabParam && ['alerts', 'notices'].includes(tabParam)) {
       activeTab.value = tabParam
     }
-    
-    
     checkUrlForDetails()
   }
 )
 
-// 添加响应式布局支持
 const isMobileView = ref(false)
 let refreshIntervalId: number | null = null
 
-// 检测屏幕尺寸并设置视图模式
 const checkScreenSize = () => {
   isMobileView.value = window.innerWidth < 768
 }
@@ -388,33 +383,28 @@ const checkScreenSize = () => {
 onBeforeMount(() => {
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
-  // 根据屏幕尺寸自动选择初始视图模式
+
   viewMode.value = isMobileView.value ? 'card' : 'table'
 })
 
 onBeforeUnmount(() => {
-  // 清除自动刷新定时器
+
   if (refreshIntervalId !== null) {
     clearInterval(refreshIntervalId)
     refreshIntervalId = null
   }
-  
-  // 移除事件监听器
+
   window.removeEventListener('resize', checkScreenSize)
 })
 
-// 视图模式选择（表格/卡片）
-const viewMode = ref('table') // 'table' 或 'card'
+const viewMode = ref('table')
 
-// 计算实际显示模式
 const actualViewMode = computed(() => viewMode.value)
 
-// 切换视图模式
 const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'table' ? 'card' : 'table'
 }
 
-// 获取当前视图模式的图标和文本
 const viewModeInfo = computed(() => {
   const modes = {
     table: { icon: Grid, text: '表格视图' },
@@ -423,14 +413,13 @@ const viewModeInfo = computed(() => {
   return modes[viewMode.value]
 })
 
-// 针对不同设备显示dialog或drawer
-const drawerDirection = ref('btt') // 默认从底部弹出
-const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
+const drawerDirection = ref('btt')
+const drawerSize = ref('70%')
 </script>
 
 <template>
   <div class="alert-notice-container">
-    <!-- 标题和操作区域 -->
+
     <div class="page-header">
       <div class="title-section">
         <h2 class="page-title">
@@ -452,8 +441,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
         <el-button type="primary" :icon="Refresh" circle @click="refreshData" />
       </div>
     </div>
-    
-    <!-- 主内容区域 -->
+
     <div class="main-content">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="custom-tabs">
 
@@ -464,7 +452,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               <span>告警信息</span>
             </div>
           </template>
-          <!-- 过滤栏保持不变 -->
+
           <div class="filter-bar">
             <div class="left-section">
               <el-select 
@@ -494,8 +482,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               </el-input>
             </div>
           </div>
-          
-          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedAlerts"
@@ -591,8 +578,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               <el-empty description="暂无告警数据" />
             </div>
           </div>
-          
-          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="alertsLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -681,7 +667,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               <span>通知公告</span>
             </div>
           </template>
-          <!-- 过滤栏保持不变 -->
+
           <div class="filter-bar">
             <div class="left-section">
               <el-button 
@@ -707,8 +693,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               </el-input>
             </div>
           </div>
-          
-          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedNotices"
@@ -775,8 +760,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
               <el-empty description="暂无通知数据" />
             </div>
           </div>
-          
-          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="noticesLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -844,7 +828,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
       </el-tabs>
     </div>
 
-    <!-- PC端展示对话框，移动端隐藏 -->
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -890,8 +873,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
         </span>
       </template>
     </el-dialog>
-    
-    <!-- 移动端展示抽屉，PC端隐藏 -->
+
     <el-drawer
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -939,7 +921,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
       </div>
     </el-drawer>
 
-    <!-- PC端告警详情对话框 -->
     <el-dialog
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1027,8 +1008,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
         </div>
       </div>
     </el-dialog>
-    
-    <!-- 移动端告警详情抽屉 -->
+
     <el-drawer
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1117,7 +1097,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
       </div>
     </el-drawer>
 
-    <!-- PC端通知详情对话框 -->
     <el-dialog
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1170,8 +1149,7 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
         </div>
       </div>
     </el-dialog>
-    
-    <!-- 移动端通知详情抽屉 -->
+
     <el-drawer
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1227,14 +1205,13 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
 </template>
 
 <style scoped>
-/* ------------ 基础布局 ------------ */
+
 .alert-notice-container {
   max-width: 1400px;
   margin: 20px auto;
   padding: 0 20px;
 }
 
-/* 页面标题区域 */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -1276,7 +1253,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   border-color: #ebeef5;
 }
 
-/* 主内容区域 */
 .main-content {
   background-color: #fff;
   border-radius: 10px;
@@ -1285,7 +1261,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   min-height: 600px;
 }
 
-/* ------------ 标签页样式 ------------ */
 .custom-tabs :deep(.el-tabs__header) {
   margin-bottom: 20px;
   border-bottom: 1px solid #e8eaec;
@@ -1319,7 +1294,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   font-size: 16px;
 }
 
-/* ------------ 过滤栏样式 ------------ */
 .filter-bar {
   display: flex;
   justify-content: space-between;
@@ -1344,7 +1318,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   width: 280px;
 }
 
-/* ------------ 表格视图样式 ------------ */
 .table-container {
   background-color: #fff;
   border-radius: 8px;
@@ -1407,7 +1380,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   display: inline-block;
 }
 
-/* ------------ 标签样式 ------------ */
 .card-tag {
   margin: 2px;
   padding: 2px 8px;
@@ -1450,7 +1422,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   padding: 2px 0;
 }
 
-/* ------------ 按钮样式 ------------ */
 .action-buttons {
   display: flex;
   justify-content: center;
@@ -1479,7 +1450,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   color: #67C23A;
 }
 
-/* ------------ 卡片视图样式 ------------ */
 .cards-container {
   padding: 5px 0;
   min-height: 350px;
@@ -1527,7 +1497,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   border-left-color: #909399;
 }
 
-/* 卡片头部 */
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -1554,7 +1523,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   font-weight: 500;
 }
 
-/* 卡片标签优化 */
 .card-tag {
   margin: 0;
   padding: 0 6px;
@@ -1586,7 +1554,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   display: inline-block;
 }
 
-/* 卡片内容 */
 .card-content {
   color: #303133;
   font-size: 13px;
@@ -1611,7 +1578,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   white-space: nowrap;
 }
 
-/* 卡片底部 */
 .card-footer {
   display: flex;
   justify-content: space-between;
@@ -1668,7 +1634,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   border-color: #d3e5fc;
 }
 
-/* ------------ 分页和空状态 ------------ */
 .pagination-container {
   display: flex;
   justify-content: center;
@@ -1685,7 +1650,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   min-height: 200px;
 }
 
-/* ------------ 详情对话框样式 ------------ */
 .detail-dialog :deep(.el-dialog__header) {
   background-color: #f4f7fc;
   border-bottom: 1px solid #e4e7ed;
@@ -1738,7 +1702,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   color: #303133;
 }
 
-/* 信息网格布局 */
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1787,7 +1750,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   color: #4b83d2;
 }
 
-/* 消息内容容器 */
 .message-container {
   background-color: #f9fafc;
   border-radius: 8px;
@@ -1804,7 +1766,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   white-space: pre-wrap;
 }
 
-/* 通知详情样式 */
 .notice-detail-header {
   text-align: center;
   margin-bottom: 15px;
@@ -1851,7 +1812,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* ------------ 响应式调整 ------------ */
 @media (max-width: 768px) {
   .alert-notice-container {
     padding: 0 10px;
@@ -1955,7 +1915,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   }
 }
 
-/* 优化卡片视图在移动端的显示 */
 @media (max-width: 576px) {
   .card-footer {
     flex-direction: column;
@@ -1972,17 +1931,14 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   }
 }
 
-/* 优化动画效果 */
 .alert-card, .notice-card {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* 优化表格和卡片切换的过渡效果 */
 .cards-container, .table-container {
   transition: opacity 0.3s ease;
 }
 
-/* ------------ 移动端抽屉适配样式 ------------ */
 .mobile-drawer :deep(.el-drawer__header) {
   margin-bottom: 0;
   padding: 10px 15px;
@@ -1999,7 +1955,6 @@ const drawerSize = ref('70%') // 将默认抽屉高度设为屏幕高度的70%
   overflow-y: auto;
 }
 
-/* 紧凑型抽屉样式 */
 .compact-drawer {
   padding: 0 12px 12px;
 }
