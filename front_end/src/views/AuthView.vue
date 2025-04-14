@@ -152,14 +152,11 @@ const handleLogin = async () => {
                 
                 localStorage.removeItem('access')
                 localStorage.removeItem('refresh')
-                
-                
+
                 authStore.setAuth({ access, refresh })
 
-                
                 await new Promise(resolve => setTimeout(resolve, 200))
-                
-                
+
                 const storedToken = localStorage.getItem('access')
                 if (storedToken !== access) {
                     console.error('Token存储异常，手动同步')
@@ -426,14 +423,14 @@ onMounted(async () => {
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    transition: height 0.5s ease 0.1s, margin-top 0.3s ease 0.1s; /* 添加过渡动画并设置延时 */
+    transition: height 0.5s ease 0.1s, margin-top 0.3s ease 0.1s;
 }
 
 .image-side {
     position: relative;
     width: 45%;
     overflow: hidden;
-    transition: height 0.2s ease 0.1s, width 0.2s ease; /* 添加内部元素高度变化动画 */
+    transition: height 0.2s ease 0.1s, width 0.2s ease;
 }
 
 .image-side img {
@@ -477,7 +474,7 @@ onMounted(async () => {
     padding: 5px;
     margin-bottom: 20px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    display: flex; /* 确保图标居中 */
+    display: flex;
     justify-content: center;
     align-items: center;
 }
@@ -485,7 +482,7 @@ onMounted(async () => {
 .campus-logo img {
     width: 90%;
     height: 90%;
-    object-fit: contain; /* 改为contain确保图标不变形 */
+    object-fit: contain;
 }
 
 .form-side {
@@ -495,7 +492,7 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    transition: height 0.3s ease 0.1s, padding 0.2s ease, width 0.3s ease; /* 添加内部元素高度变化动画 */
+    transition: height 0.3s ease 0.1s, padding 0.2s ease, width 0.3s ease;
 }
 
 .form-wrapper {
@@ -529,7 +526,6 @@ onMounted(async () => {
     color: var(--el-text-color-secondary);
 }
 
-/* 表单切换动画 */
 .form-container {
     width: 100%;
     height: 100%;
@@ -554,10 +550,9 @@ onMounted(async () => {
     transform: translateX(-50px);
 }
 
-/* 响应式布局 */
 @media (max-width: 768px) {
     .user-container {
-        padding: 20px; /* 恢复适当的内边距 */
+        padding: 20px;
     }
     
     .auth-card {
@@ -567,7 +562,7 @@ onMounted(async () => {
     
     .image-side {
         width: 100%;
-        height: 180px; /* 减小图片区域高度 */
+        height: 180px;
     }
     
     .form-side {
@@ -583,28 +578,24 @@ onMounted(async () => {
     .campus-logo {
         width: 60px;
         height: 60px;
-        min-height: 60px; /* 确保最小高度 */
+        min-height: 60px;
         margin-bottom: 10px;
         padding: 3px;
     }
 
-    /* 移动端下的登录表单样式 */
     .auth-card.login-form {
         height: 570px;
         margin-top: 30px;
     }
-    
-    /* 移动端下的注册表单样式 */
+
     .auth-card.register-form {
         height: 700px;
         margin-top: 20px;
     }
 }
 
-/* 超小屏幕适配 */
 @media (max-width: 480px) {
 
-    
     .form-side {
         padding: 20px 15px;
     }
@@ -621,7 +612,7 @@ onMounted(async () => {
     .campus-logo {
         width: 50px;
         height: 50px;
-        min-height: 50px; /* 确保最小高度 */
+        min-height: 50px;
     }
     
     .image-overlay h2 {

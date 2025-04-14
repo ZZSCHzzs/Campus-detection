@@ -148,7 +148,6 @@
           <slot name="form" :form="form" :mode="formMode" :is-mobile="isMobile"></slot>
         </div>
 
-      
       <template #footer>
         <div class="drawer-footer">
           <el-button @click="dialogVisible = false" size="medium" class="drawer-btn">取消</el-button>
@@ -222,7 +221,7 @@ const props = defineProps({
   },
   cacheDuration: {
     type: Number,
-    default: 30000 // 默认缓存30秒
+    default: 30000
   }
 })
 
@@ -273,7 +272,7 @@ const handleSearchClear = () => {
 }
 
 onMounted(() => {
-  // 设置该资源的缓存时间
+
   if (props.resourceName) {
     apiService.setResourceCacheOptions(props.resourceName, { duration: props.cacheDuration })
     console.log(`已为资源 ${props.resourceName} 设置缓存时间: ${props.cacheDuration}ms`)
@@ -284,24 +283,20 @@ onMounted(() => {
   if (props.searchQuery) {
     localSearchQuery.value = props.searchQuery
   }
-  
-  // 初始检测设备类型
+
   checkIsMobile()
-  
-  // 添加窗口大小变化监听
+
   window.addEventListener('resize', checkIsMobile)
-  
-  // 设置自动刷新定时器 (与缓存时间一致)
+
   refreshTimer.value = setInterval(() => {
     fetchData()
   }, props.cacheDuration)
 })
 
 onUnmounted(() => {
-  // 移除窗口大小变化监听
+
   window.removeEventListener('resize', checkIsMobile)
-  
-  // 清除自动刷新定时器
+
   if (refreshTimer.value) {
     clearInterval(refreshTimer.value)
   }
@@ -344,8 +339,7 @@ const fetchData = async () => {
     else{
       response = await apiService.customGet(url)
     }
-    
-    
+
     if (response && response.data) {
       
       if (response.data.results !== undefined) {
@@ -421,6 +415,7 @@ const handleDelete = (row) => {
     try {
       await apiService[props.resourceName].delete(row.id)
       ElMessage.success('删除成功')
+      await apiService[props.resourceName].refreshAll()
       await fetchData()
       emit('delete', row)
     } catch (error) {
@@ -449,6 +444,8 @@ const submitForm = async () => {
     console.error('提交失败:', error)
     ElMessage.error(`${formMode.value === 'add' ? '添加' : '更新'}失败: ${error.response?.data?.message || '未知错误'}`)
   } finally {
+    await apiService[props.resourceName].refreshById(form.value.id)
+    await fetchData()
     submitting.value = false
   }
 }
@@ -459,32 +456,27 @@ const handleDialogClose = () => {
 
 const isMobile = ref(false)
 
-// 检测设备是否为移动端
 const checkIsMobile = () => {
   isMobile.value = window.innerWidth < 768
 }
 
-// 过滤移动端下不需要显示的列
 const filteredColumns = computed(() => {
   if (!isMobile.value) {
     return props.columns;
   }
-  
-  // 在移动端模式下，过滤掉标记为在移动端隐藏的列
+
   return props.columns.filter(column => !column.hideOnMobile);
 });
 
-// 表格固定高度设置
 const tableHeight = computed(() => {
-  // 设置固定高度，基于每页10行数据
-  // 每行大约40px高度，表头约50px，预留一些边距
+
   return isMobile.value ? 400 : 500;
 });
 
 const refreshTimer = ref(null)
 
 const handleRefresh = () => {
-  // 强制刷新，跳过缓存
+
   apiService.refreshCache(props.resourceName)
   fetchData()
   ElMessage.success('数据已刷新')
@@ -624,7 +616,6 @@ const handleRefresh = () => {
   }
 }
 
-/* 移动端特有样式 */
 .base-manager.mobile {
   gap: 8px;
 }
@@ -658,7 +649,6 @@ const handleRefresh = () => {
   font-size: 12px;
 }
 
-/* 确保表格容器具有足够的高度 */
 .table-card {
   margin: 10px 0;
   width: 100%;
@@ -679,7 +669,6 @@ const handleRefresh = () => {
   }
 }
 
-/* 移动端抽屉样式 */
 .mobile-drawer :deep(.el-drawer__header) {
   margin-bottom: 8px;
   padding: 8px 12px;
@@ -694,7 +683,6 @@ const handleRefresh = () => {
   padding: 0;
 }
 
-/* 完全覆盖el-drawer的footer样式 */
 .mobile-drawer :deep(.el-drawer__footer) {
   padding: 0 !important;
   margin: 0 !important;
@@ -718,7 +706,6 @@ const handleRefresh = () => {
   box-sizing: border-box;
 }
 
-/* 确保按钮不会溢出 */
 .drawer-footer .el-button {
   flex-shrink: 1;
   min-width: 0;
@@ -728,7 +715,6 @@ const handleRefresh = () => {
   font-size: 12px;
 }
 
-/* 确保表格容器具有足够的高度 */
 .table-card {
   margin: 0;
   width: 100%;

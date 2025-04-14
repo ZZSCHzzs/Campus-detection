@@ -5,9 +5,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Message, Edit, Star } from '@element-plus/icons-vue'
 import authApi from '../services/authApi'
-import { areaService, userService } from '../services/apiService'  // 只保留areaService
+import { areaService, userService } from '../services/apiService'
 import type { User as UserType, AreaItem } from '../types'
-import CryptoJS from 'crypto-js'  // 导入CryptoJS库用于密码加密
+import CryptoJS from 'crypto-js'
 import { Calendar, Check, InfoFilled, Phone, Plus, Grid, List } from '@element-plus/icons-vue'
 import AreaCard from '../components/AreaCard.vue'
 
@@ -15,10 +15,8 @@ const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-// 从路由参数中获取当前Tab，默认为'profile'
 const activeTab = ref('profile')
 
-// 监听路由参数变化，更新activeTab
 watch(() => route.query.tab, (newTab) => {
   if (newTab === 'profile' || newTab === 'password' || newTab === 'favorites') {
     activeTab.value = newTab as string
@@ -27,12 +25,10 @@ watch(() => route.query.tab, (newTab) => {
   }
 }, { immediate: true })
 
-// 当Tab改变时更新路由
 const handleTabChange = (tab: string) => {
   router.push({ path: '/profile', query: { tab } })
 }
 
-// 用户信息相关
 const userInfo = ref<UserType>({
   id: 0,
   username: '',
@@ -56,7 +52,6 @@ const passwordForm = ref({
 const isEditing = ref(false)
 const loading = ref(false)
 
-// 表单验证规则
 const profileRules = reactive({
   email: [
     { required: true, message: '请输入邮箱地址', trigger: 'blur' },
@@ -91,7 +86,6 @@ const passwordRules = reactive({
 const profileFormRef = ref()
 const passwordFormRef = ref()
 
-// 获取用户信息
 const fetchUserInfo = async () => {
   loading.value = true
   try {
@@ -101,7 +95,7 @@ const fetchUserInfo = async () => {
 
     if (error.response?.status === 401) {
       ElMessage.error('登录已过期，请重新登录')
-      // 如果是401错误，自动重定向到登录页
+
       authStore.logout()
       await router.push({
         path: '/auth',
@@ -115,19 +109,16 @@ const fetchUserInfo = async () => {
   }
 }
 
-// 启用编辑模式
 const enableEdit = () => {
   isEditing.value = true
 }
 
-// 取消编辑
 const cancelEdit = () => {
   isEditing.value = false
   userForm.value.email = userInfo.value.email || ''
   userForm.value.phone = userInfo.value.phone || ''
 }
 
-// 提交用户信息更新
 const submitUserUpdate = async () => {
   if (!profileFormRef.value) return
 
@@ -135,20 +126,17 @@ const submitUserUpdate = async () => {
     if (valid) {
       loading.value = true
       try {
-        // 创建更新数据对象
+
         const updateData = {
           email: userForm.value.email,
           phone: userForm.value.phone
         }
 
-        // 使用统一的authApi更新用户信息
         await authApi.updateUserInfo(updateData)
 
-        // 更新本地显示的信息
         userInfo.value.email = userForm.value.email
         userInfo.value.phone = userForm.value.phone
 
-        // 更新store中的信息
         if (authStore.user) {
           authStore.user = { ...authStore.user, ...updateData }
         }
@@ -167,12 +155,10 @@ const submitUserUpdate = async () => {
   })
 }
 
-// 密码加密函数 - 与AuthView一致
 const encryptPassword = (password: string): string => {
   return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex)
 }
 
-// 提交密码更新
 const submitPasswordUpdate = async () => {
   if (!passwordFormRef.value) return
 
@@ -180,12 +166,11 @@ const submitPasswordUpdate = async () => {
     if (valid) {
       loading.value = true
       try {
-        // 在发送请求前对密码进行加密处理
+
         const encryptedCurrentPassword = encryptPassword(passwordForm.value.current_password)
         const encryptedNewPassword = encryptPassword(passwordForm.value.new_password)
         const encryptedReNewPassword = encryptPassword(passwordForm.value.re_new_password)
 
-        // 使用统一的authApi更新密码
         await authApi.updatePassword({
           current_password: encryptedCurrentPassword,
           new_password: encryptedNewPassword,
@@ -194,7 +179,6 @@ const submitPasswordUpdate = async () => {
 
         ElMessage.success('密码更新成功')
 
-        // 清空密码字段
         passwordForm.value.current_password = ''
         passwordForm.value.new_password = ''
         passwordForm.value.re_new_password = ''
@@ -210,11 +194,9 @@ const submitPasswordUpdate = async () => {
   })
 }
 
-// 收藏区域数据
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
 
-// 获取收藏区域
 const fetchFavoriteAreas = async () => {
   loadingFavorites.value = true
   try {
@@ -227,30 +209,25 @@ const fetchFavoriteAreas = async () => {
   }
 }
 
-// 处理收藏状态变化
 const handleFavoriteChange = async (event) => {
   const { areaId, isFavorite } = event
 
-  // 更新本地收藏列表
   if (!isFavorite) {
-    // 从列表中移除
+
     favoriteAreas.value = favoriteAreas.value.filter(area => area.id !== areaId)
 
     ElMessage.success('已取消收藏')
   } else {
-    // 添加到列表中 - 理论上在收藏页面不会有这种情况，但为了完整性考虑
+
     ElMessage.success('已添加到收藏')
 
-    // 刷新用户信息，获取最新收藏列表
     await fetchUserInfo()
   }
 }
 
-// 密码强度计算
 const passwordStrength = ref(0)
 const passwordStrengthStatus = ref('success')
 
-// 更新密码强度
 const updatePasswordStrength = (password) => {
   if (!password) {
     passwordStrength.value = 0
@@ -260,37 +237,29 @@ const updatePasswordStrength = (password) => {
 
   let strength = 0
 
-  // 长度检查
   if (password.length >= 8) strength += 20
   else if (password.length >= 6) strength += 10
 
-  // 包含数字
   if (/\d/.test(password)) strength += 20
 
-  // 包含小写字母
   if (/[a-z]/.test(password)) strength += 20
 
-  // 包含大写字母
   if (/[A-Z]/.test(password)) strength += 20
 
-  // 包含特殊字符
   if (/[^A-Za-z0-9]/.test(password)) strength += 20
 
   passwordStrength.value = Math.min(100, strength)
 
-  // 设置强度状态
   if (strength < 40) passwordStrengthStatus.value = 'exception'
   else if (strength < 70) passwordStrengthStatus.value = 'warning'
   else passwordStrengthStatus.value = 'success'
 }
 
-// 添加布局切换状态 - 默认跟随页面整体状态
 const isCompactView = ref(false)
 
-// 检查设备类型并设置默认布局
 const checkScreenSize = () => {
   const isMobile = window.innerWidth < 768
-  // 移动端默认使用紧凑视图
+
   isCompactView.value = isMobile
 }
 
@@ -300,12 +269,10 @@ const toggleLayoutMode = () => {
 
 onMounted(async () => {
   console.log('UserView组件已挂载，准备获取用户信息')
-  
-  // 检查设备类型并设置默认布局
+
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
-  
-  // 检查登录状态
+
   if (!authStore.isAuthenticated) {
     ElMessage.warning('请先登录')
     await router.push({
@@ -320,7 +287,6 @@ onMounted(async () => {
 
 })
 
-// 格式化日期时间显示
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return '未知';
 
@@ -338,7 +304,6 @@ const formatDateTime = (dateTimeStr) => {
   }
 }
 
-// 获取角色显示名称
 const getRoleDisplayName = (role: string) => {
   switch (role) {
     case 'admin':
@@ -351,7 +316,6 @@ const getRoleDisplayName = (role: string) => {
   }
 }
 
-// 获取角色对应的标签类型
 const getRoleTagType = (role: string) => {
   switch (role) {
     case 'admin':
@@ -721,7 +685,7 @@ const getRoleTagType = (role: string) => {
 </template>
 
 <style scoped>
-/* 自定义变量 */
+
 :root {
   --primary-color: #409EFF;
   --success-color: #67C23A;
@@ -737,7 +701,6 @@ const getRoleTagType = (role: string) => {
   --transition-time: 0.3s;
 }
 
-/* 工具类 */
 .mb-4 {
   margin-bottom: 16px;
 }
@@ -750,7 +713,6 @@ const getRoleTagType = (role: string) => {
   width: 100%;
 }
 
-/* 基础布局样式 */
 .user-center-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -758,7 +720,6 @@ const getRoleTagType = (role: string) => {
   min-height: calc(100vh - 200px);
 }
 
-/* 重新设计的顶部区域 - 浅色系风格 */
 .user-header {
   background-color: #f7faff;
   background-image: linear-gradient(to right, rgba(236, 245, 255, 0.8), rgba(243, 248, 255, 0.5)),
@@ -875,7 +836,6 @@ const getRoleTagType = (role: string) => {
   margin-right: 5px;
 }
 
-/* Tab Container Style */
 .tabs-container {
   padding: 0 20px;
 }
@@ -903,7 +863,6 @@ const getRoleTagType = (role: string) => {
   font-weight: 600;
 }
 
-/* 修复激活条样式 */
 :deep(.el-tabs__active-bar) {
   height: 5px !important;
   bottom: -2px !important;
@@ -913,7 +872,6 @@ const getRoleTagType = (role: string) => {
   animation: fadeIn 0.3s ease;
 }
 
-/* 卡片共享样式 - 移除阴影 */
 .content-card {
   margin-bottom: 25px;
   border-radius: var(--border-radius);
@@ -928,7 +886,6 @@ const getRoleTagType = (role: string) => {
   border-color: #e0e6ed;
 }
 
-/* 个人信息卡片样式 */
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -980,7 +937,6 @@ const getRoleTagType = (role: string) => {
   margin: 0;
 }
 
-/* 表单部分 */
 .edit-form {
   max-width: 600px;
   margin: 0 auto;
@@ -1085,7 +1041,6 @@ const getRoleTagType = (role: string) => {
   color: #606266;
 }
 
-/* 密码表单样式 */
 .password-card .pw-card-header,
 .security-tips-card .security-card-header {
   display: flex;
@@ -1126,7 +1081,6 @@ const getRoleTagType = (role: string) => {
   padding: 10px 0;
 }
 
-/* 收藏区域样式 */
 .favorites-header {
   display: flex;
   justify-content: space-between;
@@ -1213,7 +1167,6 @@ const getRoleTagType = (role: string) => {
   margin-bottom: 20px;
 }
 
-/* 响应式设计优化 */
 @media (max-width: 768px) {
   .user-header {
     margin: 10px;
@@ -1245,7 +1198,6 @@ const getRoleTagType = (role: string) => {
   }
 }
 
-/* 动画效果 */
 @keyframes fadeIn {
   from {
     opacity: 0;

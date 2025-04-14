@@ -161,7 +161,6 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import apiService, { nodeService } from '../../services/apiService'
 
-// 接收父组件传递的属性
 const props = defineProps({
   title: String,
   isMobile: Boolean
@@ -184,7 +183,7 @@ const dataForm = reactive({
 const alertForm = reactive({
   id: null,
   alert_type: '',
-  grade: 0,       // 默认为普通等级(0)
+  grade: 0,
   publicity: false,
   message: ''
 })
@@ -192,7 +191,6 @@ const alertForm = reactive({
 const dataFormRef = ref(null)
 const alertFormRef = ref(null)
 
-// 获取所有节点
 const fetchNodes = async () => {
   loadingNodes.value = true
   try {
@@ -206,18 +204,15 @@ const fetchNodes = async () => {
   }
 }
 
-// 刷新节点列表
 const refreshNodes = () => {
   apiService.refreshCache('nodes')
   fetchNodes()
 }
 
-// 组件挂载时获取节点列表
 onMounted(() => {
   fetchNodes()
 })
 
-// 表单验证规则
 const dataRules = {
   id: [
     { required: true, message: '请选择硬件节点', trigger: 'change' },
@@ -250,7 +245,6 @@ const alertRules = {
   ]
 }
 
-// 提交数据上传表单
 const submitDataForm = async () => {
   if (!dataFormRef.value) return
   
@@ -265,7 +259,7 @@ const submitDataForm = async () => {
     resultStatus.value = ''
     
     try {
-      // 确保id是数字类型
+
       const formData = {
         ...dataForm,
         id: Number(dataForm.id)
@@ -286,7 +280,6 @@ const submitDataForm = async () => {
   })
 }
 
-// 提交告警创建表单
 const submitAlertForm = async () => {
   if (!alertFormRef.value) return
   
@@ -301,7 +294,7 @@ const submitAlertForm = async () => {
     resultStatus.value = ''
     
     try {
-      // 确保id和grade是数字类型
+
       const formData = {
         ...alertForm,
         id: Number(alertForm.id),
@@ -323,7 +316,6 @@ const submitAlertForm = async () => {
   })
 }
 
-// 重置表单
 const resetDataForm = () => {
   if (dataFormRef.value) {
     dataFormRef.value.resetFields()
@@ -380,7 +372,6 @@ const resetAlertForm = () => {
   border: 1px solid #fbc4c4;
 }
 
-/* 移动端适配 */
 .mobile .upload-form {
   max-width: 100%;
 }

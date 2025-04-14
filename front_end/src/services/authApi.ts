@@ -1,8 +1,6 @@
 import axios from 'axios'
 
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top'
-
 
 const authAxios = axios.create({
   baseURL: BASE_URL,
@@ -12,7 +10,6 @@ const authAxios = axios.create({
     'Accept': 'application/json'
   }
 })
-
 
 authAxios.interceptors.request.use(config => {
   if (config.url && !config.url.endsWith('/') && !config.url.includes('?')) {

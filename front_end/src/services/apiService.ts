@@ -5,7 +5,6 @@ import type { AreaItem, Building, HardwareNode, ProcessTerminal, User, Alert, No
 import { useAuthStore } from '../stores/auth';
 import { ElMessage } from 'element-plus';
 
-
 const areaCustomMethods = {
     
   getPopularAreas: (count = 5) => 
@@ -44,7 +43,7 @@ const areaCustomMethods = {
           }
         })
       );
-      // Filter out any null values from failed requests
+
       return areas.filter(area => area !== null);
     } catch (error) {
         console.error('Error fetching favorite areas:', error);
@@ -99,17 +98,14 @@ const historicalCustomMethods = {
   
   getAreaHistorical: (areaId: number, params?: any) => 
     apiResourceManager.customApiCall<HistoricalData[]>(`/api/areas/${areaId}/historical/`, 'get', undefined, params),
-    
-  
+
   getHistoricalByDateRange: (startDate: string, endDate: string, params?: any) => 
     apiResourceManager.customApiCall<HistoricalData[]>(`/api/historical/`, 'get', undefined, 
       { ...params, start_date: startDate, end_date: endDate }),
-    
-  
+
   getLatestHistorical: (count = 10) => 
     apiResourceManager.customApiCall<HistoricalData[]>(`/api/historical/latest/`, 'get', undefined, { count }),
 };
-
 
 const userCustomMethods = {
   
@@ -130,8 +126,7 @@ const userCustomMethods = {
       throw error;
     }
   },
-  
-  
+
   updateUserInfo: async (data: Partial<User>) => {
     try {
       const response = await authApi.updateUserInfo(data);
@@ -141,8 +136,7 @@ const userCustomMethods = {
       throw error;
     }
   },
-  
-  
+
   updatePassword: async (data: { 
     current_password: string, 
     new_password: string, 
@@ -158,7 +152,6 @@ const userCustomMethods = {
   },
 };
 
-
 export const initializeApiService = async () => {
   try {
     await apiResourceManager.preloadCommonResources();
@@ -169,16 +162,13 @@ export const initializeApiService = async () => {
   }
 };
 
-
 export const clearApiCache = () => {
   apiResourceManager.clearCache();
 };
 
-
 export const refreshResourceCache = (resourceType: string) => {
   apiResourceManager.invalidateCache(resourceType);
 };
-
 
 interface ResourceService<T> {
   getAll: (params?: any) => Promise<T[]>;
@@ -187,9 +177,10 @@ interface ResourceService<T> {
   update: (id: number | string, data: Partial<T>) => Promise<T>;
   patch?: (id: number | string, data: Partial<T>) => Promise<T>;
   delete: (id: number | string) => Promise<void>;
-  [key: string]: any; // 添加索引签名，允许任意自定义方法
+  refreshById: (id: number | string) => Promise<T>;
+  refreshAll: (params?: any) => Promise<T[]>;
+  [key: string]: any;
 }
-
 
 function createResourceService<T, R extends ResourceType = ResourceType>(
   resourceType: R, 
@@ -213,26 +204,27 @@ function createResourceService<T, R extends ResourceType = ResourceType>(
       apiResourceManager.patchResource(resourceType, id, data) as Promise<T>,
       
     delete: (id: number | string) => 
-      apiResourceManager.deleteResource(resourceType, id)
+      apiResourceManager.deleteResource(resourceType, id),
+    
+    refreshById: (id: number | string, params = {}) => 
+      apiResourceManager.refreshById(resourceType, id, params) as Promise<T>,
+      
+    refreshAll: (params = {}) => 
+      apiResourceManager.refreshAll(resourceType, params) as unknown as Promise<T[]>
   };
-  
-  
+
   return { ...baseService, ...customMethods };
 }
 
-
 const serviceRegistry = new Map<string, any>();
-
 
 function registerService(name: string, service: any): void {
   serviceRegistry.set(name, service);
 }
 
-
 function getService(name: string): any {
   return serviceRegistry.get(name);
 }
-
 
 const areaService = createResourceService<AreaItem>('areas', areaCustomMethods);
 const buildingService = createResourceService<Building>('buildings', buildingCustomMethods);
@@ -242,7 +234,6 @@ const alertService = createResourceService<Alert>('alerts', alertCustomMethods);
 const noticeService = createResourceService<Notice>('notice', noticeCustomMethods);
 const userService = createResourceService<User>('users', userCustomMethods);
 const historicalService = createResourceService<HistoricalData>('historical', historicalCustomMethods);
-
 
 registerService('areas', areaService);
 registerService('buildings', buildingService);
@@ -255,7 +246,6 @@ registerService('users', userService);
 registerService('summary', summaryCustomMethods);
 registerService('historical', historicalService);
 
-
 export { 
   areaService,
   buildingService,
@@ -267,7 +257,6 @@ export {
   historicalService,
   summaryCustomMethods as summaryService
 };
-
 
 const apiService = {
   customGet: (url, params = {}) => {
@@ -282,18 +271,15 @@ const apiService = {
   registerService,
   getService,
   getAllServices: () => Object.fromEntries(serviceRegistry),
-  
-  // 设置特定资源类型的缓存时间
+
   setResourceCacheOptions: (resourceType: ResourceType, options: { duration: number }) => {
     apiResourceManager.setResourceCacheDuration(resourceType, options.duration);
   },
-  
-  // 批量设置多个资源的缓存时间
+
   setMultipleResourceCacheOptions: (settings: Record<ResourceType, number>) => {
     apiResourceManager.setMultipleResourceCacheDurations(settings);
   },
-  
-  // 获取特定资源的缓存时间
+
   getResourceCacheDuration: (resourceType: ResourceType) => {
     return apiResourceManager.getResourceCacheDuration(resourceType);
   },
@@ -308,15 +294,12 @@ const apiService = {
   historical: historicalService,
   summary: summaryCustomMethods,
   users: userService,
-  
-  
+
   clearCache: clearApiCache,
   refreshCache: refreshResourceCache,
-  
-  
+
   initialize: initializeApiService,
-  
-  
+
   setCacheOptions: (options: { duration?: number, enabled?: boolean }) => {
     
     if (options.duration) {

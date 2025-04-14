@@ -10,7 +10,7 @@ const props = defineProps<{
   buildingName?: string
   displayBuilding?: boolean
   expectStatus?: string
-  compact?: boolean // 新增紧凑模式
+  compact?: boolean
 }>()
 
 const nodeData = ref<HardwareNode | null>(null)
@@ -22,7 +22,7 @@ let intervalId: number | null = null
 
 const fetchNodeData = async () => {
   try {
-    // 使用areaService获取区域数据
+
     nodeData.value = await nodeService.getDatabyAreaId(props.area.id)
   } catch (error) {
     console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
@@ -50,7 +50,7 @@ watch(isVisible, (newVal) => {
 const toggleFavorite = async () => {
   favoriteLoading.value = true
   try {
-    // 使用areaService切换收藏状态
+
     await areaService.toggleFavoriteArea(props.area.id)
     isFavorite.value = !isFavorite.value
     emit('favorite-change', {
@@ -88,7 +88,6 @@ const loadStatus = computed(() => {
   return '空闲'
 })
 
-// 紧凑模式下显示百分比
 const loadPercentage = computed(() => {
   if (loadRatio.value === -1) return '未知'
   return Math.round(loadRatio.value * 100) + '%'
@@ -105,7 +104,6 @@ onBeforeUnmount(() => {
     intervalId = null
   }
 })
-
 
 </script>
 
@@ -350,7 +348,6 @@ onBeforeUnmount(() => {
   transform: scale(1.1);
 }
 
-/* 紧凑卡片样式 */
 .area-card-compact {
   background-color: #ffffff;
   border-radius: 8px;
@@ -363,7 +360,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 120px; /* 减小高度，因为移除了进度条和更新时间 */
+  height: 120px;
 }
 
 .area-card-compact:hover {
@@ -378,7 +375,6 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
-/* 卡片顶部区域 */
 .card-header-compact {
   padding: 12px 15px 8px;
   border-bottom: 1px solid #f0f2f5;
@@ -444,7 +440,6 @@ onBeforeUnmount(() => {
   width: 24px;
 }
 
-/* 卡片中部区域 - 简化版 */
 .card-body-compact {
   flex: 1;
   padding: 10px 15px;
@@ -492,7 +487,6 @@ onBeforeUnmount(() => {
   margin-top: 5px;
 }
 
-/* 加载样式 */
 .compact-loading-overlay {
   position: absolute;
   top: 0;
@@ -518,10 +512,9 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 移动端适配 */
 @media (max-width: 768px) {
   .area-card-compact {
-    height: 110px; /* 移动端更小的高度 */
+    height: 110px;
   }
   
   .card-header-compact {
