@@ -121,12 +121,12 @@ const props = defineProps({
 
 const columns = [
   { prop: 'area', label: '所属区域', width: '150', mobileWidth: '120', slot: true },
-  { prop: 'grade', label: '告警等级', width: '120', mobileWidth: '90', slot: true },
-  { prop: 'alert_type', label: '告警类型', width: '120', mobileWidth: '90', slot: true },
+  { prop: 'grade', label: '告警等级', width: '90', mobileWidth: '90', slot: true },
+  { prop: 'alert_type', label: '告警类型', width: '100', mobileWidth: '90', slot: true },
   { prop: 'message', label: '告警信息', hideOnMobile: true },
-  { prop: 'publicity', label: '是否公开', width: '100', mobileWidth: '80', slot: true },
-  { prop: 'solved', label: '处理状态', width: '100', mobileWidth: '80', slot: true },
-  { prop: 'timestamp', label: '告警时间', width: '180', hideOnMobile: true,
+  { prop: 'publicity', label: '是否公开', width: '90', mobileWidth: '80', slot: true },
+  { prop: 'solved', label: '处理状态', width: '90', mobileWidth: '80', slot: true },
+  { prop: 'timestamp', label: '告警时间', width: '160', hideOnMobile: true,
     formatter: (row) => new Date(row.timestamp).toLocaleString() }
 ]
 

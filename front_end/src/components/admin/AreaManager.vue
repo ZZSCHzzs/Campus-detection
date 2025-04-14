@@ -88,7 +88,6 @@ const defaultFormData = {
 const buildings = ref([])
 const loadingBuildings = ref(false)
 
-// 存储所有节点数据
 const nodes = ref([])
 const loadingNodes = ref(false)
 
@@ -103,7 +102,6 @@ const fetchBuildings = async () => {
   }
 }
 
-// 获取所有节点数据
 const fetchNodes = async () => {
   loadingNodes.value = true
   try {
@@ -115,9 +113,8 @@ const fetchNodes = async () => {
   }
 }
 
-// 简化后的行点击处理函数
 const handleRowClick = (row) => {
-  // 不需要再次获取节点数据，所有需要的数据已经在 nodes 中
+
 }
 
 const getBuildingName = (buildingId) => {
@@ -150,6 +147,6 @@ const getNodeUpdateTime = (nodeId) => {
 
 onMounted(() => {
   fetchBuildings()
-  fetchNodes() // 只需要获取一次所有节点数据
+  fetchNodes()
 })
 </script>

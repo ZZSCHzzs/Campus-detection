@@ -21,15 +21,14 @@ const props = defineProps({
   }
 })
 
-// 统一计算人数比率，处理capacity=0的特殊情况
 const calculateRatio = (count: number | undefined | null, capacity: number | undefined | null) => {
-  // 当容量为0或未设置时，视为未设置容量
-  if (!capacity) return -1; // 返回-1表示未设置容量
+
+  if (!capacity) return -1;
   return (count || 0) / capacity;
 }
 
 const getProgressColor = (rate: number) => {
-  // 处理未设置容量的情况
+
   if (rate === -1) return '#909399'
   if (rate > 0.9) return '#F56C6C'
   if (rate > 0.7) return '#E6A23C'
@@ -38,7 +37,7 @@ const getProgressColor = (rate: number) => {
 }
 
 const getTagType = (rate: number) => {
-  // 处理未设置容量的情况
+
   if (rate === -1) return 'info'
   if (rate > 0.9) return 'danger'
   if (rate > 0.7) return 'warning'
@@ -47,7 +46,7 @@ const getTagType = (rate: number) => {
 }
 
 const getStatusText = (rate: number) => {
-  // 处理未设置容量的情况
+
   if (rate === -1) return '未设置容量';
   if (rate >= 0.9) return '拥挤';
   if (rate >= 0.7) return '较拥挤';
@@ -56,7 +55,7 @@ const getStatusText = (rate: number) => {
 }
 
 const getStatusIcon = (rate: number) => {
-  // 处理未设置容量的情况
+
   if (rate === -1) return 'el-icon-info';
   if (rate >= 0.9) return 'el-icon-warning-filled';
   if (rate >= 0.7) return 'el-icon-warning';
@@ -64,7 +63,6 @@ const getStatusIcon = (rate: number) => {
   return 'el-icon-success-filled';
 }
 
-// 预处理区域数据
 const processedAreas = computed(() => {
   return props.areas.map(area => {
     const ratio = calculateRatio(area.detected_count, area.capacity);
@@ -146,30 +144,26 @@ const processedAreas = computed(() => {
 </template>
 
 <style scoped>
-/* 容器样式 */
+
 .area-list-container {
   width: 100%;
   height: 100%;
 }
 
-/* 添加一个包装容器来修复滚动条问题 */
 .row-container {
   width: 100%;
   padding: 0 5px;
   box-sizing: border-box;
 }
 
-/* 禁用水平滚动条 */
 .no-horizontal-scroll {
   overflow-x: hidden !important;
 }
 
-/* 删除原来的网格布局样式 */
 .area-col {
   margin-bottom: 10px;
 }
 
-/* 紧凑型卡片 */
 .area-card {
   background-color: #ffffff;
   border-radius: 6px;
@@ -179,11 +173,10 @@ const processedAreas = computed(() => {
   display: flex;
   flex-direction: column;
   border: 2px solid #ebeef5;
-  position: relative; /* 为进度条设置相对定位 */
+  position: relative;
   height: 100%;
 }
 
-/* 卡片主行 - 所有信息在一行内 */
 .card-line {
   display: flex;
   justify-content: space-between;
@@ -192,9 +185,8 @@ const processedAreas = computed(() => {
   min-height: 30px;
 }
 
-/* 进度条容器 */
 .progress-border-container {
-  height: 2px; /* 进度条高度 */
+  height: 2px;
   width: 100%;
   background-color: #f0f0f0;
   position: absolute;
@@ -202,13 +194,11 @@ const processedAreas = computed(() => {
   left: 0;
 }
 
-/* 实际进度条 */
 .progress-border {
   height: 100%;
   transition: all 0.3s ease;
 }
 
-/* 名称部分 */
 .area-name-section {
   display: flex;
   align-items: center;
@@ -233,7 +223,6 @@ const processedAreas = computed(() => {
   line-height: 18px;
 }
 
-/* 数据部分 */
 .area-data-section {
   display: flex;
   align-items: center;

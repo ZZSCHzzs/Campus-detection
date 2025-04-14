@@ -1,20 +1,18 @@
 <template>
   <div class="nav-container header" :class="{'mobile-header': isMobile}">
     <div v-if="isMobile" class="mobile-nav-container">
-      <!-- 移动端导航栏 -->
+
       <div class="mobile-header-row">
-        <!-- 左侧汉堡按钮 -->
+
         <el-button class="hamburger-btn" @click="toggleMobileMenu">
           <el-icon size="20"><Menu /></el-icon>
         </el-button>
-        
-        <!-- 中间Logo -->
+
         <div class="logo-container">
           <img alt="Logo" class="logo" src="/favicon256.ico"/>
           <span class="site-name">校园慧感</span>
         </div>
-        
-        <!-- 右侧用户中心/登录按钮 -->
+
         <div v-if="authStore.isAuthenticated" class="mobile-user-button">
           <el-avatar 
             :icon="UserFilled" 
@@ -29,14 +27,13 @@
           </el-button>
         </div>
       </div>
-      
-      <!-- 左侧滑出菜单 -->
+
       <div v-show="mobileMenuVisible" class="mobile-menu-overlay" @click="closeMobileMenu"></div>
       <div 
         class="mobile-side-menu" 
         :class="{'mobile-menu-open': mobileMenuVisible}"
       >
-        <!-- 菜单头部 -->
+
         <div class="side-menu-header">
           <div class="logo-container">
             <img alt="Logo" class="logo" src="/favicon256.ico"/>
@@ -46,8 +43,7 @@
             <el-icon size="20"><Close /></el-icon>
           </el-button>
         </div>
-        
-        <!-- 菜单导航项 -->
+
         <el-menu 
           :default-active="activeIndex" 
           mode="vertical" 
@@ -67,8 +63,7 @@
             <div class="nav-text">{{ item.title }}</div>
           </el-menu-item>
         </el-menu>
-        
-        <!-- 用户相关菜单项 -->
+
         <div v-if="authStore.isAuthenticated" class="mobile-user-area">
           <div class="user-info">
             <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
@@ -101,8 +96,7 @@
         </div>
       </div>
     </div>
-    
-    <!-- 桌面版导航栏 - 保持不变 -->
+
     <el-menu v-else :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
              @select="handleSelect">
       <div class="logo-container">
@@ -125,9 +119,7 @@
         <div class="nav-text">{{ item.title }}</div>
       </el-menu-item>
 
-
       <div class="flex-grow"></div>
-
 
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
@@ -156,7 +148,6 @@
           </template>
         </el-dropdown>
       </div>
-
 
       <div v-else class="auth-buttons">
         <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
@@ -214,7 +205,7 @@ const content = ref([
     title: '数据大屏',
     path: '/screen',
     icon: 'DataLine',
-    hideOnMobile: true  // 添加在移动端隐藏标记
+    hideOnMobile: true
   },
   {
     index: '3',
@@ -259,7 +250,6 @@ const isProfileRoute = computed(() => {
 const updateActiveIndex = () => {
   const currentPath = route.path
 
-  // 登录/注册页面时不激活任何导航项
   if (currentPath.includes('/login') || currentPath.includes('/register')) {
     activeIndex.value = ''
     return
@@ -298,7 +288,7 @@ const handleSelect = (key: string) => {
   if (path) {
     console.log('Navigating to:', path)
     router.push(path)
-    mobileMenuVisible.value = false // 关闭移动菜单
+    mobileMenuVisible.value = false
   } else {
     console.warn('No path found for key:', key)
   }
@@ -365,7 +355,6 @@ const handleCommand = (command: string) => {
   }
 }
 
-// 添加移动端相关变量和方法
 const isMobile = ref(false)
 const mobileMenuVisible = ref(false)
 
@@ -565,31 +554,26 @@ el-menu-item {
   text-decoration: none !important;
 }
 
-/* 覆盖 Element Plus 默认活跃状态样式 */
 .el-menu--horizontal > .el-menu-item.is-active {
   border-bottom: none !important;
   background-color: transparent !important;
 }
 
-/* 覆盖默认悬停效果 */
 .el-menu--horizontal > .el-menu-item:not(.is-disabled):hover {
   background-color: transparent !important;
   border-bottom: none !important;
 }
 
-/* 确保自定义活跃样式优先级更高 */
 .nav-container .el-menu-item.is-active {
   color: #409EFF !important;
   font-weight: 700;
   border-bottom: none !important;
 }
 
-/* 确保菜单项之间的分隔线不显示 */
 .el-menu--horizontal > .el-menu-item {
   border-bottom: none !important;
 }
 
-/* 添加的新样式 */
 .flex-grow {
   flex-grow: 1;
 }
@@ -631,7 +615,6 @@ el-menu-item {
   background: linear-gradient(45deg, #3a8ee6, #53a8ff);
 }
 
-/* 用户信息区域样式 */
 .user-area {
   display: flex;
   align-items: center;
@@ -650,7 +633,6 @@ el-menu-item {
   border: 1px solid transparent;
 }
 
-/* 个人中心页面激活状态 */
 .user-info-active {
   background-color: var(--el-color-primary-light-9);
   border-color: var(--el-color-primary-light-5);
@@ -663,7 +645,6 @@ el-menu-item {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* 头像激活状态 */
 .avatar-active {
   border: 2px solid var(--el-color-primary);
   transform: scale(1.05);
@@ -684,7 +665,6 @@ el-menu-item {
   margin: 0 4px;
 }
 
-/* 下拉菜单样式 */
 .custom-dropdown .el-dropdown-item {
   display: flex;
   align-items: center;
@@ -696,13 +676,11 @@ el-menu-item {
   font-size: 16px;
 }
 
-/* 登出确认框样式 */
 .logout-confirm-box {
   border-radius: 8px;
   overflow: hidden;
 }
 
-/* 移动端适配样式 */
 .mobile-header {
   width: 100%;
   padding: 0;
@@ -722,7 +700,6 @@ el-menu-item {
   position: relative;
 }
 
-/* 汉堡按钮 */
 .hamburger-btn {
   border: none;
   background: transparent;
@@ -732,7 +709,6 @@ el-menu-item {
   z-index: 2;
 }
 
-/* 关闭按钮 */
 .close-menu-btn {
   border: none;
   background: transparent;
@@ -740,7 +716,6 @@ el-menu-item {
   cursor: pointer;
 }
 
-/* 移动端头像按钮 */
 .mobile-user-button {
   cursor: pointer;
 }
@@ -761,7 +736,6 @@ el-menu-item {
   align-items: center;
 }
 
-/* 侧边菜单遮罩 */
 .mobile-menu-overlay {
   position: fixed;
   top: 0;
@@ -773,7 +747,6 @@ el-menu-item {
   transition: opacity 0.3s ease;
 }
 
-/* 侧边滑出菜单 */
 .mobile-side-menu {
   position: fixed;
   top: 0;
@@ -793,7 +766,6 @@ el-menu-item {
   left: 0;
 }
 
-/* 菜单头部 */
 .side-menu-header {
   display: flex;
   align-items: center;
@@ -802,7 +774,6 @@ el-menu-item {
   border-bottom: 1px solid #eef1ff;
 }
 
-/* 菜单本身 */
 .mobile-el-menu {
   border-right: none;
   flex: 1;
@@ -813,7 +784,6 @@ el-menu-item {
   line-height: 50px;
 }
 
-/* 用户区域 */
 .mobile-user-area {
   padding: 15px;
   border-top: 1px solid #eaeaea;
@@ -877,7 +847,6 @@ el-menu-item {
   border-radius: 20px;
 }
 
-/* 确保移动端菜单中的激活项样式正确 */
 .mobile-el-menu .el-menu-item.is-active {
   color: #409EFF !important;
   font-weight: 700;

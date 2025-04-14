@@ -1,11 +1,11 @@
 <template>
   <div class="admin-container">
-    <!-- 移动端模块选择器 -->
+
     <div class="mobile-header" v-if="isMobile">
       <div class="mobile-title">
         <h2>系统管理</h2>
       </div>
-      <!-- 修改选择框绑定和事件处理方式 -->
+
       <el-select 
         :model-value="activeModule"
         class="mobile-module-select"
@@ -27,7 +27,7 @@
     </div>
 
     <div class="admin-layout">
-      <!-- 桌面端侧边栏 -->
+
       <div class="sidebar-container" :class="sidebarWidthClass" v-if="!isMobile">
         <div class="admin-sidebar">
           <div class="sidebar-header">
@@ -97,20 +97,16 @@ const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-
 const searchQuery = ref('')
 const dataLink = ref('')
-
 
 onMounted(() => {
   if (!authStore.isAuthenticated) {
     router.push('/auth?mode=login')
   }
-  
-  // 初始检测设备类型
+
   checkIsMobile()
-  
-  // 添加窗口大小变化监听
+
   window.addEventListener('resize', checkIsMobile)
 
   if (route.query.module && modules.some(m => m.name === route.query.module)) {
@@ -124,24 +120,21 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // 移除窗口大小变化监听
+
   window.removeEventListener('resize', checkIsMobile)
 })
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
 
-// 向子组件传递isMobile状态
 const emitMobileStatus = () => {
-  // 这里可以添加广播移动状态的逻辑，如果需要的话
+
 }
 
-// 检测设备是否为移动端
 const checkIsMobile = () => {
   const screenWidth = window.innerWidth
   isMobile.value = screenWidth < 768
-  
-  // 如果是移动端，则自动折叠侧边栏
+
   if (isMobile.value) {
     isCollapse.value = true
   }
@@ -153,11 +146,9 @@ const sidebarWidthClass = computed(() => {
   return isCollapse.value ? 'collapse-width' : 'uncollapse-width'
 })
 
-
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
-
 
 const modules = [
   { name: 'users', label: '用户管理', icon: markRaw(User), component: UserManager },
@@ -171,18 +162,14 @@ const modules = [
   { name: 'upload', label: '上传接口', icon: markRaw(Upload), component: UploadManager }
 ]
 
-
 const activeModule = ref('areas')
 
-
 const currentComponent = shallowRef(modules[4].component)
-
 
 const currentModuleTitle = computed(() => {
   const module = modules.find(m => m.name === activeModule.value)
   return module ? module.label : ''
 })
-
 
 const updateCurrentComponent = (moduleName) => {
   const module = modules.find(m => m.name === moduleName)
@@ -191,17 +178,14 @@ const updateCurrentComponent = (moduleName) => {
   }
 }
 
-// 专门为移动端选择框添加处理函数 - 增强版
 const handleMobileModuleChange = (value) => {
   console.log('Mobile module changed to:', value);
   
   if (!value || activeModule.value === value) return;
-  
-  // 直接修改数据
+
   activeModule.value = value;
   updateCurrentComponent(value);
-  
-  // 更新路由
+
   setTimeout(() => {
     console.log('Updating route to module:', value);
     router.replace({
@@ -209,9 +193,9 @@ const handleMobileModuleChange = (value) => {
       query: { module: value }
     }).then(() => {
       console.log('Route updated successfully');
-      // 确保组件已更新
+
       nextTick(() => {
-        // 清空搜索
+
         searchQuery.value = '';
         dataLink.value = '';
       });
@@ -221,21 +205,17 @@ const handleMobileModuleChange = (value) => {
   }, 0);
 }
 
-// 保留原有的桌面端菜单处理函数
 const handleModuleChange = (name) => {
   console.log('Module change triggered with:', name);
   
   if (activeModule.value === name) return;
-  
-  // 清空搜索和数据链接
+
   searchQuery.value = '';
   dataLink.value = '';
-  
-  // 更新当前活动模块
+
   activeModule.value = name;
   updateCurrentComponent(name);
-  
-  // 确保路由参数更新
+
   router.push({
     path: '/admin',
     query: { 
@@ -248,13 +228,11 @@ const handleModuleChange = (name) => {
   });
 }
 
-
 const updateSearchQuery = (query) => {
 
   if (searchQuery.value === query) return;
   
   searchQuery.value = query;
-  
 
   router.replace({
     path: route.path,
@@ -264,7 +242,6 @@ const updateSearchQuery = (query) => {
     }
   });
 }
-
 
 let isUpdatingFromRoute = false;
 watch(() => route.query, (newQuery) => {
@@ -301,28 +278,41 @@ watch(() => route.query, (newQuery) => {
 
 <style scoped>
 .admin-container {
-  min-height: calc(100vh - 60px);
-  padding: 20px;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px;
   background-color: #f5f7fa;
-  overflow-x: hidden; /* 防止水平溢出 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+  max-height: calc(100vh - 60px);
 }
 
 .admin-layout {
   display: flex;
-  height: calc(100vh - 100px);
+  flex: 1;
+  height: calc(100vh - 80px);
+  max-height: calc(100vh - 80px);
   gap: 20px;
   width: 100%;
+  padding: 10px;
   max-width: 100%;
   position: relative;
-  overflow: hidden; /* 防止内部元素溢出 */
+  overflow: hidden;
 }
 
 .sidebar-container {
   height: 100%;
+  max-height: 100%;
   transition: width 0.3s ease-in-out;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  overflow: hidden;
 }
 
 .collapse-width {
@@ -337,11 +327,10 @@ watch(() => route.query, (newQuery) => {
   flex: 1;
   height: 100%;
   transition: all 0.3s ease-in-out;
-  max-width: calc(100% - 20px - 64px); /* 折叠时最大宽度 */
-  width: calc(100% - 20px - 220px); /* 展开时基础宽度 */
+  max-width: calc(100% - 20px - 64px);
+  width: calc(100% - 20px - 220px);
 }
 
-/* 当侧边栏折叠时调整内容区宽度 */
 .collapse-width + .content-container {
   width: calc(100% - 20px - 64px);
   max-width: none;
@@ -414,6 +403,7 @@ watch(() => route.query, (newQuery) => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 0;
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -442,19 +432,25 @@ watch(() => route.query, (newQuery) => {
 .admin-content > :last-child {
   flex: 1;
   padding: 24px;
-  overflow: auto;
+  overflow: hidden;
   background-color: #ffffff;
+  max-height: calc(100% - 57px); /* 减去内容标题高度 */
 }
 
 @media (max-width: 768px) {
   .admin-container {
-    padding: 10px;
+    padding: 5px;
+    top: 60px;
+    height: calc(100vh - 60px);
+    max-height: calc(100vh - 60px);
   }
   
   .admin-layout {
-    height: auto;
-    gap: 10px;
+    height: calc(100vh - 120px);
+    max-height: calc(100vh - 120px);
+    gap: 5px;
     flex-direction: column;
+    overflow: hidden;
   }
   
   .content-header {
@@ -466,15 +462,18 @@ watch(() => route.query, (newQuery) => {
   }
   
   .content-container {
-    height: auto;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
   
   .admin-content {
-    height: auto;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
 }
 
-/* 移动端特定样式 */
 .mobile-header {
   background-color: white;
   padding: 15px;

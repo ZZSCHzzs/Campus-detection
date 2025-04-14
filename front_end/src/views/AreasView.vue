@@ -13,7 +13,6 @@ const expectStatus = ref<string | "all">("all")
 const buildingFilter = ref<number | "all">("all")
 const searchKeyword = ref("")
 
-
 const isFirstLoad = ref(true)
 
 watch(searchKeyword, (newVal) => {
@@ -22,7 +21,6 @@ watch(searchKeyword, (newVal) => {
     expectStatus.value = "all"
   }
 })
-
 
 const filteredAreas = computed(() => {
   return buildings.value
@@ -63,26 +61,21 @@ const fetchBuildings = async () => {
   }
 }
 
-
 const cardVisibilities = ref<Record<number, boolean>>({})
-
 
 const handleCardVisibility = (areaId: number, visible: boolean) => {
   cardVisibilities.value[areaId] = visible
 }
-
 
 const isFloorVisible = (buildingId: number, floor: number) => {
 
   const currentBuilding = buildings.value.find(b => b.id === buildingId)
   const areasInFloor = currentBuilding?.areas?.filter(a => a.floor === floor) || []
 
-
   return areasInFloor.some(area =>
       cardVisibilities.value[area.id]
   )
 }
-
 
 const isBuildingVisible = computed(() => (buildingId: number) => {
   const building = filteredBuildings.value.find(b => b.id === buildingId)
@@ -92,19 +85,16 @@ const isBuildingVisible = computed(() => (buildingId: number) => {
   )
 })
 
-// 添加移动端视口检测
 const isMobile = ref(false)
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
-  // 根据设备类型自动设置默认视图模式
+
   if (isFirstLoad.value) {
     isCompactView.value = isMobile.value
   }
 }
 
-// 添加布局切换状态
-// 初始值为false，但会在checkScreenSize中根据设备类型自动调整
 const isCompactView = ref(false)
 
 const toggleLayoutMode = () => {
@@ -151,7 +141,6 @@ onMounted(() => {
             </el-select>
           </el-col>
 
-          <!-- 状态筛选：桌面端占5格，中等屏幕及以下占12格(一行两个) -->
           <el-col :lg="5" :xl="5" :md="12" :sm="12" :xs="12" class="search-item">
             <el-select
                 v-model="expectStatus"
@@ -290,8 +279,8 @@ onMounted(() => {
 
 <style scoped>
 .areas-container {
-  max-width: 1400px;
-  margin: 20px auto;
+  max-width: 1200px;
+  margin: 10px auto;
   padding: 25px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 0;
@@ -360,20 +349,17 @@ onMounted(() => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
-/* 建筑和状态筛选器样式 */
 .building-filter,
 .status-filter {
   flex: 1;
   min-width: 150px;
 }
 
-/* 搜索框占更多空间 */
 .search-input {
   flex: 2;
   min-width: 200px;
 }
 
-/* 布局切换按钮 */
 .layout-toggle {
   flex: 0 0 auto;
   display: flex;
@@ -565,7 +551,6 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
-/* 响应式调整 */
 @media (max-width: 768px) {
   .areas-container {
     padding: 15px;
@@ -587,12 +572,10 @@ onMounted(() => {
     flex-direction: column;
   }
 
-  /* 移动端调整每个元素宽度 */
   .search-item {
     width: 100%;
   }
 
-  /* 移动端两行两列布局 */
   .building-filter,
   .status-filter,
   .search-input,
@@ -652,7 +635,6 @@ onMounted(() => {
   }
 }
 
-/* 调整小屏幕上的卡片边距 */
 @media (max-width: 576px) {
   .card-animation {
     padding-left: 5px;
