@@ -757,9 +757,8 @@ onBeforeUnmount(() => {
 }
 
 .home-container {
-  max-width: 1400px;
-
-  margin: 20px auto;
+  max-width: 1300px;
+  margin: 0 auto;
   padding: 30px;
 }
 

@@ -1,20 +1,18 @@
 <template>
   <div class="nav-container header" :class="{'mobile-header': isMobile}">
     <div v-if="isMobile" class="mobile-nav-container">
-      <!-- 移动端导航栏 -->
+
       <div class="mobile-header-row">
-        <!-- 左侧汉堡按钮 -->
+
         <el-button class="hamburger-btn" @click="toggleMobileMenu">
           <el-icon size="20"><Menu /></el-icon>
         </el-button>
-        
-        <!-- 中间Logo -->
+
         <div class="logo-container">
           <img alt="Logo" class="logo" src="/favicon256.ico"/>
           <span class="site-name">校园慧感</span>
         </div>
-        
-        <!-- 右侧用户中心/登录按钮 -->
+
         <div v-if="authStore.isAuthenticated" class="mobile-user-button">
           <el-avatar 
             :icon="UserFilled" 
@@ -29,14 +27,13 @@
           </el-button>
         </div>
       </div>
-      
-      <!-- 左侧滑出菜单 -->
+
       <div v-show="mobileMenuVisible" class="mobile-menu-overlay" @click="closeMobileMenu"></div>
       <div 
         class="mobile-side-menu" 
         :class="{'mobile-menu-open': mobileMenuVisible}"
       >
-        <!-- 菜单头部 -->
+
         <div class="side-menu-header">
           <div class="logo-container">
             <img alt="Logo" class="logo" src="/favicon256.ico"/>
@@ -46,8 +43,7 @@
             <el-icon size="20"><Close /></el-icon>
           </el-button>
         </div>
-        
-        <!-- 菜单导航项 -->
+
         <el-menu 
           :default-active="activeIndex" 
           mode="vertical" 
@@ -67,8 +63,7 @@
             <div class="nav-text">{{ item.title }}</div>
           </el-menu-item>
         </el-menu>
-        
-        <!-- 用户相关菜单项 -->
+
         <div v-if="authStore.isAuthenticated" class="mobile-user-area">
           <div class="user-info">
             <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
@@ -101,8 +96,7 @@
         </div>
       </div>
     </div>
-    
-    <!-- 桌面版导航栏 - 保持不变 -->
+
     <el-menu v-else :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
              @select="handleSelect">
       <div class="logo-container">

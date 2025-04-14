@@ -419,7 +419,7 @@ const drawerSize = ref('70%')
 
 <template>
   <div class="alert-notice-container">
-    <!-- 标题和操作区域 -->
+
     <div class="page-header">
       <div class="title-section">
         <h2 class="page-title">
@@ -441,8 +441,7 @@ const drawerSize = ref('70%')
         <el-button type="primary" :icon="Refresh" circle @click="refreshData" />
       </div>
     </div>
-    
-    <!-- 主内容区域 -->
+
     <div class="main-content">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="custom-tabs">
 
@@ -453,7 +452,7 @@ const drawerSize = ref('70%')
               <span>告警信息</span>
             </div>
           </template>
-          <!-- 过滤栏保持不变 -->
+
           <div class="filter-bar">
             <div class="left-section">
               <el-select 
@@ -483,8 +482,7 @@ const drawerSize = ref('70%')
               </el-input>
             </div>
           </div>
-          
-          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedAlerts"
@@ -580,8 +578,7 @@ const drawerSize = ref('70%')
               <el-empty description="暂无告警数据" />
             </div>
           </div>
-          
-          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="alertsLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -670,7 +667,7 @@ const drawerSize = ref('70%')
               <span>通知公告</span>
             </div>
           </template>
-          <!-- 过滤栏保持不变 -->
+
           <div class="filter-bar">
             <div class="left-section">
               <el-button 
@@ -696,8 +693,7 @@ const drawerSize = ref('70%')
               </el-input>
             </div>
           </div>
-          
-          <!-- 表格视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedNotices"
@@ -764,8 +760,7 @@ const drawerSize = ref('70%')
               <el-empty description="暂无通知数据" />
             </div>
           </div>
-          
-          <!-- 卡片视图 - 根据视图模式决定是否显示 -->
+
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="noticesLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -833,7 +828,6 @@ const drawerSize = ref('70%')
       </el-tabs>
     </div>
 
-    <!-- PC端展示对话框，移动端隐藏 -->
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -879,8 +873,7 @@ const drawerSize = ref('70%')
         </span>
       </template>
     </el-dialog>
-    
-    <!-- 移动端展示抽屉，PC端隐藏 -->
+
     <el-drawer
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -928,7 +921,6 @@ const drawerSize = ref('70%')
       </div>
     </el-drawer>
 
-    <!-- PC端告警详情对话框 -->
     <el-dialog
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1016,8 +1008,7 @@ const drawerSize = ref('70%')
         </div>
       </div>
     </el-dialog>
-    
-    <!-- 移动端告警详情抽屉 -->
+
     <el-drawer
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1106,7 +1097,6 @@ const drawerSize = ref('70%')
       </div>
     </el-drawer>
 
-    <!-- PC端通知详情对话框 -->
     <el-dialog
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1159,8 +1149,7 @@ const drawerSize = ref('70%')
         </div>
       </div>
     </el-dialog>
-    
-    <!-- 移动端通知详情抽屉 -->
+
     <el-drawer
       v-model="noticeDetailVisible"
       title="通知详情"

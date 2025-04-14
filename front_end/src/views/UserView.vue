@@ -617,7 +617,7 @@ const getRoleTagType = (role: string) => {
               </div>
               
               <div class="header-actions">
-                <!-- 添加布局切换按钮 -->
+
                 <el-button 
                   class="toggle-view-btn"
                   plain

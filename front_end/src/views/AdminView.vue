@@ -1,11 +1,11 @@
 <template>
   <div class="admin-container">
-    <!-- 移动端模块选择器 -->
+
     <div class="mobile-header" v-if="isMobile">
       <div class="mobile-title">
         <h2>系统管理</h2>
       </div>
-      <!-- 修改选择框绑定和事件处理方式 -->
+
       <el-select 
         :model-value="activeModule"
         class="mobile-module-select"
@@ -27,7 +27,7 @@
     </div>
 
     <div class="admin-layout">
-      <!-- 桌面端侧边栏 -->
+
       <div class="sidebar-container" :class="sidebarWidthClass" v-if="!isMobile">
         <div class="admin-sidebar">
           <div class="sidebar-header">
@@ -278,17 +278,28 @@ watch(() => route.query, (newQuery) => {
 
 <style scoped>
 .admin-container {
-  min-height: calc(100vh - 60px);
-  padding: 20px;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px;
   background-color: #f5f7fa;
-  overflow-x: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+  max-height: calc(100vh - 60px);
 }
 
 .admin-layout {
   display: flex;
-  height: calc(100vh - 100px);
+  flex: 1;
+  height: calc(100vh - 80px);
+  max-height: calc(100vh - 80px);
   gap: 20px;
   width: 100%;
+  padding: 10px;
   max-width: 100%;
   position: relative;
   overflow: hidden;
@@ -296,10 +307,12 @@ watch(() => route.query, (newQuery) => {
 
 .sidebar-container {
   height: 100%;
+  max-height: 100%;
   transition: width 0.3s ease-in-out;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  overflow: hidden;
 }
 
 .collapse-width {
@@ -390,6 +403,7 @@ watch(() => route.query, (newQuery) => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 0;
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -418,19 +432,25 @@ watch(() => route.query, (newQuery) => {
 .admin-content > :last-child {
   flex: 1;
   padding: 24px;
-  overflow: auto;
+  overflow: hidden;
   background-color: #ffffff;
+  max-height: calc(100% - 57px); /* 减去内容标题高度 */
 }
 
 @media (max-width: 768px) {
   .admin-container {
-    padding: 10px;
+    padding: 5px;
+    top: 60px;
+    height: calc(100vh - 60px);
+    max-height: calc(100vh - 60px);
   }
   
   .admin-layout {
-    height: auto;
-    gap: 10px;
+    height: calc(100vh - 120px);
+    max-height: calc(100vh - 120px);
+    gap: 5px;
     flex-direction: column;
+    overflow: hidden;
   }
   
   .content-header {
@@ -442,11 +462,15 @@ watch(() => route.query, (newQuery) => {
   }
   
   .content-container {
-    height: auto;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
   
   .admin-content {
-    height: auto;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
 }
 

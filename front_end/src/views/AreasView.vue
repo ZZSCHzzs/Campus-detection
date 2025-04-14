@@ -141,7 +141,6 @@ onMounted(() => {
             </el-select>
           </el-col>
 
-          <!-- 状态筛选：桌面端占5格，中等屏幕及以下占12格(一行两个) -->
           <el-col :lg="5" :xl="5" :md="12" :sm="12" :xs="12" class="search-item">
             <el-select
                 v-model="expectStatus"
@@ -280,8 +279,8 @@ onMounted(() => {
 
 <style scoped>
 .areas-container {
-  max-width: 1400px;
-  margin: 20px auto;
+  max-width: 1200px;
+  margin: 10px auto;
   padding: 25px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 0;

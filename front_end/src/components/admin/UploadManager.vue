@@ -148,7 +148,6 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 结果显示 -->
     <div v-if="resultMessage" class="result-message" :class="resultStatus">
       {{ resultMessage }}
     </div>

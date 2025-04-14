@@ -44,8 +44,8 @@
         <slot name="filters"></slot>
       </div>
     </div>
-
-    <el-card class="table-card" shadow="hover" :body-style="isMobile ? 'padding: 0; margin: 0;' : 'padding: 0px;'">
+    <div class="table-area">
+      <el-card class="table-card" shadow="hover" :body-style="isMobile ? 'padding: 0; margin: 0;' : 'padding: 0px;'">
       <el-table
         v-loading="loading"
         :data="paginatedData"
@@ -78,7 +78,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column :label="isMobile ? '' : '操作'" :width="isMobile ? '80' : '180'" fixed="right" align="center">
+        <el-table-column :label="isMobile ? '' : '操作'" :width="isMobile ? '80' : '170'" fixed="right" align="center">
           <template #default="scope">
             <div class="action-buttons" :class="{'mobile-actions': isMobile}">
               <el-button type="primary" size="small" @click="handleEdit(scope.row)" :text="!isMobile">
@@ -94,6 +94,8 @@
         </el-table-column>
       </el-table>
     </el-card>
+    </div>
+
 
     <div class="pagination-container">
       <el-pagination
@@ -133,7 +135,6 @@
       </template>
     </el-dialog>
 
-    <!-- 移动端使用抽屉组件 -->
     <el-drawer
       v-else
       v-model="dialogVisible"
@@ -469,8 +470,8 @@ const filteredColumns = computed(() => {
 });
 
 const tableHeight = computed(() => {
-
-  return isMobile.value ? 400 : 500;
+  // 为移动设备和桌面设备使用不同的高度计算
+  return isMobile.value ? 'calc(65vh - 160px)' : 'calc(75vh - 180px)';
 });
 
 const refreshTimer = ref(null)
@@ -489,6 +490,8 @@ const handleRefresh = () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .manager-header {
@@ -535,11 +538,6 @@ const handleRefresh = () => {
 
 .search-input {
   width: 300px;
-}
-
-.table-card {
-  margin: 10px 0;
-  width: 100%;
 }
 
 .pagination-container {
@@ -599,6 +597,14 @@ const handleRefresh = () => {
     padding: 5px 0;
   }
   
+  .table-card :deep(.el-card__body) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+  }
+  
   .table-card :deep(.el-table) {
     font-size: 12px;
   }
@@ -609,6 +615,8 @@ const handleRefresh = () => {
   
   .table-card {
     margin: 5px 0;
+    flex: 1;
+    overflow: hidden;
   }
   
   .dialog-footer {
@@ -618,6 +626,8 @@ const handleRefresh = () => {
 
 .base-manager.mobile {
   gap: 8px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .mobile .manager-title {
@@ -650,12 +660,14 @@ const handleRefresh = () => {
 }
 
 .table-card {
-  margin: 10px 0;
+  margin: 0;
   width: 100%;
+  overflow: hidden;
 }
 
 .el-table {
-  overflow-y: auto;
+  overflow: auto;
+  flex: 1;
 }
 
 .refresh-button {
@@ -715,9 +727,17 @@ const handleRefresh = () => {
   font-size: 12px;
 }
 
+.table-area{
+  flex: 1;
+  overflow: hidden;
+}
+
 .table-card {
   margin: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .drawer-btn {

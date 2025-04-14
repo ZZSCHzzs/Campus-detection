@@ -108,9 +108,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- 改进后的紧凑模式卡片 - 更像卡片而不是条状 -->
+
   <div v-if="compact && displayCard()" class="area-card-compact" :class="{'offline': !nodeData?.status}">
-    <!-- 卡片顶部信息区域 -->
+
     <div class="card-header-compact">
       <div class="header-main">
         <h4 class="area-name">{{ area.name }}</h4>
@@ -139,8 +139,7 @@ onBeforeUnmount(() => {
         ></el-button>
       </div>
     </div>
-    
-    <!-- 卡片中部数据区域 - 简化版，移除了进度条 -->
+
     <div class="card-body-compact">
       <div class="count-display-compact">
         <div class="count-and-capacity">
@@ -156,14 +155,12 @@ onBeforeUnmount(() => {
         {{ loadStatus }}
       </div>
     </div>
-    
-    <!-- 加载指示器 -->
+
     <div v-if="loading" class="compact-loading-overlay">
       <div class="compact-loading-spinner"></div>
     </div>
   </div>
 
-  <!-- 标准模式卡片 - 保持原有设计 -->
   <el-card v-else-if="displayCard()" :body-style="{ padding: '0px' }" class="area-card">
     <div :style="{ background: `linear-gradient(135deg, ${loadColor}22, ${loadColor}44)` }" class="card-header">
       <h3>{{ area.name }}</h3>
