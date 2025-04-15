@@ -10,8 +10,22 @@ import AreaList from '../components/AreaList.vue'
 
 import {
   User, Monitor, OfficeBuilding, Connection, MapLocation,
-  DataAnalysis, Warning, Bell, FirstAidKit
+  DataAnalysis, Warning, Bell, FirstAidKit, 
+  Document, Reading, School, Postcard, Platform, 
+  Management, CreditCard, Trophy, Link
 } from '@element-plus/icons-vue'
+
+const navigationItems = ref([
+  { icon: 'Document', link: 'http://today.hit.edu.cn', title: '校内新闻' },
+  { icon: 'School', link: 'http://jwts.hit.edu.cn', title: '本科生教务系统' },
+  { icon: 'Reading', link: 'http://yjsgl.hit.edu.cn/', title: '研究生管理系统' },
+  { icon: 'Platform', link: 'http://i.hit.edu.cn', title: '门户平台' },
+  { icon: 'Connection', link: 'http://i-hit-edu-cn.ivpn.hit.edu.cn', title: 'IVPN(校外)' },
+  { icon: 'Management', link: 'https://xg.hit.edu.cn/xs/mh', title: '学工系统' },
+  { icon: 'CreditCard', link: 'http://xyk.hit.edu.cn', title: '校园卡' },
+  { icon: 'Trophy', link: 'http://venue-book.hit.edu.cn:8080/', title: '运动场地预约' },
+  { icon: 'Reading', link: 'http://ic.lib.hit.edu.cn/', title: '图书馆预约' }
+])
 
 const Hotareas = ref<AreaItem[]>([])
 const loading = ref(false)
@@ -66,8 +80,6 @@ const fetchFavoriteAreas = async () => {
     }
   } catch (error) {
     console.error('获取收藏区域失败:', error)
-    favoriteAreaIds.value = []
-    favoriteAreas.value = []
   }
 }
 
@@ -265,12 +277,6 @@ onMounted(async () => {
       await fetchFavoriteAreas()
     }, 30000)
   }
-  onBeforeUnmount(() => {
-    clearInterval(intervalTimer1)
-    if (isAuthenticated.value) {
-      clearInterval(intervalTimer2)
-    }
-  })
 })
 
 onBeforeUnmount(() => {
@@ -449,6 +455,22 @@ onBeforeUnmount(() => {
               </div>
             </template>
           </el-skeleton>
+        </el-card>
+
+        <el-card class="dashboard-card">
+          <template #header>
+            <span class="card-title">🔗 校园资源导航</span>
+          </template>
+          <div class="navigation-links">
+            <a v-for="item in navigationItems" :key="item.title" :href="item.link" target="_blank" class="nav-link">
+              <div class="nav-item">
+                <el-icon class="nav-icon">
+                  <component :is="item.icon" />
+                </el-icon>
+                <span class="nav-title">{{ item.title }}</span>
+              </div>
+            </a>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -785,6 +807,49 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
+.navigation-links {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border-radius: 8px;
+  background-color: #f5f7fa;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.nav-item:hover {
+  background-color: #ecf5ff;
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.nav-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: #409EFF;
+}
+
+.nav-title {
+  font-size: 12px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
 @media (max-width: 768px) {
   .home-container {
     padding: 15px;
@@ -835,6 +900,10 @@ onBeforeUnmount(() => {
   .mt-20 {
     margin-top: 15px;
   }
+
+  .navigation-links {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 480px) {
@@ -848,6 +917,10 @@ onBeforeUnmount(() => {
 
   #trend-chart {
     height: 200px !important;
+  }
+
+  .navigation-links {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>
