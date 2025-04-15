@@ -198,15 +198,16 @@ const content = ref([
     index: '1',
     title: '区域',
     path: '/areas',
-    icon: 'Menu'
+    icon: 'Menu',
+    hideOnMobile: false,
   },
-  {
-    index: '2',
-    title: '数据大屏',
-    path: '/screen',
-    icon: 'DataLine',
-    hideOnMobile: true
-  },
+  // {
+  //   index: '2',
+  //   title: '数据大屏',
+  //   path: '/screen',
+  //   icon: 'DataLine',
+  //   hideOnMobile: true
+  // },
   {
     index: '3',
     title: '告警与通知',
