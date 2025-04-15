@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive, computed, watchEffect } from 'vue'
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, historicalService } from '../services/apiService'
 import type { AreaItem, HistoricalData, SummaryData } from '../types'
@@ -281,7 +281,10 @@ onMounted(async () => {
     
     // 获取区域数据
     areas.value = await areaService.getAll()
-    
+    // 初始化卡片顺序
+    cardOrders.value = areas.value.map((_, index) => index)
+    // 启动卡片轮换
+    startCardRotation()
     // 初始化图表
     if (chartRef.value) {
       areaChart = initChart(chartRef.value)
@@ -313,6 +316,7 @@ onMounted(async () => {
       clearInterval(chartTimer)
       clearInterval(messagesTimer)
       clearInterval(timeTimer)
+      if (cardRotationTimer.value) clearInterval(cardRotationTimer.value)
       window.removeEventListener('resize', () => {
         areaChart?.resize()
       })
@@ -324,17 +328,67 @@ onMounted(async () => {
   }
 })
 
-const formatTime = (timestamp: string) => {
-  if (!timestamp) return '';
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
 // 添加地图图片路径
 const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
+
+// 添加到script setup部分
+const statusGridRef = ref(null)
+
+// 卡片轮换相关变量
+const cardRotationTimer = ref(null)
+// 添加一个响应式数组来管理顺序
+const cardOrders = ref([])
+// 轮换卡片的函数
+const rotateCards = () => {
+  if (!areas.value || areas.value.length <= 1) return
+  
+  // 移动每个元素的顺序值
+  const orders = [...cardOrders.value]
+  cardOrders.value = orders.map((_, i) => 
+    (i + 1) % orders.length
+  )
+}
+// 启动卡片轮换
+const startCardRotation = () => {
+  if (cardRotationTimer.value) clearInterval(cardRotationTimer.value)
+  cardRotationTimer.value = setInterval(rotateCards, 5000)
+}
+// 将占位函数替换为正确的实现
+function formatTime(value: string) {
+  if (!value) return '--:--'
+  
+  try {
+    const date = new Date(value)
+    
+    // 检查日期是否有效
+    if (isNaN(date.getTime())) {
+      return value // 如果无法解析，则返回原始字符串
+    }
+    
+    // 如果是今天的日期，只显示时间
+    const today = new Date()
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString('zh-CN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    } else {
+      // 否则显示日期+时间(简短格式)
+      return date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).replace(/\//g, '-')
+    }
+  } catch (error) {
+    console.error('日期格式化错误:', error)
+    return value // 出错时返回原始值
+  }
+}
+
+
 </script>
 
 <template>
@@ -391,61 +445,80 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 
       <!-- 主要图表区域 -->
       <div class="main-content">
-        <div  class="charts-container">
-          <div v-if="false" ref="chartRef" class="chart-container">
-            <div class="tech-corners"></div>
+        <!-- 区域状态容器置于顶部 -->
+        <div class="areas-container">
+          <div class="tech-corners"></div>
+          <div class="section-header">
+            <h2>区域状态监控</h2>
+            <div class="subtitle">Area Status Monitor</div>
           </div>
-          <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
-        </div>
-        
-        <div class="right-container">
-          <!-- 区域状态容器 -->
-          <div class="areas-container">
-            <div class="tech-corners"></div>
-            <div class="section-header">
-              <h2>区域状态监控</h2>
-              <div class="subtitle">Area Status Monitor</div>
-            </div>
-            <div class="status-grid">
-              <el-card v-for="area in areas" :key="area.id" class="area-card">
+          <div class="status-grid" ref="statusGridRef">
+            <div class="card-container">
+              <el-card v-for="(area, index) in areas" 
+                      :key="area.id" 
+                      class="area-card"
+                      :class="{'card-moving': cardOrders[index] !== index}" 
+                      :style="{ order: cardOrders[index] }">
+                <!-- 左侧区域名称与状态 -->
                 <div class="area-header">
-                  <div class="header-left">
-                    <h4>{{ area.name }}
-                      <span class="status-badge" :class="{'status-active': area.status}">
-                        {{ area.status ? '正常' : '异常' }}
-                      </span>
-                    </h4>
-                  </div>
+                  <h4>
+                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                    <span class="status-badge" :class="{'status-active': area.status}">
+                      {{ area.status ? '正常' : '异常' }}
+                    </span>
+                  </h4>
                 </div>
+                
+                <!-- 右侧区域统计信息 -->
                 <div class="area-stats">
                   <div class="stat-item">
-                    <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                    <div class="stat-top">
+                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                    </div>
                     <div class="usage-bar">
                       <div class="usage-fill" 
-                           :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
-                           :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
-                    </div>
-                    <div class="area-meta">
-                      <span>楼层: {{ area.floor }}F</span>
-                      <span v-if="area.updated_at">{{ formatTime(area.updated_at) }}</span>
+                          :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
+                          :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
                     </div>
                   </div>
                 </div>
               </el-card>
             </div>
           </div>
-
-          <!-- 新增高占用区域提醒 -->
-          <div v-if="highOccupancyAreas.length > 0" class="high-occupancy-alert">
-            <div class="alert-header">
-              <span class="alert-icon">⚠️</span>
-              <span class="alert-title">高占用区域</span>
-            </div>
-            <div class="alert-content">
-              <div v-for="area in highOccupancyAreas" :key="area.id" class="alert-item">
-                {{ area.name }}: {{ area.detected_count }}/{{ area.capacity }} 
-                ({{ Math.round((area.detected_count / area.capacity) * 100) }}%)
+        </div>
+        
+        <!-- 下方分为左右两栏 -->
+        <div class="lower-content">
+          <!-- 热力图容器位于左侧 -->
+          <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
+            <template #default="{ mapElement }">
+              <div class="map-image-wrapper">
+                {{ mapElement }}
               </div>
+            </template>
+          </HeatMap>
+
+          <!-- 图表容器位于右侧 -->
+          <div ref="chartRef" class="chart-container">
+            <div class="tech-corners"></div>
+            <div class="section-header">
+              <h2>区域趋势分析</h2>
+              <div class="subtitle">Area Trend Analysis</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 高占用区域提醒 -->
+        <div v-if="highOccupancyAreas.length > 0" class="high-occupancy-alert">
+          <div class="alert-header">
+            <span class="alert-icon">⚠️</span>
+            <span class="alert-title">高占用区域</span>
+          </div>
+          <div class="alert-content">
+            <div v-for="area in highOccupancyAreas" :key="area.id" class="alert-item">
+              {{ area.name }}: {{ area.detected_count }}/{{ area.capacity }} 
+              ({{ Math.round((area.detected_count / area.capacity) * 100) }}%)
             </div>
           </div>
         </div>
@@ -817,9 +890,9 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 
 /* 主内容样式 */
 .main-content {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   height: calc(100vh - 160px - 60px);
   margin-bottom: 60px;
   position: relative;
@@ -840,22 +913,94 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 }
 
 .chart-container {
-  flex: 1;
-  background: rgba(30, 41, 59, 0.7);
+  flex: 0.9; /* 略微减小图表比例 */
   border-radius: 15px;
-  padding: 20px;
+  padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
+  background: rgba(30, 41, 59, 0.7);
 }
 
 .heatmap-container {
-  flex: 1;
+  flex: 1.2; /* 热力图占比略大 */
   border-radius: 15px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px !important; /* 修改内边距 */
+}
+
+/* 创建渐变遮罩容器 */
+.map-image-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 图片样式与边缘模糊效果 */
+.heatmap-container :deep(canvas),
+.heatmap-container :deep(img) {
+  border-radius: 8px;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+  object-fit: contain;
+
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  mask-image: radial-gradient(
+    ellipse 90% 90% at center,
+    black 60%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.6) 80%,
+    rgba(0, 0, 0, 0.3) 90%,
+    transparent 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 90% at center,
+    black 60%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.6) 80%,
+    rgba(0, 0, 0, 0.3) 90%,
+    transparent 100%
+  );
+}
+
+/* 可选：添加发光效果增强过渡感 */
+.heatmap-container :deep(canvas)::after,
+.heatmap-container :deep(img)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 100px 20px rgba(30, 41, 59, 0.7);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 可选：添加科技感装饰 */
+.heatmap-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  border-top: 2px solid rgba(56, 189, 248, 0.5);
+  border-left: 2px solid rgba(56, 189, 248, 0.5);
 }
 
 /* 右侧容器样式 */
@@ -865,117 +1010,68 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
   gap: 20px;
 }
 
-/* 区域状态容器样式 */
+/* 区域状态容器样式优化 */
 .areas-container {
-  flex: 1;
+  flex: 0.35; 
   background: rgba(30, 41, 59, 0.7);
-  border-radius: 15px;
-  padding: 15px;
+  border-radius: 12px;
+  padding: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
-  overflow: hidden;
-  backdrop-filter: blur(10px);
+  overflow: hidden; /* 隐藏溢出内容 */
+  backdrop-filter: blur(8px);
   position: relative;
+  min-height: 110px; /* 减小高度 */
+  max-height: 130px; /* 减小最大高度 */
+  display: flex;
+  flex-direction: column;
 }
 
+/* 修改状态网格样式，移除原有的动画 */
 .status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
-  height: calc(100% - 40px);
-  overflow-y: auto;
-  padding: 5px;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  padding: 3px 0;
 }
 
+/* 添加卡片容器样式 */
+.card-container {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding-right: 20px;
+  transition: transform 0.5s ease-in-out;
+}
+
+/* 区域卡片样式 */
 .area-card {
+  flex: 0 0 180px;
   background: rgba(30, 41, 59, 0.8) !important;
-  border: 1px solid rgba(56, 189, 248, 0.2) !important;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  min-height: 80px;
-  padding: 8px 10px !important;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s;
-}
-
-.area-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25);
-}
-
-.area-header h4 {
-  font-size: 0.9rem;
-  margin: 0;
-  color: #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
+  border: 2px solid rgba(56, 189, 248, 0.2) !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  min-height: 50px;
+  padding: 6px 10px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin: 0 !important;
   overflow: hidden;
-  text-overflow: ellipsis;
+  box-sizing: border-box;
+  height: calc(100% - 2px);
+  transition: all 0.5s ease;
+  order: 0; /* 默认顺序属性 */
 }
 
-.header-left {
-  width: 100%;
+/* 卡片移动中的过渡效果 */
+.card-moving {
+  transition: all 0.5s ease-in-out;
+  transform: scale(1.03); /* 轻微缩放以增强效果可见性 */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25) !important;
 }
-
-.area-stats {
-  margin-top: 8px;
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 5px 8px;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(56, 189, 248, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-  transition: all 0.3s ease;
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-item span {
-  font-size: 1.2rem;
-  font-weight: bold;
-  background: linear-gradient(45deg, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  color: transparent;
-}
-
-.usage-bar {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.area-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.7rem;
-  color: #94a3b8;
-  margin-top: 3px;
-}
-
-.status-badge {
-  padding: 2px 5px;
-  border-radius: 10px;
-  font-size: 0.7rem;
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  margin-left: 4px;
-}
-
 /* 科技感边角装饰 */
 .tech-corners::before,
 .tech-corners::after {
@@ -1107,7 +1203,7 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 .status-badge {
   padding: 4px 8px;
   border-radius: 12px;
-  font-size: 0.8rem;
+  font-size: 0.5rem;
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
   margin-left: 8px;
@@ -1207,5 +1303,61 @@ const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 .message-text {
   color: #e2e8f0;
   font-weight: 500;
+}
+
+/* 下部内容区域样式 */
+.lower-content {
+  display: flex;
+  gap: 15px;
+  flex: 1;
+  min-height: 0; /* 允许内容压缩 */
+  margin-top: 10px;
+}
+
+@media (max-width: 1200px) {
+  .lower-content {
+    flex-direction: column;
+  }
+}
+
+.heatmap-container {
+  flex: 1.2; /* 热力图占比略大 */
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px !important; /* 覆盖原有的过大内边距 */
+}
+
+.chart-container {
+  flex: 0.9; /* 略微减小图表比例 */
+  border-radius: 15px;
+  padding: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+  background: rgba(30, 41, 59, 0.7);
+}
+
+.section-header {
+  margin-bottom: 6px; /* 减小底部边距 */
+  flex-shrink: 0; /* 不允许标题部分压缩 */
+}
+
+.section-header h2 {
+  font-size: 0.95rem; /* 减小标题字体 */
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.7rem; /* 减小副标题字体 */
 }
 </style>
