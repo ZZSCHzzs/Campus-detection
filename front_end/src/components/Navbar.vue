@@ -94,6 +94,13 @@
           <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
           <el-button size="small" type="primary" class="register-btn" @click="navigateToRegister">注册</el-button>
         </div>
+
+        <div class="github-link-mobile">
+          <a href="https://github.com/ZZSCHzzs/Campus-detection" target="_blank" class="github-btn-mobile">
+            <img src="/github_favicon.svg" alt="GitHub" class="github-icon" />
+            <span>GitHub 代码仓库</span>
+          </a>
+        </div>
       </div>
     </div>
 
@@ -120,6 +127,12 @@
       </el-menu-item>
 
       <div class="flex-grow"></div>
+
+      <div class="github-button-container">
+        <a href="https://github.com/ZZSCHzzs/Campus-detection" target="_blank" class="github-btn">
+          <img src="/github_favicon.svg" alt="GitHub" class="github-icon" />
+        </a>
+      </div>
 
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
@@ -898,5 +911,67 @@ el-menu-item {
     background-color: #409EFF;
     box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
   }
+}
+
+/* 添加外部链接图标样式 */
+.external-link-icon {
+  margin-left: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.nav-item:hover .external-link-icon {
+  opacity: 1;
+}
+
+/* GitHub按钮样式 */
+.github-button-container {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.github-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #f5f7fa;
+  transition: all 0.3s ease;
+}
+
+.github-btn:hover {
+  background-color: #ecf5ff;
+  transform: translateY(-3px) rotate(5deg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.github-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* 移动版GitHub链接样式 */
+.github-link-mobile {
+  padding: 15px;
+  border-top: 1px solid #eaeaea;
+}
+
+.github-btn-mobile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #f5f7fa;
+  text-decoration: none;
+  color: #606266;
+  transition: all 0.2s ease;
+}
+
+.github-btn-mobile:hover {
+  background-color: #ecf5ff;
 }
 </style>
