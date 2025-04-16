@@ -12,14 +12,13 @@ from camera import apply_camera_config
 app = Flask(__name__)
 
 # 运行模式
-MODE = "push"  # "pull" 或 "push"
+MODE = "pull"  # "pull" 或 "push"
 PULL_MODE_INTERVAL = 1  # 主动拉取模式的间隔时间（秒）
 PRE_LOAD_MODEL = True # 是否预加载模型
 LOADED_MODEL = None # 全局变量存储预加载的模型
 SAVE_IMAGE = True  # 是否保存图像
-INITIALIZE_CAMERA = True  # 是否初始化摄像头
+INITIALIZE_CAMERA = False  # 是否初始化摄像头
 CAMERAS = {
-    1: "http://192.168.1.101:81",
     2: "http://192.168.1.102:81"
 }
 STREAM_URL = "/stream"
@@ -42,15 +41,31 @@ def initialize_cameras():
 
 # 从 WiFi 摄像头捕获图像
 def capture_image_from_camera(camera_url):
-    cap = cv2.VideoCapture(camera_url+STREAM_URL)
-    if not cap.isOpened():
-        raise Exception("无法连接到摄像头")
-    ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        raise Exception("无法读取图像")
-    return frame
+    print(f"捕获图像: {camera_url}")
+    stream_url = camera_url + "/stream"
 
+    try:
+        # 使用 Requests 流模式读取数据
+        response = requests.get(stream_url, stream=True, timeout=5)
+        if response.status_code != 200:
+            raise Exception(f"HTTP 错误码: {response.status_code}")
+
+        bytes_data = bytes()
+        for chunk in response.iter_content(chunk_size=1024):
+            bytes_data += chunk
+            # 查找 JPEG 起始和结束标记
+            a = bytes_data.find(b'\xff\xd8')
+            b = bytes_data.find(b'\xff\xd9')
+            if a != -1 and b != -1:
+                jpg = bytes_data[a:b + 2]
+                bytes_data = bytes_data[b + 2:]
+                # 转换为 OpenCV 图像格式
+                image = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                if image is not None:
+                    return image
+        raise Exception("未找到有效的 JPEG 帧")
+    except Exception as e:
+        raise Exception(f"流捕获失败: {str(e)}")
 
 # 调用 detect.detect() 分析人数
 def analyze_image(image, node_id):
@@ -96,7 +111,7 @@ def analyze_images(images_data):
 
 # 上传检测结果到服务器
 def upload_result(camera_id, detected_count):
-    url = "http://smarthit.top:8000/api/upload/"
+    url = "https://smarthit.top/api/upload/"
     data = {
         "id": camera_id,
         "detected_count": detected_count,

@@ -106,6 +106,27 @@ const initChart = async () => {
     }
 
     chart = echarts.init(chartDom)
+    const hours = Array.from({ length: 18 }, (_, i) => `${i + 6}:00`)
+    const peopleData = [
+      10,   // 6:00
+      20,   // 7:00
+      180,  // 8:00 早高峰
+      195,  // 9:00
+      320,  // 10:00
+      325,  // 11:00
+      250,  // 12:00 午餐高峰
+      180,  // 13:00
+      280,  // 14:00
+      285,  // 15:00
+      160,   // 16:00
+      130,  // 17:00 晚餐高峰
+      180,  // 18:00
+      310,  // 19:00 晚自习高峰
+      330,  // 20:00
+      340,  // 21:00
+      120,   // 22:00
+      20    // 23:00
+    ]
     const option = {
       title: { text: '今日人流趋势' },
       tooltip: { trigger: 'axis' },
@@ -115,10 +136,10 @@ const initChart = async () => {
         bottom: '3%',
         containLabel: true
       },
-      xAxis: { type: 'category', data: ['6:00', '9:00', '12:00', '15:00', '18:00', '21:00', '24:00'] },
+      xAxis: { type: 'category', data: hours },
       yAxis: { type: 'value' },
       series: [{
-        data: [10, 200, 100, 180, 70, 110, 20],
+        data: peopleData,
         type: 'line',
         smooth: true,
         symbolSize: 8,
