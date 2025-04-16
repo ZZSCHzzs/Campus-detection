@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AlertManager: typeof import('./src/components/admin/AlertManager.vue')['default']
     AreaCard: typeof import('./src/components/AreaCard.vue')['default']
+    AreaHistoryChart: typeof import('./src/components/AreaHistoryChart.vue')['default']
     AreaList: typeof import('./src/components/AreaList.vue')['default']
     AreaManager: typeof import('./src/components/admin/AreaManager.vue')['default']
     BaseManager: typeof import('./src/components/admin/BaseManager.vue')['default']
@@ -56,6 +57,8 @@ declare module 'vue' {
     ElTimeline: typeof import('element-plus/es')['ElTimeline']
     ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    HardwareNodeStatus: typeof import('./src/components/HardwareNodeStatus.vue')['default']
+    HeatMap: typeof import('./src/components/HeatMap.vue')['default']
     HistoricalDataManager: typeof import('./src/components/admin/HistoricalDataManager.vue')['default']
     Jump: typeof import('./src/components/admin/Jump.vue')['default']
     Navbar: typeof import('./src/components/Navbar.vue')['default']
