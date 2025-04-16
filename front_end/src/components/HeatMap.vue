@@ -16,6 +16,9 @@ const areaCoordinates = {
   '正心12': [1526,1020],
   '正心13': [1526,1420],
   '正心21': [1526,1420],
+  '正心14':[886,2000-1753],
+  '正心22':[1473,2000-1746],
+  '正心23':[173,1273],
 }
 
 // 生成随机数的辅助函数
@@ -32,15 +35,15 @@ const generateExtraPoints = (basePoints) => {
     const [x, y, value] = point.value
     
     // 根据人流量值生成周围点的数量
-    const pointCount = Math.max(3, Math.floor(value / 10))
+    const pointCount = Math.max(5, Math.floor(value))
     
     // 周围点的值会逐渐衰减
     for (let i = 0; i < pointCount; i++) {
-      const distance = 20 + i * 15
+      const distance = 30 + i * 20
       const angle = Math.random() * Math.PI * 2
       const newX = x + Math.cos(angle) * distance
       const newY = y + Math.sin(angle) * distance
-      const newValue = value * (0.9 - i * 0.15)
+      const newValue = value * (0.9 - i * 0.06)
       
       extraPoints.push({
         name: `extra_${point.name}_${i}`,

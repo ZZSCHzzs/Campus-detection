@@ -1,54 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch} from 'vue'
 import * as echarts from 'echarts'
-import { areaService, alertService, noticeService, summaryService, historicalService, nodeService } from '../services/apiService'
+import { areaService, alertService, noticeService, summaryService, nodeService } from '../services/apiService'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
-
-// 区域趋势分析模拟数据
-const historicalData = [
-  { timestamp: '2025-04-16 08:00:00', detected_count: 23 },
-  { timestamp: '2025-04-16 08:30:00', detected_count: 45 },
-  { timestamp: '2025-04-16 09:00:00', detected_count: 78 },
-  { timestamp: '2025-04-16 09:30:00', detected_count: 102 },
-  { timestamp: '2025-04-16 10:00:00', detected_count: 95 },
-  { timestamp: '2025-04-16 10:30:00', detected_count: 88 },
-  { timestamp: '2025-04-16 11:00:00', detected_count: 76 },
-  { timestamp: '2025-04-16 11:30:00', detected_count: 92 },
-  { timestamp: '2025-04-16 12:00:00', detected_count: 134 },
-  { timestamp: '2025-04-16 12:30:00', detected_count: 156 },
-  { timestamp: '2025-04-16 13:00:00', detected_count: 121 },
-  { timestamp: '2025-04-16 13:30:00', detected_count: 89 },
-  { timestamp: '2025-04-16 14:00:00', detected_count: 72 },
-  { timestamp: '2025-04-16 14:30:00', detected_count: 68 },
-  { timestamp: '2025-04-16 15:00:00', detected_count: 82 },
-  { timestamp: '2025-04-16 15:30:00', detected_count: 96 },
-  { timestamp: '2025-04-16 16:00:00', detected_count: 115 },
-  { timestamp: '2025-04-16 16:30:00', detected_count: 142 },
-  { timestamp: '2025-04-16 17:00:00', detected_count: 168 },
-  { timestamp: '2025-04-16 17:30:00', detected_count: 153 },
-  { timestamp: '2025-04-16 18:00:00', detected_count: 112 },
-  { timestamp: '2025-04-16 18:30:00', detected_count: 87 },
-  { timestamp: '2025-04-16 19:00:00', detected_count: 64 },
-  { timestamp: '2025-04-16 19:30:00', detected_count: 38 }
-]
-// 添加节点状态相关的状态
-const currentAreaNodes = ref<HardwareNode[]>([])
-const nodeFetchTimer = ref<number | null>(null)
-// 更新获取当前区域节点数据的方法
-const fetchCurrentAreaNodes = async () => {
-  if (!areas.value || areas.value.length === 0) return
-  
-  const currentArea = areas.value[currentAreaIndex.value]
-  try {
-    // 获取当前区域的节点数据
-    const nodes = await nodeService.getDatabyAreaId(currentArea.id)
-    currentAreaNodes.value = nodes
-  } catch (error) {
-    console.error('获取节点数据失败:', error)
-    currentAreaNodes.value = []
-  }
-}
+import AreaHistoryChart from '../components/AreaHistoryChart.vue'
+import HardwareNodeStatus from '../components/HardwareNodeStatus.vue' // 导入新组件
 // 添加统计数据
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -113,7 +70,6 @@ const fetchLatestMessages = async () => {
       alertService.getUnsolvedAlerts(),
       noticeService.getLatestNotices(5)
     ])
-    
     const newMessages: Message[] = [
       ...alerts.map(alert => ({
         id: alert.id,
@@ -157,6 +113,9 @@ const updateStats = async () => {
   try {
     const data = await summaryService.getSummary()
     summary.value = data as SummaryData
+    const alerts = await alertService.getUnsolvedAlerts()
+    const alertsCount = alerts.length
+    summary.value.alerts_count = alertsCount
     updateTime()
   } catch (error) {
     console.error('获取统计数据失败:', error)
@@ -166,160 +125,7 @@ const updateStats = async () => {
 // 添加当前显示的区域索引
 const currentAreaIndex = ref(0)
 
-// 初始化图表
-const initChart = (chartDom: HTMLElement) => {
-  
-  if (!chartDom) return null 
-  // 使用容器中的子元素作为图表渲染区域
-  const chartContainer = chartDom.querySelector('.chart-inner-container')
-  if (!chartContainer) return null
-  
-  const chart = echarts.init(chartContainer as HTMLElement)
-  
-  const option = {
-    dataset: {
-      source: [] as Array<[string, number]>
-    },
-    title: {
-      text: '区域实时人流',
-      subtext: '', 
-      textStyle: {
-        color: '#e2e8f0',
-        fontSize: 16,
-        fontWeight: 600
-      },
-      subtextStyle: {
-        color: '#94a3b8',
-        fontSize: 14
-      }
-    },
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-      borderColor: 'rgba(56, 189, 248, 0.3)',
-      textStyle: {
-        color: '#e2e8f0'
-      },
-      axisPointer: {
-        type: 'line',
-        lineStyle: {
-          color: '#3b82f6'
-        }
-      }
-    },
-    grid: {
-      left: '5%',
-      right: '5%',
-      top: '15%',
-      bottom: '12%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'time',
-      name: '时间',
-      nameTextStyle: {
-        color: '#88ccff'
-      },
-      axisLabel: {
-        color: '#94a3b8',
-        formatter: (value: string) => formatTime(value)
-      },
-      splitLine: {
-        show: true,
-        lineStyle: {
-          color: 'rgba(59, 130, 246, 0.1)'
-        }
-      },
-      scale: true,
-      boundaryGap: ['20%', '20%']
-    },
-    yAxis: {
-      type: 'value',
-      name: '人数',
-      nameTextStyle: {
-        color: '#88ccff'
-      },
-      axisLabel: {
-        color: '#94a3b8'
-      },
-      splitLine: {
-        show: true,
-        lineStyle: {
-          color: 'rgba(59, 130, 246, 0.1)'
-        }
-      },
-      scale: true,
-      min: (value: { min: number }) => Math.floor(value.min * 0.8),
-      max: (value: { max: number }) => Math.ceil(value.max * 1.2)
-    },
-    series: [{
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 8,
-      lineStyle: {
-        width: 3,
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#3b82f6' },
-          { offset: 1, color: '#60a5fa' }
-        ])
-      },
-      itemStyle: {
-        color: '#3b82f6',
-        borderWidth: 2,
-        borderColor: '#fff'
-      },
-      areaStyle: {
-        opacity: 0.2,
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-          { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
-        ])
-      }
-    }]
-  }
-  
-  chart.setOption(option)
-  return chart
-}
 
-// 更新图表数据
-const updateChart = async () => {
-  try {
-    if (!areaChart || !areas.value || areas.value.length === 0) return
-    
-    // 更新当前区域索引
-    currentAreaIndex.value = (currentAreaIndex.value + 1) % areas.value.length
-    const currentArea = areas.value[currentAreaIndex.value]
-
-    // 使用模拟的历史数据，无需API调用
-    // 根据当前区域ID来简单修改数据，使得不同区域有不同的曲线
-    const modifier = (currentArea.id % 5) * 0.2 + 0.8 // 0.8到1.8之间的修改系数
-    
-    const customHistoricalData = historicalData.map(d => ({
-      timestamp: d.timestamp,
-      detected_count: Math.round(d.detected_count * modifier)
-    }))
-    
-    // 更新图表数据
-    areaChart.setOption({
-      title: {
-        subtext: currentArea.name
-      },
-      dataset: {
-        source: customHistoricalData.map(d => ([
-          d.timestamp,
-          d.detected_count
-        ]))
-      }
-    })
-    
-    // 获取节点后立即更新当前区域的节点数据
-    fetchCurrentAreaNodes()
-  } catch (error) {
-    console.error('获取历史数据失败:', error)
-  }
-}
 // 用于卡片移动动画
 const cardAnimationState = reactive({
   isMoving: false,
@@ -394,20 +200,11 @@ onMounted(async () => {
     pageState.loading = true
     // 获取区域数据
     areas.value = await areaService.getAll()
-    // 初始化图表
-    if (chartRef.value) {
-      areaChart = initChart(chartRef.value)
-    }
-    
     // 初始获取数据
     await Promise.all([
       updateStats(),
-      updateChart(),
       fetchLatestMessages(),
-      fetchCurrentAreaNodes() // 添加节点数据获取
     ])
-    // 添加节点状态定时更新
-    nodeFetchTimer.value = window.setInterval(fetchCurrentAreaNodes, 5000)
 
     setTimeout(calculateCardWidths, 500) // 等待卡片完全渲染
     cardAnimationState.animationTimer = setInterval(() => {
@@ -436,7 +233,6 @@ onMounted(async () => {
 
     // 设置定时更新
     const statsTimer = setInterval(updateStats, 3000)
-    const chartTimer = setInterval(updateChart, 10000) // 每10秒切换一次区域
     const messagesTimer = setInterval(fetchLatestMessages, 30000)
     const timeTimer = setInterval(updateTime, 1000)
 
@@ -448,11 +244,9 @@ onMounted(async () => {
     // 组件卸载时清除定时器
     return () => {
       clearInterval(statsTimer)
-      clearInterval(chartTimer)
       clearInterval(messagesTimer)
       clearInterval(timeTimer)
       clearInterval(cardAnimationState.animationTimer)
-      if (nodeFetchTimer.value) clearInterval(nodeFetchTimer.value)
       window.removeEventListener('resize', handleResize)
     }
   } catch (error) {
@@ -501,12 +295,6 @@ function formatTime(value: string) {
     return value // 出错时返回原始值
   }
 }
-
-// 监听当前区域索引的变化，更新节点数据
-watch(() => currentAreaIndex.value, () => {
-  fetchCurrentAreaNodes()
-})
-
 </script>
 
 <template>
@@ -560,131 +348,112 @@ watch(() => currentAreaIndex.value, () => {
       </div>
 
       <!-- 主要图表区域 -->
-      <div class="main-content">
-        <!-- 区域状态容器置于顶部 -->
-        <div class="areas-container">
-          <div class="tech-corners"></div>
-          <div class="section-header">
-            <h2>区域状态监控</h2>   
-            <div class="subtitle">Area Status Monitor</div>
-          </div>
-          <div class="status-grid" ref="statusGridRef">
-            <div class="card-container":class="{'moving': cardAnimationState.isMoving}">
-              <el-card v-for="(area, index) in areas" :key="area.id" 
-                      class="area-card">
-                <!-- 左侧区域名称与状态 -->
-                <div class="area-header">
-                  <h4>
-                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                    <span class="status-badge" :class="{'status-active': area.status}">
-                      {{ area.status ? '正常' : '异常' }}
-                    </span>
-                  </h4>
+            <div class="main-content">
+              <!-- 区域状态容器置于顶部 -->
+              <div class="areas-container">
+                <div class="tech-corners"></div>
+                <div class="section-header">
+                  <h2>区域状态监控</h2>   
+                  <div class="subtitle">Area Status Monitor</div>
                 </div>
-                
-                <!-- 右侧区域统计信息 -->
-                <div class="area-stats">
-                  <div class="stat-item">
-                    <div class="stat-top">
-                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                    </div>
-                    <div class="usage-bar">
-                      <div class="usage-fill" 
-                          :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
-                          :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
-                    </div>
+                <div class="status-grid" ref="statusGridRef">
+                  <div class="card-container":class="{'moving': cardAnimationState.isMoving}">
+                    <el-card v-for="(area, index) in areas" :key="area.id" 
+                            class="area-card">
+                      <!-- 左侧区域名称与状态 -->
+                      <div class="area-header">
+                        <h4>
+                          {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                          <span class="status-badge" :class="{'status-active': area.status}">
+                            {{ area.status ? '正常' : '异常' }}
+                          </span>
+                        </h4>
+                      </div>
+                      
+                      <!-- 右侧区域统计信息 -->
+                      <div class="area-stats">
+                        <div class="stat-item">
+                          <div class="stat-top">
+                            <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                            <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                          </div>
+                          <div class="usage-bar">
+                            <div class="usage-fill" 
+                                :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
+                                :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </el-card>
+                    <el-card v-for="(area, index) in areas" :key="area.id" 
+                            class="area-card">
+                      <!-- 左侧区域名称与状态 -->
+                      <div class="area-header">
+                        <h4>
+                          {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                          <span class="status-badge" :class="{'status-active': area.status}">
+                            {{ area.status ? '正常' : '异常' }}
+                          </span>
+                        </h4>
+                      </div>
+                      
+                      <!-- 右侧区域统计信息 -->
+                      <div class="area-stats">
+                        <div class="stat-item">
+                          <div class="stat-top">
+                            <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                            <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                          </div>
+                          <div class="usage-bar">
+                            <div class="usage-fill" 
+                                :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
+                                :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </el-card>
                   </div>
                 </div>
-              </el-card>
-              <el-card v-for="(area, index) in areas" :key="area.id" 
-                      class="area-card">
-                <!-- 左侧区域名称与状态 -->
-                <div class="area-header">
-                  <h4>
-                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                    <span class="status-badge" :class="{'status-active': area.status}">
-                      {{ area.status ? '正常' : '异常' }}
-                    </span>
-                  </h4>
-                </div>
-                
-                <!-- 右侧区域统计信息 -->
-                <div class="area-stats">
-                  <div class="stat-item">
-                    <div class="stat-top">
-                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                    </div>
-                    <div class="usage-bar">
-                      <div class="usage-fill" 
-                          :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
-                          :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
-                    </div>
-                  </div>
-                </div>
-              </el-card>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 下部内容区域样式 -->
-        <div class="lower-content">
-          <!-- 热力图容器位于左侧 -->
-          <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
-            <template #default="{ mapElement }">
-              <div class="map-image-wrapper">
-                {{ mapElement }}
               </div>
-            </template>
-          </HeatMap>
-
-          <!-- 新增右侧列容器，用于垂直排列图表和节点状态 -->
-          <div class="right-column">
-            <!-- 图表容器位于右侧上方 -->
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="section-header">
-                <h2>区域趋势分析</h2>
-                <div class="subtitle">Area Trend Analysis</div>
-              </div>
-              <div class="chart-inner-container"></div>
-            </div>
-            
-            <!-- 节点状态容器位于右侧下方 -->
-            <div class="node-status-container">
-              <div class="tech-corners"></div>
-              <div class="section-header">
-                <h2>硬件节点状态</h2>
-                <div class="subtitle">Hardware Node Status</div>
-              </div>
-              <div class="nodes-grid" v-if="currentAreaNodes.length > 0">
-                <div v-for="node in currentAreaNodes" :key="node.id" class="node-card">
-                  <div class="node-header">
-                    <span class="node-name">{{ node.name }}</span>
-                    <span :class="['status-badge', node.status ? 'status-active' : '']">
-                      {{ node.status ? '在线' : '离线' }}
-                    </span>
-                  </div>
-                  <div class="node-stats">
-                    <div class="stat-item">
-                      <span class="stat-title">检测人数</span>
-                      <span class="stat-value">{{ node.detected_count }}</span>
+              
+              <!-- 下部内容区域样式 -->
+              <div class="lower-content">
+                <!-- 热力图容器位于左侧 -->
+                <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
+                  <template #default="{ mapElement }">
+                    <div class="map-image-wrapper">
+                      {{ mapElement }}
                     </div>
-                    <div class="stat-item">
-                      <span class="stat-title">更新时间</span>
-                      <span class="stat-time">{{ formatTime(node.updated_at) }}</span>
+                  </template>
+                </HeatMap>
+      
+                <!-- 新增右侧列容器，用于垂直排列图表和节点状态 -->
+                <div class="right-column">
+                  <!-- 图表容器位于右侧上方 -->
+                  <div ref="chartRef" class="chart-container">
+                    <div class="tech-corners"></div>
+                    <div class="section-header">
+                      <h2>区域趋势分析</h2>
+                      <div class="subtitle">Area Trend Analysis</div>
+                    </div>
+                    <div class="chart-inner-container">
+                      <AreaHistoryChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
                     </div>
                   </div>
-                  <div class="tech-indicator" :class="{ 'active': node.status }"></div>
+                  
+                  <!-- 节点状态容器位于右侧下方 -->
+                  <div class="node-status-container">
+                    <div class="tech-corners"></div>
+                    <div class="section-header">
+                      <h2>硬件节点状态</h2>
+                      <div class="subtitle">Hardware Node Status</div>
+                  </div>
+                  <div class="node-content">
+                      <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+                  </div>
                 </div>
-              </div>
-              <div class="empty-state" v-else>
-                <p>当前区域没有活跃的硬件节点</p>
               </div>
             </div>
-          </div>
-        </div>
       </div>
       <!-- 消息河流组件 -->
       <div class="message-river">
@@ -1068,11 +837,6 @@ watch(() => currentAreaIndex.value, () => {
   }
 }
 
-.charts-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
 
 .chart-container {
   flex: 1; /* 占据右侧空间的60% */
@@ -1085,6 +849,8 @@ watch(() => currentAreaIndex.value, () => {
   overflow: hidden;
   background: rgba(30, 41, 59, 0.7);
   min-height: 240px; /* 确保有足够高度显示图表 */
+  display: flex; /* 添加这行 */
+  flex-direction: column; /* 添加这行 */
 }
 
 .heatmap-container {
@@ -1599,6 +1365,7 @@ watch(() => currentAreaIndex.value, () => {
   flex: 1;
   min-height: 0; /* 允许内容压缩 */
   margin-top: 10px;
+  margin-bottom: 70px;
 }
 
 @media (max-width: 1200px) {
@@ -1614,21 +1381,6 @@ watch(() => currentAreaIndex.value, () => {
   flex: 0.9;
   min-height: 0; /* 允许内容压缩 */
 }
-.heatmap-container {
-  flex: 1.1; /* 热力图占比略大 */
-  border-radius: 15px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  backdrop-filter: blur(10px);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 15px !important; /* 修改内边距 */
-}
-
 .section-header {
   margin-bottom: 6px;
   flex-shrink: 0;
@@ -1661,68 +1413,6 @@ watch(() => currentAreaIndex.value, () => {
   width: 1px;
   background: rgba(56, 189, 248, 0.5);
 }
-.node-status-container {
-  flex: 0.8; /* 占据右侧空间的40% */
-  background: rgba(30, 41, 59, 0.7);
-  border-radius: 15px;
-  padding: 15px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  backdrop-filter: blur(10px);
-  position: relative;
-  overflow: hidden;
-  margin-top: 0; /* 移除上边距，因为已经在容器中设置了间距 */
-}
-/* 节点卡片网格布局 */
-.nodes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-  max-height: 160px; /* 减小最大高度 */
-  overflow-y: auto;
-}
-
-/* 节点卡片样式 */
-.node-card {
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid rgba(56, 189, 248, 0.15);
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.node-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  border-color: rgba(56, 189, 248, 0.3);
-}
-
-/* 节点卡片头部样式 */
-.node-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.node-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #e2e8f0;
-}
-
-/* 节点统计信息样式 */
-.node-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
 .stat-item {
   display: flex;
   flex-direction: column;
@@ -1800,7 +1490,26 @@ watch(() => currentAreaIndex.value, () => {
 }
 .chart-inner-container {
   width: 100%;
-  height: calc(100% - 40px); /* 减去标题区域的高度 */
-  margin-top: 10px;
+  height: 100%; /* 修改这里，不再使用calc计算高度 */
+  min-height: 180px; /* 添加这行，确保最小高度 */
+  flex: 1; /* 添加这行，让容器可以扩展填充剩余空间 */
+}
+.node-status-container {
+  flex: 0.8; /* 占据右侧空间的40% */
+  background: rgba(30, 41, 59, 0.7);
+  border-radius: 15px;
+  padding: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.node-content {
+  flex: 1;
+  overflow: hidden;
+  margin-top: 8px;
 }
 </style>
