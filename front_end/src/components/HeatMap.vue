@@ -13,21 +13,9 @@ let heatmapChart: echarts.ECharts
 
 // 扩展区域坐标配置，添加更多点位形成更平滑的热力图
 const areaCoordinates = {
-  '正心11': [1580, 992],
-  '正心12': [1480, 900],
-  '正心13': [1620, 1050],
-  '教学楼': [950, 750],
-  '图书馆': [700, 500],
-  '实验楼': [1200, 850],
-  '食堂': [500, 900],
-  '宿舍楼': [350, 600],
-  '体育馆': [850, 450],
-  // 虚拟点位，用于增强热力效果
-  'point_1': [1500, 900],
-  'point_2': [1400, 950],
-  'point_3': [1550, 1000],
-  'point_4': [1650, 950],
-  'point_5': [1700, 1050]
+  '正心12': [1526,1020],
+  '正心13': [1526,1420],
+  '正心21': [1526,1420],
 }
 
 // 生成随机数的辅助函数
@@ -60,7 +48,6 @@ const generateExtraPoints = (basePoints) => {
       })
     }
   })
-  
   return extraPoints
 }
 
@@ -172,7 +159,6 @@ const initHeatmap = () => {
 // 更新热力图数据
 const updateHeatmap = () => {
   if (!heatmapChart) return
-  
   // 基础数据点 - 从实际区域数据中生成
   const basePoints = props.areas.map(area => {
     const coordinates = areaCoordinates[area.name]
@@ -196,7 +182,7 @@ const updateHeatmap = () => {
     if (!basePoints.some(p => p.name === name)) {
       basePoints.push({
         name,
-        value: [...areaCoordinates[name], getRandomNumber(5, 80)]
+        value: [...areaCoordinates[name], getRandomNumber(15, 80)]
       })
     }
   })
@@ -225,7 +211,7 @@ window.addEventListener('resize', () => {
 onMounted(() => {
   initHeatmap()
   // 定期更新热力图数据
-  setInterval(updateHeatmap, 8000)
+  setInterval(updateHeatmap, 1000)
 })
 </script>
 
@@ -234,8 +220,8 @@ onMounted(() => {
     <div class="map-background" :style="{ backgroundImage: `url(${mapImage})` }"></div>
     <div ref="heatmapRef" class="heatmap-canvas"></div>
     <div class="heatmap-title">
-      <span class="title-text">实时热力分布图</span>
-      <span class="subtitle-text">Campus Heat Distribution</span>
+      <h2 class="title-text">实时热力分布图</h2>
+      <div class="subtitle-text">Campus Heat Distribution</div>
     </div>
     <div class="tech-decoration top-right"></div>
     <div class="tech-decoration bottom-left"></div>
@@ -249,7 +235,7 @@ onMounted(() => {
   height: 100%;
   min-height: 400px;
   padding: 20px;
-  background-color: rgba(20, 28, 47, 0.7);
+  background-color: rgba(20, 28, 47, 1.0);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -258,12 +244,12 @@ onMounted(() => {
   position: absolute;
   top: 5%;
   left: 5%;
-  width: 80%;
-  height: 80%;
+  width: 90%;
+  height: 90%;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  opacity: 0.85;
+  opacity: 1;
   filter: brightness(0.9) contrast(1.1);
   border-radius: 8px;
   mask-image: radial-gradient(
@@ -291,22 +277,6 @@ onMounted(() => {
   width: 90%;
   height: 90%;
   z-index: 1;
-  mask-image: radial-gradient(
-    ellipse 80% 80% at center,
-    black 40%,
-    rgba(0, 0, 0, 0.9) 50%,
-    rgba(0, 0, 0, 0.7) 65%,
-    rgba(0, 0, 0, 0.4) 80%,
-    transparent 100%
-  );
-  -webkit-mask-image: radial-gradient(
-    ellipse 80% 80% at center,
-    black 40%,
-    rgba(0, 0, 0, 0.9) 50%,
-    rgba(0, 0, 0, 0.7) 65%,
-    rgba(0, 0, 0, 0.4) 80%,
-    transparent 100%
-  );
 }
 
 .heatmap-title {
@@ -315,22 +285,38 @@ onMounted(() => {
   left: 20px;
   z-index: 2;
   display: flex;
-  flex-direction: column;
+  align-items: center; /* 垂直居中对齐 */
+  gap: 10px; /* 标题与副标题间距 */
+  margin-bottom: 6px;
+  flex-shrink: 0;
 }
 
 .title-text {
-  font-size: 18px;
+  font-size: 0.95rem;
   font-weight: 500;
   color: #fff;
-  text-shadow: 0 0 10px rgba(0, 195, 255, 0.7);
+  margin: 0;
+  white-space: nowrap; /* 防止标题换行 */
 }
 
 .subtitle-text {
-  font-size: 12px;
-  color: rgba(0, 195, 255, 0.8);
-  margin-top: 4px;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  position: relative;
+  padding-left: 10px; /* 为分隔线留出空间 */
 }
 
+/* 添加垂直分隔线 */
+.subtitle-text::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 12px;
+  width: 1px;
+  background: rgba(56, 189, 248, 0.5);
+}
 .tech-decoration {
   position: absolute;
   width: 80px;

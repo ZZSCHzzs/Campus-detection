@@ -1,10 +1,54 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed, watchEffect } from 'vue'
+import { ref, onMounted, reactive, watch} from 'vue'
 import * as echarts from 'echarts'
-import { areaService, alertService, noticeService, summaryService, historicalService } from '../services/apiService'
-import type { AreaItem, HistoricalData, SummaryData } from '../types'
+import { areaService, alertService, noticeService, summaryService, historicalService, nodeService } from '../services/apiService'
+import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
 
+// 区域趋势分析模拟数据
+const historicalData = [
+  { timestamp: '2025-04-16 08:00:00', detected_count: 23 },
+  { timestamp: '2025-04-16 08:30:00', detected_count: 45 },
+  { timestamp: '2025-04-16 09:00:00', detected_count: 78 },
+  { timestamp: '2025-04-16 09:30:00', detected_count: 102 },
+  { timestamp: '2025-04-16 10:00:00', detected_count: 95 },
+  { timestamp: '2025-04-16 10:30:00', detected_count: 88 },
+  { timestamp: '2025-04-16 11:00:00', detected_count: 76 },
+  { timestamp: '2025-04-16 11:30:00', detected_count: 92 },
+  { timestamp: '2025-04-16 12:00:00', detected_count: 134 },
+  { timestamp: '2025-04-16 12:30:00', detected_count: 156 },
+  { timestamp: '2025-04-16 13:00:00', detected_count: 121 },
+  { timestamp: '2025-04-16 13:30:00', detected_count: 89 },
+  { timestamp: '2025-04-16 14:00:00', detected_count: 72 },
+  { timestamp: '2025-04-16 14:30:00', detected_count: 68 },
+  { timestamp: '2025-04-16 15:00:00', detected_count: 82 },
+  { timestamp: '2025-04-16 15:30:00', detected_count: 96 },
+  { timestamp: '2025-04-16 16:00:00', detected_count: 115 },
+  { timestamp: '2025-04-16 16:30:00', detected_count: 142 },
+  { timestamp: '2025-04-16 17:00:00', detected_count: 168 },
+  { timestamp: '2025-04-16 17:30:00', detected_count: 153 },
+  { timestamp: '2025-04-16 18:00:00', detected_count: 112 },
+  { timestamp: '2025-04-16 18:30:00', detected_count: 87 },
+  { timestamp: '2025-04-16 19:00:00', detected_count: 64 },
+  { timestamp: '2025-04-16 19:30:00', detected_count: 38 }
+]
+// 添加节点状态相关的状态
+const currentAreaNodes = ref<HardwareNode[]>([])
+const nodeFetchTimer = ref<number | null>(null)
+// 更新获取当前区域节点数据的方法
+const fetchCurrentAreaNodes = async () => {
+  if (!areas.value || areas.value.length === 0) return
+  
+  const currentArea = areas.value[currentAreaIndex.value]
+  try {
+    // 获取当前区域的节点数据
+    const nodes = await nodeService.getDatabyAreaId(currentArea.id)
+    currentAreaNodes.value = nodes
+  } catch (error) {
+    console.error('获取节点数据失败:', error)
+    currentAreaNodes.value = []
+  }
+}
 // 添加统计数据
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -43,16 +87,6 @@ type Message = {
 const messages = ref<Message[]>([])
 
 const isFullscreen = ref(false)
-
-// 计算属性：获取高占比区域
-const highOccupancyAreas = computed(() => {
-  return areas.value.filter(area => {
-    if (area.capacity && area.detected_count) {
-      return (area.detected_count / area.capacity) > 0.8
-    }
-    return false
-  })
-})
 
 const toggleFullScreen = () => {
   const dashboard = document.querySelector('.dashboard') as HTMLElement
@@ -134,9 +168,13 @@ const currentAreaIndex = ref(0)
 
 // 初始化图表
 const initChart = (chartDom: HTMLElement) => {
-  if (!chartDom) return null
   
-  const chart = echarts.init(chartDom)
+  if (!chartDom) return null 
+  // 使用容器中的子元素作为图表渲染区域
+  const chartContainer = chartDom.querySelector('.chart-inner-container')
+  if (!chartContainer) return null
+  
+  const chart = echarts.init(chartContainer as HTMLElement)
   
   const option = {
     dataset: {
@@ -254,8 +292,14 @@ const updateChart = async () => {
     currentAreaIndex.value = (currentAreaIndex.value + 1) % areas.value.length
     const currentArea = areas.value[currentAreaIndex.value]
 
-    // 获取当前区域的历史数据
-    const historicalData = await historicalService.getAreaHistorical(currentArea.id)
+    // 使用模拟的历史数据，无需API调用
+    // 根据当前区域ID来简单修改数据，使得不同区域有不同的曲线
+    const modifier = (currentArea.id % 5) * 0.2 + 0.8 // 0.8到1.8之间的修改系数
+    
+    const customHistoricalData = historicalData.map(d => ({
+      timestamp: d.timestamp,
+      detected_count: Math.round(d.detected_count * modifier)
+    }))
     
     // 更新图表数据
     areaChart.setOption({
@@ -263,28 +307,93 @@ const updateChart = async () => {
         subtext: currentArea.name
       },
       dataset: {
-        source: historicalData.map(d => ([
+        source: customHistoricalData.map(d => ([
           d.timestamp,
           d.detected_count
         ]))
       }
     })
+    
+    // 获取节点后立即更新当前区域的节点数据
+    fetchCurrentAreaNodes()
   } catch (error) {
     console.error('获取历史数据失败:', error)
   }
 }
-
+// 用于卡片移动动画
+const cardAnimationState = reactive({
+  isMoving: false,
+  currentPosition: 0,
+  currentIndex: 0,
+  cardWidths: [] as number[], // 存储每个卡片的实际宽度
+  animationTimer: null as any
+})
+// 计算并保存所有卡片宽度
+const calculateCardWidths = () => {
+  const cards = document.querySelectorAll('.area-card')
+  
+  // 重置宽度数组
+  cardAnimationState.cardWidths = []
+  
+  // 计算每个卡片的宽度（包括外边距/间隔）
+  cards.forEach((card, index) => {
+    const cardElement = card as HTMLElement
+    const cardWidth = cardElement.offsetWidth + 12 // 12px是卡片间隔
+    cardAnimationState.cardWidths.push(cardWidth)
+  })
+  
+  console.log('卡片宽度数组:', cardAnimationState.cardWidths)
+}
+// 控制卡片循环移动
+const animateCards = () => {
+  const container = document.querySelector('.card-container') as HTMLElement
+  if (!container || !areas.value.length) return
+  
+  const cards = document.querySelectorAll('.area-card')
+  const uniqueAreasCount = areas.value.length
+  if (cards.length <= 0) return
+  
+  // 开始移动动画
+  cardAnimationState.isMoving = true
+  
+  // 获取当前卡片的宽度
+  const cardWidth = cardAnimationState.cardWidths[cardAnimationState.currentIndex % uniqueAreasCount] || 192
+  
+  // 应用移动效果
+  cardAnimationState.currentPosition -= cardWidth
+  container.style.transform = `translateX(${cardAnimationState.currentPosition}px)`
+  
+  // 更新索引，指向下一个卡片
+  cardAnimationState.currentIndex = (cardAnimationState.currentIndex + 1) % cards.length
+  
+  // 当滚动到第一组的尾部重置位置（实现无缝效果）
+  if (cardAnimationState.currentIndex >= uniqueAreasCount) {
+    // 重置位置
+    setTimeout(() => {
+      container.style.transition = 'none'
+      cardAnimationState.currentPosition = 0
+      cardAnimationState.currentIndex = 0
+      container.style.transform = `translateX(0px)`
+      
+      // 恢复过渡效果
+      setTimeout(() => {
+        container.style.transition = 'transform 0.5s ease-in-out'
+        cardAnimationState.isMoving = false
+      }, 50)
+    }, 500)
+  } else {
+    // 移动后停顿
+    setTimeout(() => {
+      cardAnimationState.isMoving = false
+    }, 500)
+  }
+}
 // 修改 onMounted 中的图表配置和更新逻辑
 onMounted(async () => {
   try {
     pageState.loading = true
-    
     // 获取区域数据
     areas.value = await areaService.getAll()
-    // 初始化卡片顺序
-    cardOrders.value = areas.value.map((_, index) => index)
-    // 启动卡片轮换
-    startCardRotation()
     // 初始化图表
     if (chartRef.value) {
       areaChart = initChart(chartRef.value)
@@ -294,9 +403,35 @@ onMounted(async () => {
     await Promise.all([
       updateStats(),
       updateChart(),
-      fetchLatestMessages()
+      fetchLatestMessages(),
+      fetchCurrentAreaNodes() // 添加节点数据获取
     ])
+    // 添加节点状态定时更新
+    nodeFetchTimer.value = window.setInterval(fetchCurrentAreaNodes, 5000)
+
+    setTimeout(calculateCardWidths, 500) // 等待卡片完全渲染
+    cardAnimationState.animationTimer = setInterval(() => {
+      if (!cardAnimationState.isMoving && areas.value.length > 0) {
+        animateCards()
+      }
+    }, 2000) // 每3.5秒移动一次(包含0.5秒的移动时间)
     
+    // 监听窗口大小变化，重新计算卡片宽度
+    const handleResize = () => {
+      cardAnimationState.currentPosition = 0
+      cardAnimationState.currentIndex = 0
+      const container = document.querySelector('.card-container') as HTMLElement
+      if (container) {
+        container.style.transition = 'none'
+        container.style.transform = `translateX(0px)`
+        setTimeout(() => {
+          container.style.transition = 'transform 0.5s ease-in-out'
+          calculateCardWidths() // 重新计算卡片宽度
+        }, 50)
+      }
+    }
+    
+    window.addEventListener('resize', handleResize)
     pageState.loading = false
 
     // 设置定时更新
@@ -316,10 +451,9 @@ onMounted(async () => {
       clearInterval(chartTimer)
       clearInterval(messagesTimer)
       clearInterval(timeTimer)
-      if (cardRotationTimer.value) clearInterval(cardRotationTimer.value)
-      window.removeEventListener('resize', () => {
-        areaChart?.resize()
-      })
+      clearInterval(cardAnimationState.animationTimer)
+      if (nodeFetchTimer.value) clearInterval(nodeFetchTimer.value)
+      window.removeEventListener('resize', handleResize)
     }
   } catch (error) {
     console.error('数据加载失败:', error)
@@ -328,31 +462,11 @@ onMounted(async () => {
   }
 })
 
-// 添加地图图片路径
-const mapImage = new URL('../assets/map_zx_F1.jpg', import.meta.url).href
 
+// 添加地图图片路径
+const mapImage = new URL('../assets/map_zx_F1.png', import.meta.url).href
 // 添加到script setup部分
 const statusGridRef = ref(null)
-
-// 卡片轮换相关变量
-const cardRotationTimer = ref(null)
-// 添加一个响应式数组来管理顺序
-const cardOrders = ref([])
-// 轮换卡片的函数
-const rotateCards = () => {
-  if (!areas.value || areas.value.length <= 1) return
-  
-  // 移动每个元素的顺序值
-  const orders = [...cardOrders.value]
-  cardOrders.value = orders.map((_, i) => 
-    (i + 1) % orders.length
-  )
-}
-// 启动卡片轮换
-const startCardRotation = () => {
-  if (cardRotationTimer.value) clearInterval(cardRotationTimer.value)
-  cardRotationTimer.value = setInterval(rotateCards, 5000)
-}
 // 将占位函数替换为正确的实现
 function formatTime(value: string) {
   if (!value) return '--:--'
@@ -388,6 +502,10 @@ function formatTime(value: string) {
   }
 }
 
+// 监听当前区域索引的变化，更新节点数据
+watch(() => currentAreaIndex.value, () => {
+  fetchCurrentAreaNodes()
+})
 
 </script>
 
@@ -408,7 +526,6 @@ function formatTime(value: string) {
     <div v-if="pageState.error" class="error-container">
       <div class="error-icon">⚠️</div>
       <div class="error-message">{{ pageState.error }}</div>
-      <button class="retry-button" @click="location.reload()">重试</button>
     </div>
     
     <template v-if="!pageState.loading && !pageState.error">
@@ -439,7 +556,6 @@ function formatTime(value: string) {
         <div class="overview-item">
           <h3>当前时间</h3>
           <div class="time">{{ currentTime }}</div>
-          <div class="label">更新于: {{ pageState.lastUpdated }}</div>
         </div>
       </div>
 
@@ -449,16 +565,40 @@ function formatTime(value: string) {
         <div class="areas-container">
           <div class="tech-corners"></div>
           <div class="section-header">
-            <h2>区域状态监控</h2>
+            <h2>区域状态监控</h2>   
             <div class="subtitle">Area Status Monitor</div>
           </div>
           <div class="status-grid" ref="statusGridRef">
-            <div class="card-container">
-              <el-card v-for="(area, index) in areas" 
-                      :key="area.id" 
-                      class="area-card"
-                      :class="{'card-moving': cardOrders[index] !== index}" 
-                      :style="{ order: cardOrders[index] }">
+            <div class="card-container":class="{'moving': cardAnimationState.isMoving}">
+              <el-card v-for="(area, index) in areas" :key="area.id" 
+                      class="area-card">
+                <!-- 左侧区域名称与状态 -->
+                <div class="area-header">
+                  <h4>
+                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                    <span class="status-badge" :class="{'status-active': area.status}">
+                      {{ area.status ? '正常' : '异常' }}
+                    </span>
+                  </h4>
+                </div>
+                
+                <!-- 右侧区域统计信息 -->
+                <div class="area-stats">
+                  <div class="stat-item">
+                    <div class="stat-top">
+                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                    </div>
+                    <div class="usage-bar">
+                      <div class="usage-fill" 
+                          :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
+                          :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+              <el-card v-for="(area, index) in areas" :key="area.id" 
+                      class="area-card">
                 <!-- 左侧区域名称与状态 -->
                 <div class="area-header">
                   <h4>
@@ -488,7 +628,7 @@ function formatTime(value: string) {
           </div>
         </div>
         
-        <!-- 下方分为左右两栏 -->
+        <!-- 下部内容区域样式 -->
         <div class="lower-content">
           <!-- 热力图容器位于左侧 -->
           <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
@@ -499,31 +639,53 @@ function formatTime(value: string) {
             </template>
           </HeatMap>
 
-          <!-- 图表容器位于右侧 -->
-          <div ref="chartRef" class="chart-container">
-            <div class="tech-corners"></div>
-            <div class="section-header">
-              <h2>区域趋势分析</h2>
-              <div class="subtitle">Area Trend Analysis</div>
+          <!-- 新增右侧列容器，用于垂直排列图表和节点状态 -->
+          <div class="right-column">
+            <!-- 图表容器位于右侧上方 -->
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="section-header">
+                <h2>区域趋势分析</h2>
+                <div class="subtitle">Area Trend Analysis</div>
+              </div>
+              <div class="chart-inner-container"></div>
             </div>
-          </div>
-        </div>
-        
-        <!-- 高占用区域提醒 -->
-        <div v-if="highOccupancyAreas.length > 0" class="high-occupancy-alert">
-          <div class="alert-header">
-            <span class="alert-icon">⚠️</span>
-            <span class="alert-title">高占用区域</span>
-          </div>
-          <div class="alert-content">
-            <div v-for="area in highOccupancyAreas" :key="area.id" class="alert-item">
-              {{ area.name }}: {{ area.detected_count }}/{{ area.capacity }} 
-              ({{ Math.round((area.detected_count / area.capacity) * 100) }}%)
+            
+            <!-- 节点状态容器位于右侧下方 -->
+            <div class="node-status-container">
+              <div class="tech-corners"></div>
+              <div class="section-header">
+                <h2>硬件节点状态</h2>
+                <div class="subtitle">Hardware Node Status</div>
+              </div>
+              <div class="nodes-grid" v-if="currentAreaNodes.length > 0">
+                <div v-for="node in currentAreaNodes" :key="node.id" class="node-card">
+                  <div class="node-header">
+                    <span class="node-name">{{ node.name }}</span>
+                    <span :class="['status-badge', node.status ? 'status-active' : '']">
+                      {{ node.status ? '在线' : '离线' }}
+                    </span>
+                  </div>
+                  <div class="node-stats">
+                    <div class="stat-item">
+                      <span class="stat-title">检测人数</span>
+                      <span class="stat-value">{{ node.detected_count }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-title">更新时间</span>
+                      <span class="stat-time">{{ formatTime(node.updated_at) }}</span>
+                    </div>
+                  </div>
+                  <div class="tech-indicator" :class="{ 'active': node.status }"></div>
+                </div>
+              </div>
+              <div class="empty-state" v-else>
+                <p>当前区域没有活跃的硬件节点</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
       <!-- 消息河流组件 -->
       <div class="message-river">
         <div class="message-container">
@@ -913,7 +1075,7 @@ function formatTime(value: string) {
 }
 
 .chart-container {
-  flex: 0.9; /* 略微减小图表比例 */
+  flex: 1; /* 占据右侧空间的60% */
   border-radius: 15px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -922,6 +1084,7 @@ function formatTime(value: string) {
   position: relative;
   overflow: hidden;
   background: rgba(30, 41, 59, 0.7);
+  min-height: 240px; /* 确保有足够高度显示图表 */
 }
 
 .heatmap-container {
@@ -1038,39 +1201,180 @@ function formatTime(value: string) {
 /* 添加卡片容器样式 */
 .card-container {
   display: flex;
-  gap: 10px;
+  gap: 12px; /* 增加间距使移动更明显 */
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding-right: 20px;
-  transition: transform 0.5s ease-in-out;
+  padding: 0 5px; /* 减少内边距 */
+  transition: transform 0.5s ease-in-out; /* 整体容器的移动动画 */
+  min-width: max-content; /* 确保所有卡片都能显示 */
+  position: relative; /* 为绝对定位提供参考 */
 }
 
-/* 区域卡片样式 */
+/* 添加滚动轨迹 */
+.status-grid:after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background: rgba(56, 189, 248, 0.1);
+  border-radius: 1px;
+  z-index: 0;
+}
+@keyframes slideIndicator {
+  0% { left: 10px; }
+  100% { left: calc(100% - 30px); }
+}
+
+/* 区域卡片样式 - 修复溢出问题并美化 */
 .area-card {
   flex: 0 0 180px;
   background: rgba(30, 41, 59, 0.8) !important;
   border: 2px solid rgba(56, 189, 248, 0.2) !important;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
   min-height: 50px;
-  padding: 6px 10px !important;
+  padding: 8px 12px !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
   margin: 0 !important;
-  overflow: hidden;
   box-sizing: border-box;
   height: calc(100% - 2px);
-  transition: all 0.5s ease;
   order: 0; /* 默认顺序属性 */
+  transform-origin: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  /* 修复冲突的overflow属性 */
+  overflow: visible;
 }
 
-/* 卡片移动中的过渡效果 */
-.card-moving {
-  transition: all 0.5s ease-in-out;
-  transform: scale(1.03); /* 轻微缩放以增强效果可见性 */
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25) !important;
+.card-container.moving .area-card {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* 修复区域标题溢出问题 */
+.area-header {
+  flex: 0 0 60px; /* 固定宽度 */
+  margin-right: 8px;
+  overflow: hidden; /* 确保内容不会溢出 */
+}
+
+.area-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  color: #d1d5db;
+}
+
+/* 优化区域统计信息布局 */
+.area-stats {
+  flex: 1;
+  min-width: 0; /* 防止弹性项目溢出 */
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-item {
+  width: 100%;
+}
+
+/* 优化统计信息顶部布局 */
+.stat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 数值比例显示 */
+.stat-top span:first-child {
+  font-size: 1.1rem;
+  font-weight: bold;
+  background: linear-gradient(45deg, #38bdf8, #818cf8);
+  -webkit-background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+/* 更新时间显示 */
+.update-time {
+  font-size: 0.6rem !important;
+  color: #94a3b8 !important;
+  opacity: 0.8;
+  background: none !important;
+  text-shadow: none !important;
+  text-align: right;
+  max-width: 50px; /* 限制宽度 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 优化状态徽章样式 */
+.status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.5rem;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  margin-left: 4px;
+  white-space: nowrap;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+/* 优化使用率进度条 */
+.usage-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.usage-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 3px;
+  transition: width 0.5s ease-out;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+/* 添加科技感光效 */
+.area-card:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5), transparent);
+  opacity: 0.5;
+}
+
+/* 添加卡片内容的过渡效果 */
+.area-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(59, 130, 246, 0.03);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  border-radius: inherit;
+  z-index: -1;
+}
+
+.card-moving::before {
+  opacity: 1;
 }
 /* 科技感边角装饰 */
 .tech-corners::before,
@@ -1149,23 +1453,6 @@ function formatTime(value: string) {
   -webkit-background-clip: text;
   color: transparent;
   text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-}
-
-/* 高占用区域提醒 */
-.high-occupancy-alert {
-  background: rgba(30, 41, 59, 0.7);
-  border-radius: 15px;
-  padding: 15px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(251, 146, 60, 0.3);
-  backdrop-filter: blur(10px);
-  animation: pulse-border 2s infinite;
-}
-
-@keyframes pulse-border {
-  0% { border-color: rgba(251, 146, 60, 0.3); }
-  50% { border-color: rgba(251, 146, 60, 0.7); }
-  100% { border-color: rgba(251, 146, 60, 0.3); }
 }
 
 .alert-header {
@@ -1319,9 +1606,16 @@ function formatTime(value: string) {
     flex-direction: column;
   }
 }
-
+/* 新增右侧列容器样式 */
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  flex: 0.9;
+  min-height: 0; /* 允许内容压缩 */
+}
 .heatmap-container {
-  flex: 1.2; /* 热力图占比略大 */
+  flex: 1.1; /* 热力图占比略大 */
   border-radius: 15px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -1332,11 +1626,44 @@ function formatTime(value: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 15px !important; /* 覆盖原有的过大内边距 */
+  padding: 15px !important; /* 修改内边距 */
 }
 
-.chart-container {
-  flex: 0.9; /* 略微减小图表比例 */
+.section-header {
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  display: flex; /* 使用flex布局让标题和副标题在同一行 */
+  align-items: center; /* 垂直居中对齐 */
+  gap: 10px; /* 标题与副标题间距 */
+}
+
+.section-header h2 {
+  font-size: 0.95rem;
+  margin: 0;
+  white-space: nowrap; /* 防止标题换行 */
+}
+
+.subtitle {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  position: relative;
+  padding-left: 10px; /* 为分隔线留出空间 */
+}
+
+/* 添加垂直分隔线 */
+.subtitle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 12px;
+  width: 1px;
+  background: rgba(56, 189, 248, 0.5);
+}
+.node-status-container {
+  flex: 0.8; /* 占据右侧空间的40% */
+  background: rgba(30, 41, 59, 0.7);
   border-radius: 15px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -1344,20 +1671,136 @@ function formatTime(value: string) {
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
-  background: rgba(30, 41, 59, 0.7);
+  margin-top: 0; /* 移除上边距，因为已经在容器中设置了间距 */
+}
+/* 节点卡片网格布局 */
+.nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+  max-height: 160px; /* 减小最大高度 */
+  overflow-y: auto;
 }
 
-.section-header {
-  margin-bottom: 6px; /* 减小底部边距 */
-  flex-shrink: 0; /* 不允许标题部分压缩 */
+/* 节点卡片样式 */
+.node-card {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
 }
 
-.section-header h2 {
-  font-size: 0.95rem; /* 减小标题字体 */
-  margin: 0;
+.node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  border-color: rgba(56, 189, 248, 0.3);
 }
 
-.subtitle {
-  font-size: 0.7rem; /* 减小副标题字体 */
+/* 节点卡片头部样式 */
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.node-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+/* 节点统计信息样式 */
+.node-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-title {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 2px;
+  background: linear-gradient(45deg, #38bdf8, #818cf8);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.stat-time {
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 2px;
+  color: #94a3b8;
+}
+
+/* 节点状态指示器 */
+.tech-indicator {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.tech-indicator.active {
+  background: rgba(34, 197, 94, 0.3);
+  animation: pulse-active 2s infinite;
+}
+
+@keyframes pulse-active {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* 自定义滚动条样式 */
+.nodes-grid::-webkit-scrollbar {
+  width: 5px;
+}
+
+.nodes-grid::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 3px;
+}
+
+.nodes-grid::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 3px;
+}
+
+.nodes-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.5);
+}
+.chart-inner-container {
+  width: 100%;
+  height: calc(100% - 40px); /* 减去标题区域的高度 */
+  margin-top: 10px;
 }
 </style>
