@@ -92,15 +92,16 @@ router.beforeEach(async (to, from, next) => {
 HomePage.vue
  └── AreaList.vue           
 
-
 AreasView.vue
  └── Areacard.vue
 
 AlertNotice.vue
 
+NotFound.vue
 
 DataScreen.vue
 
+AuthView.vue
 
 UserView.vue
  └── Areacard.vue
