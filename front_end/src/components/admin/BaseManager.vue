@@ -471,7 +471,7 @@ const filteredColumns = computed(() => {
 });
 
 const tableHeight = computed(() => {
-  // 为移动设备和桌面设备使用不同的高度计算
+
   return isMobile.value ? 'calc(65vh - 160px)' : 'calc(75vh - 180px)';
 });
 
