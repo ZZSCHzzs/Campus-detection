@@ -30,7 +30,7 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 # 允许的 Hosts 添加更多选项
-ALLOWED_HOSTS = ['smarthit.top', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['smarthit.top', 'localhost', '127.0.0.1','m.smarthit.top']
 
 TIME_ZONE = 'Asia/Shanghai'
 
