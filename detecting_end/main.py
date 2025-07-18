@@ -480,7 +480,7 @@ def update_detection_stats(count):
 
 # 上传检测结果到服务器
 def upload_result(camera_id, detected_count):
-    url = "https://smarthit.top/api/upload/"
+    url = API_URL  # 使用API_URL而不是硬编码
     data = {
         "id": camera_id,
         "detected_count": detected_count,
@@ -677,7 +677,7 @@ def load_config_from_file():
 # 修改配置API
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    global MODE, PULL_MODE_INTERVAL, CAMERAS, SAVE_IMAGE, PRE_LOAD_MODEL
+    global MODE, PULL_MODE_INTERVAL, CAMERAS, SAVE_IMAGE, PRE_LOAD_MODEL, SERVER_URL, API_URL
     
     data = request.json
     config_changed = False
@@ -728,7 +728,9 @@ def update_config():
                 'cameras': CAMERAS,
                 'save_image': SAVE_IMAGE,
                 'preload_model': PRE_LOAD_MODEL,
-                'server_url': data.get('server_url', 'https://smarthit.top/api/upload/')
+                'terminal_id': TERMINAL_ID,
+                'server_url': data.get('server_url', SERVER_URL),
+                'api_url': data.get('api_url', API_URL)
             }
             save_config_to_file(config_data)
         
@@ -820,466 +822,104 @@ def handle_control_detection(data):
 
 # 添加全局WebSocket客户端实例
 ws_client = None
+TERMINAL_ID = 1  # 当前终端的ID
+SERVER_URL = "wss://smarthit.top"  # 服务器基础URL（用于WebSocket）
+API_URL = "https://smarthit.top/api/upload/"  # API上传URL
 
-# 添加WebSocket命令处理函数
-async def handle_ws_command(command_data):
-    """处理从服务器接收到的WebSocket命令"""
-    command = command_data.get('command')
-    params = command_data.get('params', {})
-    
-    log_event('info', f'收到服务器命令: {command}', 'websocket')
-    socketio.emit('system_message', {'message': f'收到服务器命令: {command}'})
-    
-    if command == 'restart':
-        # 重启检测服务
-        delay = params.get('delay', 0)
-        log_event('info', f'系统将在{delay}秒后重启...', 'command')
-        socketio.emit('system_message', {'message': f'系统将在{delay}秒后重启...'})
-        
-        # 延迟执行重启
-        if delay > 0:
-            await asyncio.sleep(delay)
-        
-        # 重启检测服务
-        detection_manager.stop_pull()
-        detection_manager.stop_push()
-        time.sleep(1)
-        detection_manager.start_push()
-        detection_manager.start_pull()
-        
-        log_event('info', '检测服务已重启', 'command')
-        socketio.emit('system_message', {'message': '检测服务已重启'})
-        
-        # 报告状态更新
-        await send_status_update()
-    
-    elif command == 'update_config':
-        # 更新配置
-        log_event('info', '正在更新配置...', 'command')
-        socketio.emit('system_message', {'message': '正在更新配置...'})
-        
-        config_changed = False
-        
-        if 'cameras' in params:
-            detection_manager.update_cameras(params['cameras'])
-            config_changed = True
-        
-        if 'interval' in params and float(params['interval']) != PULL_MODE_INTERVAL:
-            PULL_MODE_INTERVAL = float(params['interval'])
-            detection_manager.update_interval(PULL_MODE_INTERVAL)
-            config_changed = True
-        
-        if 'mode' in params and params['mode'] != MODE:
-            detection_manager.change_mode(params['mode'])
-            config_changed = True
-        
-        if 'save_image' in params and params['save_image'] != SAVE_IMAGE:
-            global SAVE_IMAGE
-            SAVE_IMAGE = params['save_image']
-            config_changed = True
-        
-        if 'preload_model' in params and params['preload_model'] != PRE_LOAD_MODEL:
-            # 这个选项需要重启才能生效
-            global PRE_LOAD_MODEL
-            PRE_LOAD_MODEL = params['preload_model']
-            config_changed = True
-            
-            # 通知用户需要重启
-            log_event('warning', '修改预加载模型设置需要重启终端才能生效', 'command')
-            socketio.emit('system_message', {'message': '修改预加载模型设置需要重启终端才能生效'})
-        
-        # 如果配置有变化，保存到文件
-        if config_changed:
-            config_data = {
-                'mode': MODE,
-                'interval': PULL_MODE_INTERVAL,
-                'cameras': CAMERAS,
-                'save_image': SAVE_IMAGE,
-                'preload_model': PRE_LOAD_MODEL
-            }
-            save_config_to_file(config_data)
-            
-            log_event('info', '配置已更新并保存', 'command')
-            socketio.emit('system_message', {'message': '配置已更新并保存'})
-        else:
-            log_event('info', '无配置变更', 'command')
-            socketio.emit('system_message', {'message': '无配置变更'})
-        
-        # 报告状态更新
-        await send_status_update()
-    
-    elif command == 'get_status':
-        # 发送状态
-        await send_status_update()
-        return {
-            'status': 'success',
-            'data': get_system_status()
-        }
-    
-    elif command == 'get_config':
-        # 发送配置
-        return {
-            'status': 'success',
-            'data': {
-                'mode': MODE,
-                'interval': PULL_MODE_INTERVAL,
-                'cameras': CAMERAS,
-                'save_image': SAVE_IMAGE,
-                'preload_model': PRE_LOAD_MODEL
-            }
-        }
-    
-    elif command == 'get_logs':
-        # 发送日志
-        return {
-            'status': 'success',
-            'data': detection_logs
-        }
-    
-    elif command == 'start':
-        # 启动服务
-        mode = params.get('mode', 'both')
-        success = False
-        
-        if mode == 'push' or mode == 'both':
-            success = detection_manager.start_push() or success
-            
-        if mode == 'pull' or mode == 'both':
-            success = detection_manager.start_pull() or success
-        
-        log_event('info', f'通过命令启动{mode}模式: {"成功" if success else "失败"}', 'command')
-        
-        # 报告状态更新
-        await send_status_update()
-        
-        return {
-            'status': 'success' if success else 'error',
-            'message': f'启动{mode}模式{"成功" if success else "失败"}'
-        }
-    
-    elif command == 'stop':
-        # 停止服务
-        mode = params.get('mode', 'both')
-        success = False
-        
-        if mode == 'push' or mode == 'both':
-            success = detection_manager.stop_push() or success
-            
-        if mode == 'pull' or mode == 'both':
-            success = detection_manager.stop_pull() or success
-        
-        log_event('info', f'通过命令停止{mode}模式: {"成功" if success else "失败"}', 'command')
-        
-        # 报告状态更新
-        await send_status_update()
-        
-        return {
-            'status': 'success' if success else 'error',
-            'message': f'停止{mode}模式{"成功" if success else "失败"}'
-        }
-    
-    else:
-        log_event('warning', f'未知命令: {command}', 'command')
-        return {
-            'status': 'error',
-            'message': f'未知命令: {command}'
-        }
-
-# 获取系统状态数据
-def get_system_status():
-    with status_lock:
-        return {
-            'cameras': system_status["cameras"],
-            'cpu_usage': system_status["cpu_usage"],
-            'memory_usage': system_status["memory_usage"],
-            'model_loaded': system_status["model_loaded"],
-            'push_running': system_status["push_running"],
-            'pull_running': system_status["pull_running"],
-            'started_at': system_status["started_at"],
-            'mode': MODE
-        }
-
-# 发送状态更新到WebSocket服务器
-async def send_status_update():
-    if ws_client and ws_client.connected:
-        await ws_client.send_system_status(get_system_status())
-
-# 异步运行WebSocket客户端
-def run_websocket_client():
-    """创建新线程运行事件循环，用于WebSocket客户端"""
-    try:
-        logger.info("启动WebSocket客户端线程...")
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # 运行WebSocket客户端
-        loop.run_until_complete(init_websocket_client())
-        loop.run_forever()
-    except Exception as e:
-        logger.error(f"WebSocket客户端线程异常: {e}")
-    finally:
-        if loop.is_running():
-            loop.close()
+# 构建实际的WebSocket URL
+def get_ws_url():
+    """获取正确格式的WebSocket URL"""
+    base_url = SERVER_URL.rstrip('/')
+    return f"{base_url}/ws/terminals/{TERMINAL_ID}/"
 
 # 初始化WebSocket客户端
-async def init_websocket_client():
-    global ws_client
+def init_websocket_client():
+    global ws_client, TERMINAL_ID, SERVER_URL, API_URL
     
-    # 从配置中获取终端ID和服务器地址
-    terminal_id = os.environ.get('TERMINAL_ID', '1')  # 可以通过环境变量设置
-    server_url = os.environ.get('WS_SERVER_URL', 'ws://smarthit.top')
-    
-    logger.info(f"初始化WebSocket客户端: 终端ID={terminal_id}, 服务器={server_url}")
-    
-    ws_client = TerminalWebSocketClient(
-        server_url=server_url,
-        terminal_id=terminal_id,
-        on_command=handle_ws_command
-    )
-    
-    # 启动WebSocket客户端
-    return await ws_client.start()
-
-# 日志记录函数增强
-def log_event(level, message, source=None):
-    """记录事件到日志文件和内存"""
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # 添加到内存中的日志列表
-    log_entry = {
-        'timestamp': timestamp,
-        'level': level,
-        'message': message,
-        'source': source or 'system'
-    }
-    
-    # 限制内存中的日志数量
-    if len(detection_logs) >= MAX_LOGS:
-        detection_logs.pop()  # 移除最老的日志
-    
-    detection_logs.insert(0, log_entry)  # 新日志添加到开头
-    
-    # 写入日志文件
-    if level == 'info':
-        logger.info(f"{source or 'System'}: {message}")
-    elif level == 'warning':
-        logger.warning(f"{source or 'System'}: {message}")
-    elif level == 'error':
-        logger.error(f"{source or 'System'}: {message}")
-    elif level == 'detection':
-        logger.info(f"Detection - {source or 'Unknown Camera'}: {message}")
-    
-    # 通过WebSocket发送新日志
-    socketio.emit('new_log', log_entry)
-    
-    # 同时发送到Django WebSocket服务器
-    if ws_client and ws_client.connected:
-        asyncio.run_coroutine_threadsafe(
-            ws_client.send_log(level, message, source),
-            asyncio.get_event_loop()
-        )
-
-# 启动Web服务器
-def start_server():
-    """启动Flask服务器"""
-    try:
-        log_event('info', '系统启动中...')
-        # 添加allow_unsafe_werkzeug=True参数来解决Werkzeug生产环境警告
-        socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
-        log_event('info', 'Web服务器已启动')
-        print("Web服务器已启动")
-    except Exception as e:
-        error_msg = f"启动Web服务器失败: {e}"
-        log_event('error', error_msg)
-        print(error_msg)
-
-# 系统监控线程
-def monitor_system():
-    """监控系统资源并通过WebSocket发送更新"""
-    print("系统监控线程已启动")
-    
-    while True:
-        try:
-            # 获取CPU和内存使用率
-            cpu_usage = psutil.cpu_percent()
-            memory_usage = psutil.virtual_memory().percent
-            
-            # 发送系统资源数据
-            with status_lock:
-                system_status["cpu_usage"] = cpu_usage
-                system_status["memory_usage"] = memory_usage
-                
-            socketio.emit('system_resources', {
-                'cpu': cpu_usage,
-                'memory': memory_usage
-            })
-            
-        except Exception as e:
-            print(f"系统监控错误: {e}")
-        
-        # 每2秒更新一次
-        time.sleep(2)
-
-# 异步运行WebSocket客户端
-def run_websocket_client():
-    """创建新线程运行事件循环，用于WebSocket客户端"""
-    try:
-        logger.info("启动WebSocket客户端线程...")
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # 运行WebSocket客户端
-        loop.run_until_complete(init_websocket_client())
-        loop.run_forever()
-    except Exception as e:
-        logger.error(f"WebSocket客户端线程异常: {e}")
-    finally:
-        if loop.is_running():
-            loop.close()
-
-# 初始化WebSocket客户端
-async def init_websocket_client():
-    global ws_client
-    
-    # 从配置中获取终端ID和服务器地址
-    terminal_id = os.environ.get('TERMINAL_ID', '1')  # 可以通过环境变量设置
-    server_url = os.environ.get('WS_SERVER_URL', 'ws://smarthit.top')
-    
-    logger.info(f"初始化WebSocket客户端: 终端ID={terminal_id}, 服务器={server_url}")
-    
-    ws_client = TerminalWebSocketClient(
-        server_url=server_url,
-        terminal_id=terminal_id,
-        on_command=handle_ws_command
-    )
-    
-    # 启动WebSocket客户端
-    return await ws_client.start()
-
-# 日志记录函数增强
-def log_event(level, message, source=None):
-    """记录事件到日志文件和内存"""
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # 添加到内存中的日志列表
-    log_entry = {
-        'timestamp': timestamp,
-        'level': level,
-        'message': message,
-        'source': source or 'system'
-    }
-    
-    # 限制内存中的日志数量
-    if len(detection_logs) >= MAX_LOGS:
-        detection_logs.pop()  # 移除最老的日志
-    
-    detection_logs.insert(0, log_entry)  # 新日志添加到开头
-    
-    # 写入日志文件
-    if level == 'info':
-        logger.info(f"{source or 'System'}: {message}")
-    elif level == 'warning':
-        logger.warning(f"{source or 'System'}: {message}")
-    elif level == 'error':
-        logger.error(f"{source or 'System'}: {message}")
-    elif level == 'detection':
-        logger.info(f"Detection - {source or 'Unknown Camera'}: {message}")
-    
-    # 通过WebSocket发送新日志
-    socketio.emit('new_log', log_entry)
-    
-    # 同时发送到Django WebSocket服务器
-    if ws_client and ws_client.connected:
-        asyncio.run_coroutine_threadsafe(
-            ws_client.send_log(level, message, source),
-            asyncio.get_event_loop()
-        )
-
-# 修改主函数，添加日志记录
-def main():
-    print("启动人数检测系统...")
-    log_event('info', '启动人数检测系统')
-
-    # 加载保存的配置
+    # 从配置文件加载终端ID和服务器URL
     config = load_config_from_file()
     if config:
-        global MODE, PULL_MODE_INTERVAL, CAMERAS, SAVE_IMAGE, PRE_LOAD_MODEL
+        TERMINAL_ID = config.get('terminal_id', TERMINAL_ID)
+        SERVER_URL = config.get('server_url', SERVER_URL)
+        API_URL = config.get('api_url', API_URL)
+    
+    log_event('info', f'初始化WebSocket客户端，终端ID: {TERMINAL_ID}，服务器: {SERVER_URL}', 'system')
+    
+    # 创建WebSocket客户端
+    from websocket_client import TerminalWebSocketClient
+    ws_client = TerminalWebSocketClient(get_ws_url(), TERMINAL_ID, on_command=handle_ws_command)
+    
+    # 启动WebSocket连接
+    def start_ws_client():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def run_client():
+            try:
+                connected = await ws_client.start()
+                if connected:
+                    log_event('info', f'WebSocket客户端已连接到服务器', 'system')
+                    socketio.emit('system_message', {'message': '已连接到远程服务器'})
+                    socketio.emit('system_update', {'ws_connected': True})
+                    
+                    # 发送初始状态
+                    with status_lock:
+                        status_copy = dict(system_status)
+                        status_copy['terminal_id'] = TERMINAL_ID
+                    await ws_client.send_status(status_copy)
+                else:
+                    log_event('error', '无法连接到WebSocket服务器', 'system')
+                    socketio.emit('system_error', {'message': '无法连接到远程服务器'})
+                    socketio.emit('system_update', {'ws_connected': False})
+            except Exception as e:
+                log_event('error', f'WebSocket客户端启动错误: {str(e)}', 'system')
+                socketio.emit('system_error', {'message': f'WebSocket连接错误: {str(e)}'})
+                socketio.emit('system_update', {'ws_connected': False})
+        
+        loop.run_until_complete(run_client())
+        loop.run_forever()
+    
+    # 在新线程中启动WebSocket客户端
+    ws_thread = Thread(target=start_ws_client, daemon=True)
+    ws_thread.start()
+    
+    return ws_thread
+
+# 主程序入口点
+if __name__ == "__main__":
+    # 加载配置
+    config = load_config_from_file()
+    if config:
         MODE = config.get('mode', MODE)
         PULL_MODE_INTERVAL = config.get('interval', PULL_MODE_INTERVAL)
         CAMERAS = config.get('cameras', CAMERAS)
         SAVE_IMAGE = config.get('save_image', SAVE_IMAGE)
         PRE_LOAD_MODEL = config.get('preload_model', PRE_LOAD_MODEL)
-        log_event('info', '从文件加载配置成功')
-        print("从文件加载配置成功")
-        
-        # 更新系统状态和检测线程配置
-        with status_lock:
-            system_status['mode'] = MODE
-        
-        detection_manager.interval = PULL_MODE_INTERVAL
-
-    if INITIALIZE_CAMERA:
-        log_event('info', '初始化摄像头')
-        initialize_cameras()
-
-    # 预加载模型
+        TERMINAL_ID = config.get('terminal_id', TERMINAL_ID)
+        SERVER_URL = config.get('server_url', SERVER_URL)
+        API_URL = config.get('api_url', API_URL)
+    
+    # 创建必要的目录
+    os.makedirs('temp', exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
+    
+    log_event('info', f'系统启动，终端ID: {TERMINAL_ID}，模式: {MODE}', 'system')
+    
+    # 预加载模型（如果配置为True）
     if PRE_LOAD_MODEL:
-        log_event('info', '预加载模型开始')
-        print("预加载模型...")
-        initialize_model()
-        log_event('info', '预加载模型完成')
-
-    # 启动WebSocket客户端线程
-    print("启动WebSocket客户端...")
-    log_event('info', '启动WebSocket客户端')
-    websocket_thread = Thread(target=run_websocket_client)
-    websocket_thread.daemon = True
-    websocket_thread.start()
+        model_thread = Thread(target=initialize_model)
+        model_thread.daemon = True
+        model_thread.start()
     
-    # 启动系统监控线程
-    print("启动系统监控...")
-    log_event('info', '启动系统监控')
-    monitor_thread = Thread(target=monitor_system)
-    monitor_thread.daemon = True
-    monitor_thread.start()
+    # 初始化WebSocket客户端
+    ws_thread = init_websocket_client()
     
-    # 延迟1秒确保线程启动
-    time.sleep(1)
-    
-    # 根据配置模式启动相应服务
+    # 根据配置的模式启动相应的检测服务
     if MODE == "push" or MODE == "both":
-        print("启动被动接收模式...")
-        log_event('info', '启动被动接收模式')
         detection_manager.start_push()
     
     if MODE == "pull" or MODE == "both":
-        print("启动主动拉取模式...")
-        log_event('info', '启动主动拉取模式')
         detection_manager.start_pull()
     
-    # 启动Web服务器（这是阻塞的，应放在最后）
-    print("启动Web服务器...")
-    start_server()
-    
-    # 下面的代码只有在Web服务器停止时才会执行
-    log_event('info', 'Web服务器已停止，正在清理...')
-    print("Web服务器已停止，正在清理...")
-    detection_manager.stop_push()
-    detection_manager.stop_pull()
-    log_event('info', '系统已停止')
-    print("系统已停止")
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("接收到终止信号，正在关闭...")
-    except Exception as e:
-        print(f"系统异常: {e}")
-    finally:
-        # 确保优雅退出
-        print("正在清理资源...")
-        if 'detection_manager' in globals():
-            detection_manager.stop_push()
-            detection_manager.stop_pull()
-        print("系统已停止")
+    # 使用socketio.run启动Flask应用，添加allow_unsafe_werkzeug=True参数
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)

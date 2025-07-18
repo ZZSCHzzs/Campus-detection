@@ -1,28 +1,96 @@
 import axios from 'axios';
 
 /**
+ * 终端消息类型定义
+ */
+export interface TerminalMessage {
+  type: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+/**
+ * 终端命令接口
+ */
+export interface TerminalCommand {
+  command: string;
+  params?: Record<string, any>;
+  timestamp?: string;
+}
+
+/**
+ * 终端状态接口
+ */
+export interface TerminalStatus {
+  cameras: Record<string, string>;
+  cpu_usage: number;
+  memory_usage: number;
+  push_running: boolean;
+  pull_running: boolean;
+  model_loaded: boolean;
+  started_at?: string;
+  mode?: string;
+  [key: string]: any;
+}
+
+/**
+ * 终端配置接口
+ */
+export interface TerminalConfig {
+  mode: 'pull' | 'push' | 'both';
+  interval: number;
+  cameras: Record<string, string>;
+  save_image: boolean;
+  preload_model: boolean;
+  [key: string]: any;
+}
+
+/**
+ * 日志记录接口
+ */
+export interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warning' | 'error' | 'detection';
+  message: string;
+  source: string;
+}
+
+/**
+ * WebSocket回调函数类型
+ */
+export type WebSocketCallback = (data: any) => void;
+
+/**
  * 终端通信服务 - 支持本地直连和远程连接两种模式
  */
 class TerminalService {
-  constructor() {
-    this.mode = 'remote'; // 'remote' 或 'local'
-    this.terminalId = null;
-    this.localEndpoint = 'http://localhost:5000'; // 本地终端API端点
-    this.ws = null; // WebSocket连接
-    this.wsCallbacks = new Map(); // 回调函数映射
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectTimeout = null;
-    this.reconnectDelay = 2000; // 初始重连延迟(ms)
-    this.isReconnecting = false;
-  }
+  // 服务配置
+  private mode: 'remote' | 'local' = 'remote';
+  private terminalId: number | null = null;
+  private localEndpoint: string = 'http://localhost:5000';
+  
+  // WebSocket连接
+  private ws: WebSocket | null = null;
+  private wsCallbacks: Map<string, WebSocketCallback> = new Map();
+  
+  // 重连机制
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectTimeout: number | null = null;
+  private reconnectDelay: number = 2000; // 初始重连延迟(ms)
+  private isReconnecting: boolean = false;
+
+  // WebSocket URL配置
+  private readonly wsPathTemplate: string = '/ws/terminals/{id}/';
+  private readonly localWsId: string = 'local';
   
   /**
    * 设置连接模式
-   * @param {string} mode - 连接模式: 'local' 或 'remote'
-   * @param {number|null} terminalId - 远程模式下的终端ID
+   * @param mode - 连接模式: 'local' 或 'remote'
+   * @param terminalId - 远程模式下的终端ID
+   * @returns 是否进行了模式切换
    */
-  setMode(mode, terminalId = null) {
+  setMode(mode: 'remote' | 'local', terminalId: number | null = null): boolean {
     // 检查是否需要更改
     if (this.mode === mode && this.terminalId === terminalId) {
       return false;
@@ -42,9 +110,9 @@ class TerminalService {
   
   /**
    * 检测本地终端是否可用
-   * @returns {Promise<boolean>} 是否可用
+   * @returns 是否可用
    */
-  async detectLocalTerminal() {
+  async detectLocalTerminal(): Promise<boolean> {
     try {
       const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 2000 });
       return response.status === 200;
@@ -56,13 +124,13 @@ class TerminalService {
   
   /**
    * 发送命令到终端
-   * @param {string} command - 命令名称
-   * @param {Object} params - 命令参数
-   * @returns {Promise<Object>} 命令执行结果
+   * @param command - 命令名称
+   * @param params - 命令参数
+   * @returns 命令执行结果
    */
-  async sendCommand(command, params = {}) {
+  async sendCommand(command: string, params: Record<string, any> = {}): Promise<any> {
     // 统一命令格式
-    const commandData = {
+    const commandData: TerminalCommand = {
       command: command,
       params: params,
       timestamp: new Date().toISOString()
@@ -79,11 +147,11 @@ class TerminalService {
    * 发送命令到本地终端
    * @private
    */
-  async sendLocalCommand(commandData) {
+  private async sendLocalCommand(commandData: TerminalCommand): Promise<any> {
     try {
       // 根据命令类型选择合适的终端API
       let endpoint = `${this.localEndpoint}/api/control`;
-      let requestData = {
+      let requestData: Record<string, any> = {
         action: commandData.command,
         ...commandData.params
       };
@@ -91,7 +159,7 @@ class TerminalService {
       // 特殊命令处理
       if (commandData.command === 'update_config') {
         endpoint = `${this.localEndpoint}/api/config`;
-        requestData = commandData.params;
+        requestData = commandData.params || {};
       }
       
       const response = await axios.post(endpoint, requestData, {
@@ -113,12 +181,13 @@ class TerminalService {
    * 发送命令到远程终端
    * @private
    */
-  async sendRemoteCommand(commandData) {
+  private async sendRemoteCommand(commandData: TerminalCommand): Promise<any> {
     if (!this.terminalId) {
       throw new Error('远程模式下必须提供终端ID');
     }
     
     try {
+      // 使用一致的复数形式URL
       const response = await axios.post(`/api/terminals/${this.terminalId}/command/`, commandData, {
         timeout: 10000,
         headers: {
@@ -135,9 +204,9 @@ class TerminalService {
   
   /**
    * 获取终端状态
-   * @returns {Promise<Object>} 终端状态
+   * @returns 终端状态
    */
-  async getStatus() {
+  async getStatus(): Promise<TerminalStatus> {
     if (this.mode === 'local') {
       try {
         const response = await axios.get(`${this.localEndpoint}/api/status`, {
@@ -151,7 +220,7 @@ class TerminalService {
       }
     } else {
       try {
-        // 先尝试通过API获取状态
+        // 使用一致的复数形式URL
         const response = await axios.get(`/api/terminals/${this.terminalId}/status/`, {
           timeout: 8000
         });
@@ -179,7 +248,7 @@ class TerminalService {
    * 标准化状态数据格式
    * @private
    */
-  normalizeStatusData(data) {
+  private normalizeStatusData(data: any): TerminalStatus {
     // 确保返回数据格式一致
     return {
       cameras: data.cameras || {},
@@ -194,9 +263,9 @@ class TerminalService {
   
   /**
    * 获取终端配置
-   * @returns {Promise<Object>} 终端配置
+   * @returns 终端配置
    */
-  async getConfig() {
+  async getConfig(): Promise<TerminalConfig> {
     if (this.mode === 'local') {
       try {
         const response = await axios.get(`${this.localEndpoint}/api/config`, {
@@ -229,7 +298,7 @@ class TerminalService {
    * 标准化配置数据格式
    * @private
    */
-  normalizeConfigData(data) {
+  private normalizeConfigData(data: any): TerminalConfig {
     // 确保返回配置格式一致
     return {
       mode: data.mode || 'both',
@@ -243,10 +312,10 @@ class TerminalService {
   
   /**
    * 保存终端配置
-   * @param {Object} config - 配置对象
-   * @returns {Promise<Object>} 保存结果
+   * @param config - 配置对象
+   * @returns 保存结果
    */
-  async saveConfig(config) {
+  async saveConfig(config: Partial<TerminalConfig>): Promise<any> {
     if (this.mode === 'local') {
       try {
         const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
@@ -279,9 +348,9 @@ class TerminalService {
   
   /**
    * 获取终端日志
-   * @returns {Promise<Array>} 日志数据
+   * @returns 日志数据
    */
-  async getLogs() {
+  async getLogs(): Promise<LogEntry[]> {
     if (this.mode === 'local') {
       try {
         const response = await axios.get(`${this.localEndpoint}/api/logs`, {
@@ -323,7 +392,7 @@ class TerminalService {
    * 标准化日志数据格式
    * @private
    */
-  normalizeLogData(data) {
+  private normalizeLogData(data: any[]): LogEntry[] {
     if (!Array.isArray(data)) return [];
     
     return data.map(log => ({
@@ -338,7 +407,7 @@ class TerminalService {
    * 处理API错误
    * @private
    */
-  handleApiError(context, error) {
+  private handleApiError(context: string, error: any): void {
     // 可以在这里添加错误上报逻辑
     const errorMessage = error.response ? 
       `${error.response.status}: ${JSON.stringify(error.response.data)}` : 
@@ -348,11 +417,29 @@ class TerminalService {
   }
   
   /**
-   * 建立WebSocket连接获取实时数据
-   * @param {Function} callback - 接收消息的回调函数
-   * @returns {string} 回调ID
+   * 构建WebSocket URL
+   * @private
    */
-  connectWebSocket(callback) {
+  private getWebSocketUrl(): string {
+    // 确定协议(ws/wss)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    if (this.mode === 'local') {
+      // 本地模式统一使用标准格式
+      return `ws://localhost:5000${this.wsPathTemplate.replace('{id}', this.localWsId)}`;
+    } else {
+      // 远程模式使用当前域名
+      const host = window.location.host;
+      return `${protocol}//${host}${this.wsPathTemplate.replace('{id}', String(this.terminalId))}`;
+    }
+  }
+  
+  /**
+   * 建立WebSocket连接获取实时数据
+   * @param callback - 接收消息的回调函数
+   * @returns 回调ID
+   */
+  connectWebSocket(callback: WebSocketCallback): string | null {
     if (!callback) return null;
     
     // 生成唯一回调ID
@@ -365,8 +452,8 @@ class TerminalService {
     }
     
     // 清理任何现有的重连计时器
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
+    if (this.reconnectTimeout !== null) {
+      window.clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
     
@@ -380,19 +467,13 @@ class TerminalService {
    * 创建WebSocket连接
    * @private
    */
-  createWebSocketConnection() {
+  private createWebSocketConnection(): void {
     try {
       // 断开现有连接
       this.disconnectWebSocket();
       
-      let wsUrl;
-      if (this.mode === 'local') {
-        // 连接本地WebSocket - 尝试检测是否支持SocketIO
-        wsUrl = `ws://localhost:5000/ws`;
-      } else {
-        // 连接远程WebSocket
-        wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/terminal/${this.terminalId}/`;
-      }
+      // 获取统一格式的WebSocket URL
+      const wsUrl = this.getWebSocketUrl();
       
       console.log(`尝试WebSocket连接: ${wsUrl}`);
       this.ws = new WebSocket(wsUrl);
@@ -450,7 +531,7 @@ class TerminalService {
    * 安排WebSocket重连
    * @private
    */
-  scheduleReconnect() {
+  private scheduleReconnect(): void {
     if (this.isReconnecting || this.reconnectAttempts >= this.maxReconnectAttempts) {
       return;
     }
@@ -463,19 +544,20 @@ class TerminalService {
     
     console.log(`计划WebSocket重连 (尝试 ${this.reconnectAttempts}/${this.maxReconnectAttempts}, 延迟 ${delay}ms)`);
     
-    this.reconnectTimeout = setTimeout(() => {
+    this.reconnectTimeout = window.setTimeout(() => {
       if (this.wsCallbacks.size > 0) {
         console.log('正在尝试重新连接WebSocket...');
         this.createWebSocketConnection();
       }
+      this.reconnectTimeout = null;
     }, delay);
   }
   
   /**
    * 移除WebSocket回调
-   * @param {string} callbackId - 回调ID
+   * @param callbackId - 回调ID
    */
-  removeWebSocketCallback(callbackId) {
+  removeWebSocketCallback(callbackId: string): void {
     if (this.wsCallbacks.has(callbackId)) {
       this.wsCallbacks.delete(callbackId);
       
@@ -489,10 +571,10 @@ class TerminalService {
   /**
    * 断开WebSocket连接
    */
-  disconnectWebSocket() {
+  disconnectWebSocket(): void {
     // 清理重连计时器
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
+    if (this.reconnectTimeout !== null) {
+      window.clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
     

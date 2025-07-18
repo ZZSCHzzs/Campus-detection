@@ -23,6 +23,8 @@ class TerminalWebSocketClient:
         self.heartbeat_task = None
         self.running = False
         
+        # 修改：不再需要路径模板，直接使用完整URL
+        
     async def start(self):
         """启动WebSocket客户端"""
         self.running = True
@@ -43,12 +45,16 @@ class TerminalWebSocketClient:
             
         await self.disconnect()
     
+    def get_ws_url(self):
+        """获取WebSocket URL - 现在直接返回初始化时提供的URL"""
+        return self.server_url
+    
     async def connect(self):
         """建立WebSocket连接"""
         if not self.running:
             return False
             
-        ws_url = f"{self.server_url}/ws/terminal/{self.terminal_id}/"
+        ws_url = self.get_ws_url()
         logger.info(f"尝试连接到WebSocket服务器: {ws_url}")
         
         try:
@@ -176,6 +182,7 @@ class TerminalWebSocketClient:
         
         return await self.send_message(message)
     
+    # 添加系统状态发送方法
     async def send_system_status(self, status_data):
         """发送系统状态到服务器"""
         message = {
@@ -185,7 +192,12 @@ class TerminalWebSocketClient:
         }
         
         return await self.send_message(message)
-    
+
+    # 添加状态发送方法，用于初始状态上报和状态获取命令响应
+    async def send_status(self, status_data):
+        """发送终端状态到服务器"""
+        return await self.send_system_status(status_data)
+        
     async def send_log(self, level, message, source=None):
         """发送日志消息到服务器"""
         log_data = {

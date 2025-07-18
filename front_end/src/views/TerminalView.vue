@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { terminalService } from '../services/terminal-service';
+import { terminalService } from '../services/terminalService';
 
 const route = useRoute();
 const router = useRouter();

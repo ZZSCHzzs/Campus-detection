@@ -1,0 +1,3 @@
+2025-07-18 09:02:27,272 - INFO - detect_app - system: 系统启动，终端ID: 1，模式: push
+2025-07-18 09:02:27,275 - INFO - detect_app - system: 初始化WebSocket客户端，终端ID: 1，服务器: https://smarthit.top/api/upload/
+2025-07-18 09:02:27,277 - INFO - websocket_client - 尝试连接到WebSocket服务器: https://smarthit.top/api/upload/ws/terminal/1/
