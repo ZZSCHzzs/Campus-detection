@@ -6,9 +6,7 @@ class WebapiConfig(AppConfig):
     name = 'webapi'
 
     def ready(self):
-        # 导入信号处理器或其他需要在应用启动时加载的内容
-        import webapi.signals
-        
+       
         # 检查并记录channels配置
         from django.conf import settings
         import logging
