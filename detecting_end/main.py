@@ -826,10 +826,115 @@ TERMINAL_ID = 1  # 当前终端的ID
 SERVER_URL = "wss://smarthit.top"  # 服务器基础URL（用于WebSocket）
 API_URL = "https://smarthit.top/api/upload/"  # API上传URL
 
+# 添加WebSocket命令处理函数
+async def handle_ws_command(command_data):
+    """处理从服务器接收到的WebSocket命令"""
+    global SAVE_IMAGE, PRE_LOAD_MODEL, PULL_MODE_INTERVAL, MODE, CAMERAS
+    
+    command = command_data.get('command')
+    params = command_data.get('params', {})
+    
+    log_event('info', f'收到服务器命令: {command}', 'websocket')
+    socketio.emit('system_message', {'message': f'收到服务器命令: {command}'})
+    
+    try:
+        if command == 'start':
+            mode = params.get('mode', 'both')
+            if mode == 'push' or mode == 'both':
+                detection_manager.start_push()
+            if mode == 'pull' or mode == 'both':
+                detection_manager.start_pull()
+            log_event('info', f'服务器命令：启动{mode}模式', 'websocket')
+            
+        elif command == 'stop':
+            mode = params.get('mode', 'both')
+            if mode == 'push' or mode == 'both':
+                detection_manager.stop_push()
+            if mode == 'pull' or mode == 'both':
+                detection_manager.stop_pull()
+            log_event('info', f'服务器命令：停止{mode}模式', 'websocket')
+            
+        elif command == 'update_config':
+            config_changed = False
+            restart_required = False
+            
+            if 'mode' in params and params['mode'] != MODE:
+                detection_manager.change_mode(params['mode'])
+                config_changed = True
+                
+            if 'interval' in params and float(params['interval']) != PULL_MODE_INTERVAL:
+                PULL_MODE_INTERVAL = float(params['interval'])
+                detection_manager.update_interval(PULL_MODE_INTERVAL)
+                config_changed = True
+                
+            if 'cameras' in params and params['cameras'] != CAMERAS:
+                CAMERAS = params['cameras']
+                detection_manager.update_cameras(CAMERAS)
+                config_changed = True
+                
+            if 'save_image' in params and params['save_image'] != SAVE_IMAGE:
+                SAVE_IMAGE = params['save_image']
+                config_changed = True
+                
+            if 'preload_model' in params and params['preload_model'] != PRE_LOAD_MODEL:
+                PRE_LOAD_MODEL = params['preload_model']
+                restart_required = True
+                config_changed = True
+                
+            if config_changed:
+                config_data = {
+                    'mode': MODE,
+                    'interval': PULL_MODE_INTERVAL,
+                    'cameras': CAMERAS,
+                    'save_image': SAVE_IMAGE,
+                    'preload_model': PRE_LOAD_MODEL,
+                    'terminal_id': TERMINAL_ID,
+                    'server_url': SERVER_URL,
+                    'api_url': API_URL
+                }
+                save_config_to_file(config_data)
+                log_event('info', '配置已更新并保存', 'websocket')
+                
+            if restart_required:
+                log_event('warning', '配置更改需要重启应用才能生效', 'websocket')
+                
+        elif command == 'get_status':
+            # 向服务器报告当前状态
+            if ws_client and ws_client.connected:
+                with status_lock:
+                    status_copy = dict(system_status)
+                    status_copy['terminal_id'] = TERMINAL_ID
+                asyncio.run_coroutine_threadsafe(
+                    ws_client.send_status(status_copy),
+                    asyncio.get_event_loop()
+                )
+                
+        else:
+            log_event('warning', f'未知命令: {command}', 'websocket')
+            
+    except Exception as e:
+        error_msg = f'处理命令 {command} 时出错: {str(e)}'
+        log_event('error', error_msg, 'websocket')
+
 # 构建实际的WebSocket URL
 def get_ws_url():
     """获取正确格式的WebSocket URL"""
+    # 确保URL使用正确的WebSocket协议
     base_url = SERVER_URL.rstrip('/')
+    
+    # 如果URL不是以ws或wss开头，修正协议
+    if not (base_url.startswith('ws://') or base_url.startswith('wss://')):
+        # 如果是https协议，转换为wss协议
+        if base_url.startswith('https://'):
+            base_url = 'wss://' + base_url[8:]
+        # 如果是http协议，转换为ws协议
+        elif base_url.startswith('http://'):
+            base_url = 'ws://' + base_url[7:]
+        # 如果没有协议，默认使用wss
+        else:
+            base_url = 'wss://' + base_url
+    
+    # 构建完整WebSocket URL
     return f"{base_url}/ws/terminals/{TERMINAL_ID}/"
 
 # 初始化WebSocket客户端
@@ -840,14 +945,17 @@ def init_websocket_client():
     config = load_config_from_file()
     if config:
         TERMINAL_ID = config.get('terminal_id', TERMINAL_ID)
+        # 确保服务器URL正确设置
         SERVER_URL = config.get('server_url', SERVER_URL)
         API_URL = config.get('api_url', API_URL)
     
-    log_event('info', f'初始化WebSocket客户端，终端ID: {TERMINAL_ID}，服务器: {SERVER_URL}', 'system')
+    # 检查并确保WebSocket URL正确性
+    correct_ws_url = get_ws_url()
+    log_event('info', f'初始化WebSocket客户端，终端ID: {TERMINAL_ID}，服务器URL: {correct_ws_url}', 'system')
     
     # 创建WebSocket客户端
     from websocket_client import TerminalWebSocketClient
-    ws_client = TerminalWebSocketClient(get_ws_url(), TERMINAL_ID, on_command=handle_ws_command)
+    ws_client = TerminalWebSocketClient(correct_ws_url, TERMINAL_ID, on_command=handle_ws_command)
     
     # 启动WebSocket连接
     def start_ws_client():

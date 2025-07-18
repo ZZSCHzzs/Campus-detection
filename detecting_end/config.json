@@ -4,5 +4,5 @@
     "cameras": {},
     "save_image": true,
     "preload_model": true,
-    "server_url": "https://smarthit.top/api/upload/"
+    "server_url": "https://smarthit.top/"
 }
