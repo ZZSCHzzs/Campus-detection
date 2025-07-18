@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive, watch} from 'vue'
+import { ref, onMounted, reactive, watch } from 'vue'
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService } from '../services/apiService'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
 import AreaHistoryChart from '../components/AreaHistoryChart.vue'
-import HardwareNodeStatus from '../components/HardwareNodeStatus.vue' // 导入新组件
-// 添加统计数据
+import HardwareNodeStatus from '../components/HardwareNodeStatus.vue'
+
 const summary = ref<SummaryData>({
   nodes_count: 0,
   terminals_count: 0,
@@ -18,7 +18,6 @@ const summary = ref<SummaryData>({
   alerts_count: 0
 })
 
-// 添加页面状态管理
 const pageState = reactive({
   loading: true,
   error: null,
@@ -30,7 +29,6 @@ const areas = ref<AreaItem[]>([])
 const chartRef = ref<HTMLElement>()
 let areaChart: echarts.ECharts | null = null
 
-// 在 script setup 中添加类型定义
 type MessageType = 'emergency' | 'warning' | 'info'
 type Message = {
   id: number
@@ -56,14 +54,12 @@ const toggleFullScreen = () => {
   }
 }
 
-// 更新时间
 const updateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleString()
   pageState.lastUpdated = now.toLocaleTimeString()
 }
 
-// 获取最新告警和通知
 const fetchLatestMessages = async () => {
   try {
     const [alerts, notices] = await Promise.all([
@@ -88,8 +84,8 @@ const fetchLatestMessages = async () => {
         sourceId: notice.id
       }))
     ]
-    
-    messages.value = newMessages.sort((a, b) => 
+
+    messages.value = newMessages.sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     ).slice(0, 8)
   } catch (error) {
@@ -97,18 +93,16 @@ const fetchLatestMessages = async () => {
   }
 }
 
-// 告警等级转换为消息类型
 const getAlertType = (grade: number): MessageType => {
   const gradeMap: { [key: number]: MessageType } = {
-    3: 'emergency', // 严重
-    2: 'warning',   // 警告
-    1: 'warning',   // 注意
-    0: 'info'       // 普通
+    3: 'emergency',
+    2: 'warning',
+    1: 'warning',
+    0: 'info'
   }
   return gradeMap[grade] || 'info'
 }
 
-// 更新实时统计数据
 const updateStats = async () => {
   try {
     const data = await summaryService.getSummary()
@@ -122,98 +116,86 @@ const updateStats = async () => {
   }
 }
 
-// 添加当前显示的区域索引
 const currentAreaIndex = ref(0)
 
-
-// 用于卡片移动动画
 const cardAnimationState = reactive({
   isMoving: false,
   currentPosition: 0,
   currentIndex: 0,
-  cardWidths: [] as number[], // 存储每个卡片的实际宽度
+  cardWidths: [] as number[],
   animationTimer: null as any
 })
-// 计算并保存所有卡片宽度
+
 const calculateCardWidths = () => {
   const cards = document.querySelectorAll('.area-card')
-  
-  // 重置宽度数组
+
   cardAnimationState.cardWidths = []
-  
-  // 计算每个卡片的宽度（包括外边距/间隔）
+
   cards.forEach((card, index) => {
     const cardElement = card as HTMLElement
-    const cardWidth = cardElement.offsetWidth + 12 // 12px是卡片间隔
+    const cardWidth = cardElement.offsetWidth + 12
     cardAnimationState.cardWidths.push(cardWidth)
   })
-  
+
   console.log('卡片宽度数组:', cardAnimationState.cardWidths)
 }
-// 控制卡片循环移动
+
 const animateCards = () => {
   const container = document.querySelector('.card-container') as HTMLElement
   if (!container || !areas.value.length) return
-  
+
   const cards = document.querySelectorAll('.area-card')
   const uniqueAreasCount = areas.value.length
   if (cards.length <= 0) return
-  
-  // 开始移动动画
+
   cardAnimationState.isMoving = true
-  
-  // 获取当前卡片的宽度
+
   const cardWidth = cardAnimationState.cardWidths[cardAnimationState.currentIndex % uniqueAreasCount] || 192
-  
-  // 应用移动效果
+
   cardAnimationState.currentPosition -= cardWidth
   container.style.transform = `translateX(${cardAnimationState.currentPosition}px)`
-  
-  // 更新索引，指向下一个卡片
+
   cardAnimationState.currentIndex = (cardAnimationState.currentIndex + 1) % cards.length
-  
-  // 当滚动到第一组的尾部重置位置（实现无缝效果）
+
   if (cardAnimationState.currentIndex >= uniqueAreasCount) {
-    // 重置位置
+
     setTimeout(() => {
       container.style.transition = 'none'
       cardAnimationState.currentPosition = 0
       cardAnimationState.currentIndex = 0
       container.style.transform = `translateX(0px)`
-      
-      // 恢复过渡效果
+
       setTimeout(() => {
         container.style.transition = 'transform 0.5s ease-in-out'
         cardAnimationState.isMoving = false
       }, 50)
     }, 500)
   } else {
-    // 移动后停顿
+
     setTimeout(() => {
       cardAnimationState.isMoving = false
     }, 500)
   }
 }
-// 修改 onMounted 中的图表配置和更新逻辑
+
 onMounted(async () => {
   try {
     pageState.loading = true
-    // 获取区域数据
+
     areas.value = await areaService.getAll()
-    // 初始获取数据
+
     await Promise.all([
       updateStats(),
       fetchLatestMessages(),
     ])
 
-    setTimeout(calculateCardWidths, 500) // 等待卡片完全渲染
+    setTimeout(calculateCardWidths, 500)
     cardAnimationState.animationTimer = setInterval(() => {
       if (!cardAnimationState.isMoving && areas.value.length > 0) {
         animateCards()
       }
-    }, 2000) // 每3.5秒移动一次(包含0.5秒的移动时间)
-    
-    // 监听窗口大小变化，重新计算卡片宽度
+    }, 2000)
+
     const handleResize = () => {
       cardAnimationState.currentPosition = 0
       cardAnimationState.currentIndex = 0
@@ -223,25 +205,22 @@ onMounted(async () => {
         container.style.transform = `translateX(0px)`
         setTimeout(() => {
           container.style.transition = 'transform 0.5s ease-in-out'
-          calculateCardWidths() // 重新计算卡片宽度
+          calculateCardWidths()
         }, 50)
       }
     }
-    
+
     window.addEventListener('resize', handleResize)
     pageState.loading = false
 
-    // 设置定时更新
     const statsTimer = setInterval(updateStats, 3000)
     const messagesTimer = setInterval(fetchLatestMessages, 30000)
     const timeTimer = setInterval(updateTime, 1000)
 
-    // 监听窗口大小变化
     window.addEventListener('resize', () => {
       areaChart?.resize()
     })
-    
-    // 组件卸载时清除定时器
+
     return () => {
       clearInterval(statsTimer)
       clearInterval(messagesTimer)
@@ -256,33 +235,29 @@ onMounted(async () => {
   }
 })
 
-
-// 添加地图图片路径
 const mapImage = new URL('../assets/map_zx_F1.png', import.meta.url).href
-// 添加到script setup部分
+
 const statusGridRef = ref(null)
-// 将占位函数替换为正确的实现
+
 function formatTime(value: string) {
   if (!value) return '--:--'
-  
+
   try {
     const date = new Date(value)
-    
-    // 检查日期是否有效
+
     if (isNaN(date.getTime())) {
-      return value // 如果无法解析，则返回原始字符串
+      return value
     }
-    
-    // 如果是今天的日期，只显示时间
+
     const today = new Date()
     if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString('zh-CN', { 
-        hour: '2-digit', 
+      return date.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
       })
     } else {
-      // 否则显示日期+时间(简短格式)
+
       return date.toLocaleString('zh-CN', {
         month: '2-digit',
         day: '2-digit',
@@ -292,32 +267,30 @@ function formatTime(value: string) {
     }
   } catch (error) {
     console.error('日期格式化错误:', error)
-    return value // 出错时返回原始值
+    return value
   }
 }
 </script>
 
 <template>
   <div class="dashboard">
-    <!-- 全屏切换按钮 -->
+    
     <div class="fullscreen-toggle" @click="toggleFullScreen">
       <i class="fullscreen-icon" :class="{ 'is-active': isFullscreen }"></i>
     </div>
-    
-    <!-- 加载状态 -->
+
     <div v-if="pageState.loading" class="loading-overlay">
       <div class="loading-spinner"></div>
       <div class="loading-text">数据加载中...</div>
     </div>
-    
-    <!-- 错误信息 -->
+
     <div v-if="pageState.error" class="error-container">
       <div class="error-icon">⚠️</div>
       <div class="error-message">{{ pageState.error }}</div>
     </div>
-    
+
     <template v-if="!pageState.loading && !pageState.error">
-      <!-- 顶部数据总览 -->
+      
       <div class="overview">
         <div class="overview-item">
           <h3>今日总客流</h3>
@@ -332,7 +305,7 @@ function formatTime(value: string) {
         <div class="overview-item">
           <h3>告警事件数</h3>
           <div class="number warning">{{ summary.alerts_count }}</div>
-          <div class="label" :class="{'warning-text': summary.alerts_count > 0}">
+          <div class="label" :class="{ 'warning-text': summary.alerts_count > 0 }">
             {{ summary.alerts_count > 0 ? '需要处理' : '无告警' }}
           </div>
         </div>
@@ -347,123 +320,113 @@ function formatTime(value: string) {
         </div>
       </div>
 
-      <!-- 主要图表区域 -->
-            <div class="main-content">
-              <!-- 区域状态容器置于顶部 -->
-              <div class="areas-container">
-                <div class="tech-corners"></div>
-                <div class="section-header">
-                  <h2>区域状态监控</h2>   
-                  <div class="subtitle">Area Status Monitor</div>
+      <div class="main-content">
+        
+        <div class="areas-container">
+          <div class="tech-corners"></div>
+          <div class="section-header">
+            <h2>区域状态监控</h2>
+            <div class="subtitle">Area Status Monitor</div>
+          </div>
+          <div class="status-grid" ref="statusGridRef">
+            <div class="card-container" :class="{ 'moving': cardAnimationState.isMoving }">
+              <el-card v-for="(area, index) in areas" :key="area.id" class="area-card">
+                
+                <div class="area-header">
+                  <h4>
+                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                    <span class="status-badge" :class="{ 'status-active': area.status }">
+                      {{ area.status ? '正常' : '异常' }}
+                    </span>
+                  </h4>
                 </div>
-                <div class="status-grid" ref="statusGridRef">
-                  <div class="card-container":class="{'moving': cardAnimationState.isMoving}">
-                    <el-card v-for="(area, index) in areas" :key="area.id" 
-                            class="area-card">
-                      <!-- 左侧区域名称与状态 -->
-                      <div class="area-header">
-                        <h4>
-                          {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                          <span class="status-badge" :class="{'status-active': area.status}">
-                            {{ area.status ? '正常' : '异常' }}
-                          </span>
-                        </h4>
+
+                <div class="area-stats">
+                  <div class="stat-item">
+                    <div class="stat-top">
+                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                    </div>
+                    <div class="usage-bar">
+                      <div class="usage-fill"
+                        :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
+                        :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
                       </div>
-                      
-                      <!-- 右侧区域统计信息 -->
-                      <div class="area-stats">
-                        <div class="stat-item">
-                          <div class="stat-top">
-                            <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                            <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                          </div>
-                          <div class="usage-bar">
-                            <div class="usage-fill" 
-                                :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
-                                :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </el-card>
-                    <el-card v-for="(area, index) in areas" :key="area.id" 
-                            class="area-card">
-                      <!-- 左侧区域名称与状态 -->
-                      <div class="area-header">
-                        <h4>
-                          {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                          <span class="status-badge" :class="{'status-active': area.status}">
-                            {{ area.status ? '正常' : '异常' }}
-                          </span>
-                        </h4>
-                      </div>
-                      
-                      <!-- 右侧区域统计信息 -->
-                      <div class="area-stats">
-                        <div class="stat-item">
-                          <div class="stat-top">
-                            <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                            <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                          </div>
-                          <div class="usage-bar">
-                            <div class="usage-fill" 
-                                :style="{width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%`}"
-                                :class="{'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8}"></div>
-                          </div>
-                        </div>
-                      </div>
-                    </el-card>
+                    </div>
                   </div>
                 </div>
+              </el-card>
+              <el-card v-for="(area, index) in areas" :key="area.id" class="area-card">
+                
+                <div class="area-header">
+                  <h4>
+                    {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                    <span class="status-badge" :class="{ 'status-active': area.status }">
+                      {{ area.status ? '正常' : '异常' }}
+                    </span>
+                  </h4>
+                </div>
+
+                <div class="area-stats">
+                  <div class="stat-item">
+                    <div class="stat-top">
+                      <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                      <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                    </div>
+                    <div class="usage-bar">
+                      <div class="usage-fill"
+                        :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
+                        :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+            </div>
+          </div>
+        </div>
+
+        <div class="lower-content">
+          
+          <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
+            <template #default="{ mapElement }">
+              <div class="map-image-wrapper">
+                {{ mapElement }}
               </div>
-              
-              <!-- 下部内容区域样式 -->
-              <div class="lower-content">
-                <!-- 热力图容器位于左侧 -->
-                <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
-                  <template #default="{ mapElement }">
-                    <div class="map-image-wrapper">
-                      {{ mapElement }}
-                    </div>
-                  </template>
-                </HeatMap>
-      
-                <!-- 新增右侧列容器，用于垂直排列图表和节点状态 -->
-                <div class="right-column">
-                  <!-- 图表容器位于右侧上方 -->
-                  <div ref="chartRef" class="chart-container">
-                    <div class="tech-corners"></div>
-                    <div class="section-header">
-                      <h2>区域趋势分析</h2>
-                      <div class="subtitle">Area Trend Analysis</div>
-                    </div>
-                    <div class="chart-inner-container">
-                      <AreaHistoryChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
-                    </div>
-                  </div>
-                  
-                  <!-- 节点状态容器位于右侧下方 -->
-                  <div class="node-status-container">
-                    <div class="tech-corners"></div>
-                    <div class="section-header">
-                      <h2>硬件节点状态</h2>
-                      <div class="subtitle">Hardware Node Status</div>
-                  </div>
-                  <div class="node-content">
-                      <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
-                  </div>
-                </div>
+            </template>
+          </HeatMap>
+
+          <div class="right-column">
+            
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="section-header">
+                <h2>区域趋势分析</h2>
+                <div class="subtitle">Area Trend Analysis</div>
+              </div>
+              <div class="chart-inner-container">
+                <AreaHistoryChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
               </div>
             </div>
+
+            <div class="node-status-container">
+              <div class="tech-corners"></div>
+              <div class="section-header">
+                <h2>硬件节点状态</h2>
+                <div class="subtitle">Hardware Node Status</div>
+              </div>
+              <div class="node-content">
+                <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <!-- 消息河流组件 -->
+      
       <div class="message-river">
         <div class="message-container">
-          <div 
-            v-for="msg in messages" 
-            :key="`${msg.sourceType}-${msg.sourceId}`"
-            class="message-bubble"
-            :class="[`type-${msg.type}`]"
-          >
+          <div v-for="msg in messages" :key="`${msg.sourceType}-${msg.sourceId}`" class="message-bubble"
+            :class="[`type-${msg.type}`]">
             <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
             <span class="message-text">{{ msg.text }}</span>
           </div>
@@ -480,9 +443,10 @@ function formatTime(value: string) {
   min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   color: #e2e8f0;
+  overflow: hidden;
 }
 
-/* 背景网格效果 */
+
 .dashboard::before {
   content: '';
   position: absolute;
@@ -490,14 +454,14 @@ function formatTime(value: string) {
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: 
+  background-image:
     linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
   background-size: 20px 20px;
   z-index: 0;
 }
 
-/* 加载状态样式 */
+
 .loading-overlay {
   position: fixed;
   top: 0;
@@ -522,8 +486,13 @@ function formatTime(value: string) {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -532,7 +501,7 @@ function formatTime(value: string) {
   color: #e2e8f0;
 }
 
-/* 错误信息样式 */
+
 .error-container {
   position: fixed;
   top: 50%;
@@ -575,7 +544,7 @@ function formatTime(value: string) {
   transform: translateY(-2px);
 }
 
-/* 全屏相关样式 */
+
 .dashboard:fullscreen {
   padding: 30px;
   width: 100vw;
@@ -594,13 +563,14 @@ function formatTime(value: string) {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-/* 适配不同浏览器的全屏选择器 */
+
 .dashboard:-webkit-full-screen,
 .dashboard:-moz-full-screen,
 .dashboard:-ms-fullscreen {
@@ -623,7 +593,7 @@ function formatTime(value: string) {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0 .3s ease;
+  transition: all 0.3s ease;
   z-index: 1000;
   border: 1px solid rgba(56, 189, 248, 0.3);
   box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
@@ -676,7 +646,7 @@ function formatTime(value: string) {
   bottom: 2px;
 }
 
-/* 数据总览样式 */
+
 .overview {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -722,8 +692,13 @@ function formatTime(value: string) {
 }
 
 @keyframes scanline {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .overview-item:hover {
@@ -731,7 +706,7 @@ function formatTime(value: string) {
   box-shadow: 0 8px 25px rgba(56, 189, 248, 0.25);
 }
 
-/* 数字样式 */
+
 .number {
   font-size: 2rem;
   font-weight: bold;
@@ -756,7 +731,7 @@ function formatTime(value: string) {
   text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
 }
 
-/* 标题样式 */
+
 .overview-item h3 {
   margin: 0;
   font-size: 0.9rem;
@@ -777,7 +752,7 @@ function formatTime(value: string) {
   border-radius: 50%;
 }
 
-/* 标签和趋势指标 */
+
 .label {
   margin-top: 6px;
   font-size: 0.8rem;
@@ -808,7 +783,7 @@ function formatTime(value: string) {
   color: #f43f5e;
 }
 
-/* 时间显示样式 */
+
 .time {
   font-size: 1.5rem;
   font-weight: bold;
@@ -819,7 +794,7 @@ function formatTime(value: string) {
   font-family: 'Courier New', monospace;
 }
 
-/* 主内容样式 */
+
 .main-content {
   display: flex;
   flex-direction: column;
@@ -837,9 +812,9 @@ function formatTime(value: string) {
   }
 }
 
-
 .chart-container {
-  flex: 1; /* 占据右侧空间的60% */
+  flex: 1;
+  
   border-radius: 15px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -848,13 +823,17 @@ function formatTime(value: string) {
   position: relative;
   overflow: hidden;
   background: rgba(30, 41, 59, 0.7);
-  min-height: 240px; /* 确保有足够高度显示图表 */
-  display: flex; /* 添加这行 */
-  flex-direction: column; /* 添加这行 */
+  min-height: 240px;
+  
+  display: flex;
+  
+  flex-direction: column;
+  
 }
 
 .heatmap-container {
-  flex: 1.2; /* 热力图占比略大 */
+  flex: 1.2;
+  
   border-radius: 15px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -865,10 +844,11 @@ function formatTime(value: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 15px !important; /* 修改内边距 */
+  padding: 15px !important;
+  
 }
 
-/* 创建渐变遮罩容器 */
+
 .map-image-wrapper {
   position: relative;
   width: 100%;
@@ -878,7 +858,7 @@ function formatTime(value: string) {
   justify-content: center;
 }
 
-/* 图片样式与边缘模糊效果 */
+
 .heatmap-container :deep(canvas),
 .heatmap-container :deep(img) {
   border-radius: 8px;
@@ -887,17 +867,15 @@ function formatTime(value: string) {
   object-fit: contain;
 
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-  mask-image: radial-gradient(
-    ellipse 90% 90% at center,
-    black 60%,
-    rgba(0, 0, 0, 0.8) 70%,
-    rgba(0, 0, 0, 0.6) 80%,
-    rgba(0, 0, 0, 0.3) 90%,
-    transparent 100%
-  );
+  mask-image: radial-gradient(ellipse 90% 90% at center,
+      black 60%,
+      rgba(0, 0, 0, 0.8) 70%,
+      rgba(0, 0, 0, 0.6) 80%,
+      rgba(0, 0, 0, 0.3) 90%,
+      transparent 100%);
 }
 
-/* 可选：添加发光效果增强过渡感 */
+
 .heatmap-container :deep(canvas)::after,
 .heatmap-container :deep(img)::after {
   content: '';
@@ -912,7 +890,7 @@ function formatTime(value: string) {
   z-index: 1;
 }
 
-/* 可选：添加科技感装饰 */
+
 .heatmap-container::before {
   content: '';
   position: absolute;
@@ -924,31 +902,34 @@ function formatTime(value: string) {
   border-left: 2px solid rgba(56, 189, 248, 0.5);
 }
 
-/* 右侧容器样式 */
+
 .right-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-/* 区域状态容器样式优化 */
+
 .areas-container {
-  flex: 0.35; 
+  flex: 0.35;
   background: rgba(30, 41, 59, 0.7);
   border-radius: 12px;
   padding: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
-  overflow: hidden; /* 隐藏溢出内容 */
+  overflow: hidden;
+  
   backdrop-filter: blur(8px);
   position: relative;
-  min-height: 110px; /* 减小高度 */
-  max-height: 130px; /* 减小最大高度 */
+  min-height: 110px;
+  
+  max-height: 130px;
+  
   display: flex;
   flex-direction: column;
 }
 
-/* 修改状态网格样式，移除原有的动画 */
+
 .status-grid {
   width: 100%;
   height: 100%;
@@ -956,20 +937,25 @@ function formatTime(value: string) {
   padding: 3px 0;
 }
 
-/* 添加卡片容器样式 */
+
 .card-container {
   display: flex;
-  gap: 12px; /* 增加间距使移动更明显 */
+  gap: 12px;
+  
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 0 5px; /* 减少内边距 */
-  transition: transform 0.5s ease-in-out; /* 整体容器的移动动画 */
-  min-width: max-content; /* 确保所有卡片都能显示 */
-  position: relative; /* 为绝对定位提供参考 */
+  padding: 0 5px;
+  
+  transition: transform 0.5s ease-in-out;
+  
+  min-width: max-content;
+  
+  position: relative;
+  
 }
 
-/* 添加滚动轨迹 */
+
 .status-grid:after {
   content: '';
   position: absolute;
@@ -981,12 +967,18 @@ function formatTime(value: string) {
   border-radius: 1px;
   z-index: 0;
 }
+
 @keyframes slideIndicator {
-  0% { left: 10px; }
-  100% { left: calc(100% - 30px); }
+  0% {
+    left: 10px;
+  }
+
+  100% {
+    left: calc(100% - 30px);
+  }
 }
 
-/* 区域卡片样式 - 修复溢出问题并美化 */
+
 .area-card {
   flex: 0 0 180px;
   background: rgba(30, 41, 59, 0.8) !important;
@@ -1001,11 +993,12 @@ function formatTime(value: string) {
   margin: 0 !important;
   box-sizing: border-box;
   height: calc(100% - 2px);
-  order: 0; /* 默认顺序属性 */
+  order: 0;
+  
   transform-origin: center;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   position: relative;
-  /* 修复冲突的overflow属性 */
+  
   overflow: visible;
 }
 
@@ -1013,11 +1006,13 @@ function formatTime(value: string) {
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
-/* 修复区域标题溢出问题 */
+
 .area-header {
-  flex: 0 0 60px; /* 固定宽度 */
+  flex: 0 0 60px;
+  
   margin-right: 8px;
-  overflow: hidden; /* 确保内容不会溢出 */
+  overflow: hidden;
+  
 }
 
 .area-header h4 {
@@ -1031,10 +1026,11 @@ function formatTime(value: string) {
   color: #d1d5db;
 }
 
-/* 优化区域统计信息布局 */
+
 .area-stats {
   flex: 1;
-  min-width: 0; /* 防止弹性项目溢出 */
+  min-width: 0;
+  
   display: flex;
   flex-direction: column;
 }
@@ -1043,7 +1039,7 @@ function formatTime(value: string) {
   width: 100%;
 }
 
-/* 优化统计信息顶部布局 */
+
 .stat-top {
   display: flex;
   justify-content: space-between;
@@ -1053,7 +1049,7 @@ function formatTime(value: string) {
   overflow: hidden;
 }
 
-/* 数值比例显示 */
+
 .stat-top span:first-child {
   font-size: 1.1rem;
   font-weight: bold;
@@ -1063,7 +1059,7 @@ function formatTime(value: string) {
   text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
 }
 
-/* 更新时间显示 */
+
 .update-time {
   font-size: 0.6rem !important;
   color: #94a3b8 !important;
@@ -1071,12 +1067,13 @@ function formatTime(value: string) {
   background: none !important;
   text-shadow: none !important;
   text-align: right;
-  max-width: 50px; /* 限制宽度 */
+  max-width: 50px;
+  
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* 优化状态徽章样式 */
+
 .status-badge {
   display: inline-block;
   padding: 2px 6px;
@@ -1090,7 +1087,7 @@ function formatTime(value: string) {
   line-height: 1;
 }
 
-/* 优化使用率进度条 */
+
 .usage-bar {
   width: 100%;
   height: 6px;
@@ -1107,7 +1104,8 @@ function formatTime(value: string) {
   transition: width 0.5s ease-out;
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
 }
-/* 添加科技感光效 */
+
+
 .area-card:after {
   content: '';
   position: absolute;
@@ -1119,7 +1117,7 @@ function formatTime(value: string) {
   opacity: 0.5;
 }
 
-/* 添加卡片内容的过渡效果 */
+
 .area-card::before {
   content: '';
   position: absolute;
@@ -1134,7 +1132,8 @@ function formatTime(value: string) {
 .card-moving::before {
   opacity: 1;
 }
-/* 科技感边角装饰 */
+
+
 .tech-corners::before,
 .tech-corners::after {
   content: '';
@@ -1157,7 +1156,7 @@ function formatTime(value: string) {
   border-right: 2px solid rgba(56, 189, 248, 0.5);
 }
 
-/* 自定义滚动条样式 */
+
 .status-grid::-webkit-scrollbar {
   width: 5px;
 }
@@ -1176,7 +1175,7 @@ function formatTime(value: string) {
   background: rgba(56, 189, 248, 0.5);
 }
 
-/* 使用进度条替代旧的样式 */
+
 .usage-bar {
   width: 100%;
   height: 8px;
@@ -1199,9 +1198,17 @@ function formatTime(value: string) {
 }
 
 @keyframes pulse-warning {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
+  0% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.7;
+  }
 }
 
 .stat-item span {
@@ -1244,7 +1251,7 @@ function formatTime(value: string) {
   color: #fed7aa;
 }
 
-/* 状态徽章样式 */
+
 .status-badge {
   padding: 4px 8px;
   border-radius: 12px;
@@ -1259,7 +1266,7 @@ function formatTime(value: string) {
   color: #22c55e;
 }
 
-/* 消息河流样式 */
+
 .message-river {
   position: fixed;
   bottom: 0;
@@ -1283,8 +1290,13 @@ function formatTime(value: string) {
 }
 
 @keyframes scrollMessages {
-  0% { transform: translateX(100%); }
-  100% { transform: translateX(-100%); }
+  0% {
+    transform: translateX(100%);
+  }
+
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
 .message-container:hover {
@@ -1316,12 +1328,16 @@ function formatTime(value: string) {
   background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.1), transparent);
   transform: skewX(-15deg);
   animation: shine 3s infinite;
-  animation-delay: calc(var(--index, 0) * 0.5s);
 }
 
 @keyframes shine {
-  0% { transform: translateX(-200%) skewX(-15deg); }
-  100% { transform: translateX(200%) skewX(-15deg); }
+  0% {
+    transform: translateX(-200%) skewX(-15deg);
+  }
+
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
 }
 
 .type-emergency {
@@ -1350,12 +1366,13 @@ function formatTime(value: string) {
   font-weight: 500;
 }
 
-/* 下部内容区域样式 */
+
 .lower-content {
   display: flex;
   gap: 15px;
   flex: 1;
-  min-height: 0; /* 允许内容压缩 */
+  min-height: 0;
+  
   margin-top: 10px;
   margin-bottom: 70px;
 }
@@ -1365,36 +1382,44 @@ function formatTime(value: string) {
     flex-direction: column;
   }
 }
-/* 新增右侧列容器样式 */
+
+
 .right-column {
   display: flex;
   flex-direction: column;
   gap: 15px;
   flex: 0.9;
-  min-height: 0; /* 允许内容压缩 */
+  min-height: 0;
+  
 }
+
 .section-header {
   margin-bottom: 6px;
   flex-shrink: 0;
-  display: flex; /* 使用flex布局让标题和副标题在同一行 */
-  align-items: center; /* 垂直居中对齐 */
-  gap: 10px; /* 标题与副标题间距 */
+  display: flex;
+  
+  align-items: center;
+  
+  gap: 10px;
+  
 }
 
 .section-header h2 {
   font-size: 0.95rem;
   margin: 0;
-  white-space: nowrap; /* 防止标题换行 */
+  white-space: nowrap;
+  
 }
 
 .subtitle {
   font-size: 0.7rem;
   color: #94a3b8;
   position: relative;
-  padding-left: 10px; /* 为分隔线留出空间 */
+  padding-left: 10px;
+  
 }
 
-/* 添加垂直分隔线 */
+
 .subtitle::before {
   content: '';
   position: absolute;
@@ -1405,6 +1430,7 @@ function formatTime(value: string) {
   width: 1px;
   background: rgba(56, 189, 248, 0.5);
 }
+
 .stat-item {
   display: flex;
   flex-direction: column;
@@ -1431,7 +1457,7 @@ function formatTime(value: string) {
   color: #94a3b8;
 }
 
-/* 节点状态指示器 */
+
 .tech-indicator {
   position: absolute;
   right: 0;
@@ -1447,12 +1473,20 @@ function formatTime(value: string) {
 }
 
 @keyframes pulse-active {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
+  0% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.7;
+  }
 }
 
-/* 空状态样式 */
+
 .empty-state {
   display: flex;
   justify-content: center;
@@ -1462,7 +1496,7 @@ function formatTime(value: string) {
   font-style: italic;
 }
 
-/* 自定义滚动条样式 */
+
 .nodes-grid::-webkit-scrollbar {
   width: 5px;
 }
@@ -1480,14 +1514,20 @@ function formatTime(value: string) {
 .nodes-grid::-webkit-scrollbar-thumb:hover {
   background: rgba(56, 189, 248, 0.5);
 }
+
 .chart-inner-container {
   width: 100%;
-  height: 100%; /* 修改这里，不再使用calc计算高度 */
-  min-height: 180px; /* 添加这行，确保最小高度 */
-  flex: 1; /* 添加这行，让容器可以扩展填充剩余空间 */
+  height: 100%;
+  
+  min-height: 180px;
+  
+  flex: 1;
+  
 }
+
 .node-status-container {
-  flex: 0.8; /* 占据右侧空间的40% */
+  flex: 0.8;
+  
   background: rgba(30, 41, 59, 0.7);
   border-radius: 15px;
   padding: 15px;
@@ -1499,9 +1539,40 @@ function formatTime(value: string) {
   display: flex;
   flex-direction: column;
 }
+
 .node-content {
   flex: 1;
   overflow: hidden;
   margin-top: 8px;
+}
+
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.status-grid::-webkit-scrollbar,
+.nodes-grid::-webkit-scrollbar,
+.mobile-side-menu::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+}
+
+.status-grid::-webkit-scrollbar,
+.status-grid::-webkit-scrollbar-track,
+.status-grid::-webkit-scrollbar-thumb,
+.nodes-grid::-webkit-scrollbar,
+.nodes-grid::-webkit-scrollbar-track,
+.nodes-grid::-webkit-scrollbar-thumb {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
 }
 </style>

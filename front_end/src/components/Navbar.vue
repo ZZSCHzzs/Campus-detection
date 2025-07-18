@@ -234,6 +234,15 @@ const content = ref([
     icon: 'Operation',
     adminOnly: true  
   }
+  ,
+  {
+    index: '5',
+    title: '终端管理',
+    path: '/terminal',
+    icon: 'DataLine',
+    adminOnly: true,
+    hideOnMobile: true
+  }
 ])
 
 const getIconComponent = (iconName: string) => {
@@ -252,7 +261,8 @@ const routePathMap = {
   '1': '/areas',
   '2': '/screen',
   '3': '/alerts',
-  '4': '/admin'
+  '4': '/admin',
+  '5': '/terminal'
 }
 
 const activeIndex = ref('0')

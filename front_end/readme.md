@@ -15,9 +15,9 @@ front_end/
 │   ├── router/             # 路由配置
 │   ├── stores/             # Pinia状态管理
 │   ├── services/           # API服务
-│   │   ├── api.ts                # 基础API配置
-│   │   ├── apiService.ts         # 通用API服务
-│   │   ├── apiResourceManager.ts # API资源管理器
+│   │   ├── api.ts                # 基础API实例
+│   │   ├── apiService.ts         # API资源服务接口
+│   │   ├── apiResourceManager.ts # API资源服务管理器
 │   │   └── authApi.ts            # 认证相关API
 │   ├── types.ts            # TypeScript类型定义
 │   ├── assets/             # 静态资源
@@ -28,15 +28,16 @@ front_end/
 
 ## 路由结构
 
-| 路径 | 组件 | 描述 | 权限要求 |
-|------|------|------|----------|
-| `/` | HomePage | 首页，系统概览 | 无 |
-| `/areas` | AreasView | 区域列表和详情 | 无 |
-| `/screen` | DataScreen | 数据大屏可视化 | 无 |
-| `/auth` | AuthView | 登录和注册 | 无 |
-| `/alerts` | AlertNotice | 告警和通知 | 无 |
-| `/profile` | UserView | 用户个人中心 | 需要登录 |
-| `/admin` | AdminView | 管理控制面板 | 需要管理员权限 |
+| 路径          | 组件 | 描述 | 权限要求 |
+|-------------|------|------|----------|
+| `/`         | HomePage | 首页，系统概览 | 无 |
+| `/areas`    | AreasView | 区域列表和详情 | 无 |
+| `/screen`   | DataScreen | 数据大屏可视化 | 无 |
+| `/login`    | AuthView | 登录 | 无 |
+| `/register` | AuthView | 注册 | 无 |
+| `/alerts`   | AlertNotice | 告警和通知 | 无 |
+| `/profile`  | UserView | 用户个人中心 | 需要登录 |
+| `/admin`    | AdminView | 管理控制面板 | 需要管理员权限 |
 
 ## 组件间引用说明
 
@@ -92,15 +93,16 @@ router.beforeEach(async (to, from, next) => {
 HomePage.vue
  └── AreaList.vue           
 
-
 AreasView.vue
  └── Areacard.vue
 
 AlertNotice.vue
 
+NotFound.vue
 
 DataScreen.vue
 
+AuthView.vue
 
 UserView.vue
  └── Areacard.vue

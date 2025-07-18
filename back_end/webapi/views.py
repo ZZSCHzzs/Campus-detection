@@ -2,10 +2,13 @@ from rest_framework import viewsets
 from rest_framework.decorators import action, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
-from .models import *
-from .serializers import *
 from rest_framework.response import Response
 from rest_framework import status
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+import json
+from .models import *
+from .serializers import *
 from .permissions import StaffEditSelected
 
 
@@ -284,3 +287,62 @@ class SummaryView(APIView):
             "notice_count": notice_count,
             "alerts_count": alerts_count
         })
+
+
+class TerminalCommandView(APIView):
+    """
+    用于发送命令到检测终端
+    """
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = True
+    
+    def post(self, request, pk=None):
+        """
+        向指定ID的终端发送命令
+        """
+        try:
+            # 验证终端是否存在
+            terminal = ProcessTerminal.objects.get(id=pk)
+            
+            # 获取命令数据
+            command_data = request.data
+            if not isinstance(command_data, dict) or 'command' not in command_data:
+                return Response(
+                    {"error": "必须提供有效的命令格式，包含'command'字段"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # 构建命令消息
+            message = {
+                'type': 'send_command',
+                'command': command_data.get('command'),
+                'params': command_data.get('params', {}),
+                'timestamp': timezone.now().isoformat()
+            }
+            
+            # 获取通道层
+            channel_layer = get_channel_layer()
+            
+            # 发送命令到终端的消费者
+            channel_name = f"terminal_{pk}"
+            async_to_sync(channel_layer.group_send)(
+                channel_name,
+                message
+            )
+            
+            return Response({
+                "status": "success",
+                "message": f"命令已发送到终端 {pk}",
+                "command": command_data
+            })
+            
+        except ProcessTerminal.DoesNotExist:
+            return Response(
+                {"error": f"终端ID {pk} 不存在"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"发送命令失败: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

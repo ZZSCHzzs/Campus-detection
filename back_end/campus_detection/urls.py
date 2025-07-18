@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/upload/', DataUploadView.as_view()),
     path('api/summary/', SummaryView.as_view()),
     path('api/alert/', AlertView.as_view()),
+    path('api/terminals/<int:pk>/command/', TerminalCommandView.as_view(), name='terminal-command'),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
     path('auth/jwt/create/', TokenObtainPairView.as_view(), name='jwt-create'),

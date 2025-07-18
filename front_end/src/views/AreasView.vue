@@ -255,15 +255,17 @@ onMounted(() => {
                       :sm="isCompactView ? 8 : 12"
                       :xs="isCompactView ? 12 : 24"
                       class="card-animation"
+                      v-show="cardVisibilities[area.id] !== false"
                   >
-                    <div class="">
+
                       <AreaCard
+
                           :area="area"
                           :compact="isCompactView"
                           :expectStatus="expectStatus"
                           @visible-change="(v) => handleCardVisibility(area.id, v)"
                       />
-                    </div>
+
 
                   </el-col>
                 </el-row>

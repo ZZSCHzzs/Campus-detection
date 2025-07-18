@@ -1,0 +1,311 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* 补充样式 - 与style.css配合使用 */
+:root {
+    --primary: #2563eb;
+    --primary-light: #3b82f6;
+    --secondary: #64748b;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --info: #06b6d4;
+    --light: #f1f5f9;
+    --dark: #1e293b;
+    --gray: #94a3b8;
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --transition: all 0.25s ease;
+}
+
+body {
+    font-family: 'Noto Sans SC', 'Segoe UI', Tahoma, sans-serif;
+    background-color: #f8fafc;
+    color: #334155;
+}
+
+/* 配置页面专用卡片样式 */
+.config-card {
+    border: none;
+    border-radius: 0.75rem;
+    box-shadow: var(--card-shadow);
+    transition: var(--transition);
+}
+
+.config-card:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.config-card .card-header {
+    background-color: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1.25rem 1.5rem;
+}
+
+.config-card .card-header .card-title {
+    font-weight: 600;
+    margin: 0;
+    color: var(--dark);
+}
+
+.config-card .card-body {
+    padding: 1.5rem;
+}
+
+/* 配置表单样式 */
+.config-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.config-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.section-title {
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    color: var(--dark);
+}
+
+.section-title i {
+    margin-right: 0.5rem;
+    color: var(--primary);
+}
+
+.form-check {
+    margin-bottom: 0.75rem;
+}
+
+.form-switch .form-check-input {
+    width: 2.5em;
+    height: 1.25em;
+}
+
+.form-check-input:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.form-control {
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+}
+
+.form-control:focus {
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+}
+
+.form-text {
+    font-size: 0.75rem;
+    color: var(--gray);
+    margin-top: 0.375rem;
+}
+
+/* 摄像头卡片样式 */
+.camera-config-card {
+    background-color: #fff;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    transition: var(--transition);
+}
+
+.camera-config-card:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.camera-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.875rem;
+    padding-bottom: 0.875rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.camera-title {
+    font-weight: 600;
+    margin: 0;
+}
+
+/* 卡片样式 */
+.card {
+    transition: all 0.3s ease;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    font-weight: 500;
+    padding: 1rem 1.25rem;
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+/* 状态卡片 */
+.status-card {
+    display: flex;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    transition: all 0.3s ease;
+}
+
+.status-card:hover {
+    background-color: #e9ecef;
+}
+
+.status-icon {
+    font-size: 1.5rem;
+    margin-right: 12px;
+    display: flex;
+    align-items: center;
+}
+
+.status-content {
+    flex: 1;
+}
+
+.status-content h6 {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* 时间线样式 */
+.timeline {
+    position: relative;
+    margin-left: 1.5rem;
+    padding-left: 1.5rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    height: 100%;
+    width: 2px;
+    background-color: var(--light);
+    left: 0;
+    top: 0;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-icon {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    background-color: #fff;
+    border-radius: 50%;
+    border: 2px solid var(--primary);
+    left: -2rem;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: var(--primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-content {
+    background-color: #fff;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+}
+
+/* 资源项目 */
+.resource-item {
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+
+.resource-item:hover {
+    background-color: #e9ecef;
+}
+
+.cpu-percent, .memory-percent {
+    font-weight: 600;
+}
+
+/* 最新检测结果样式 */
+.latest-count {
+    transition: all 0.3s ease;
+}
+
+.latest-count .highlight {
+    color: #007bff;
+    transform: scale(1.1);
+}
+
+.latest-info {
+    font-size: 0.9rem;
+}
+
+/* 日志记录表格增强 */
+#detection-records-table th, 
+#detection-records-table td {
+    vertical-align: middle;
+}
+
+.thumbnail-preview {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.thumbnail-preview:hover {
+    transform: scale(1.1);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .config-card .card-header,
+    .config-card .card-body {
+        padding: 1rem;
+    }
+    
+    .camera-config-card {
+        padding: 0.875rem;
+    }
+    
+    .timeline {
+        margin-left: 1rem;
+        padding-left: 1rem;
+    }
+    
+    .timeline-icon {
+        width: 22px;
+        height: 22px;
+        left: -1.5rem;
+        font-size: 0.75rem;
+    }
+}

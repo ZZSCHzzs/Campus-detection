@@ -1,0 +1,8 @@
+{
+    "mode": "push",
+    "interval": 1.0,
+    "cameras": {},
+    "save_image": true,
+    "preload_model": true,
+    "server_url": "https://smarthit.top/"
+}
