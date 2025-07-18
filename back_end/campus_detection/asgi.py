@@ -5,23 +5,22 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 from django.urls import path
 
-# 导入WebSocket消费者
-from webapi.consumers import TerminalConsumer
-
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus_detection.settings')
-django.setup()  # 显式调用django.setup()
+django.setup()  # 显式初始化Django
 
-# 定义WebSocket路由
-websocket_urlpatterns = [
-    path('ws/terminal/<int:terminal_id>/', TerminalConsumer.as_asgi()),
-]
+# 延迟导入，避免提前触发模型导入
+def get_application():
+    from webapi.consumers import TerminalConsumer
 
-# 配置ASGI应用
-application = ProtocolTypeRouter({
-    "http": get_asgi_application(),
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            websocket_urlpatterns
-        )
-    ),
-})
+    websocket_urlpatterns = [
+        path('ws/terminal/<int:terminal_id>/', TerminalConsumer.as_asgi()),
+    ]
+
+    return ProtocolTypeRouter({
+        "http": get_asgi_application(),
+        "websocket": AuthMiddlewareStack(
+            URLRouter(websocket_urlpatterns)
+        ),
+    })
+
+application = get_application()
