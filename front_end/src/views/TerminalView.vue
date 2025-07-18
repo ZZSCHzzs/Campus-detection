@@ -51,6 +51,20 @@ const newCamera = reactive({
 // 终端日志
 const logs = ref([]);
 
+// 添加终端列表和终端选择
+const terminalList = ref([]);
+const selectedTerminalId = ref(null);
+
+// 添加终端详细信息数据
+const terminalDetails = reactive({
+  id: null,
+  name: '终端',
+  status: false,
+  cpu_usage: 0,
+  memory_usage: 0,
+  last_active: null
+});
+
 // 检测本地终端是否可用
 const detectLocalTerminal = async () => {
   try {
@@ -63,41 +77,97 @@ const detectLocalTerminal = async () => {
   }
 };
 
+// 加载终端列表
+const loadTerminalList = async () => {
+  try {
+    const response = await fetch('/api/terminals/');
+    const data = await response.json();
+    terminalList.value = data;
+    return data;
+  } catch (error) {
+    console.error('加载终端列表失败:', error);
+    ElMessage.error('加载终端列表失败');
+    return [];
+  }
+};
+
+// 加载终端详细信息
+const loadTerminalDetails = async () => {
+  try {
+    const details = await terminalService.getTerminalDetails();
+    Object.assign(terminalDetails, details);
+    
+    // 更新终端基本信息
+    terminal.id = terminalDetails.id;
+    terminal.name = terminalDetails.name;
+    terminal.status = terminalDetails.status;
+    
+    return details;
+  } catch (error) {
+    console.error('加载终端详细信息失败:', error);
+    ElMessage.warning('无法获取终端详细信息');
+    return null;
+  }
+};
+
 // 处理连接模式变更
 const handleModeChange = async () => {
   loading.value = true;
   if (connectionMode.value === 'remote') {
     if (!terminal.id) {
-      ElMessage.error('远程模式需要终端ID');
-      if (localAvailable.value) {
-        connectionMode.value = 'local';
+      if (terminalList.value.length > 0) {
+        // 如果有可用终端，使用第一个
+        terminal.id = terminalList.value[0].id;
+        selectedTerminalId.value = terminal.id;
       } else {
-        router.push('/terminals');
-        return;
+        ElMessage.error('远程模式需要终端ID，但无可用终端');
+        if (localAvailable.value) {
+          connectionMode.value = 'local';
+        } else {
+          router.push('/terminals');
+          return;
+        }
       }
-    } else {
-      terminalService.setMode('remote', terminal.id);
     }
+    terminalService.setMode('remote', terminal.id);
   } else {
     terminalService.setMode('local');
   }
   
   // 重新加载数据
-  await Promise.all([
-    loadTerminalStatus(),
-    loadTerminalConfig(),
-    loadLogs()
-  ]);
+  try {
+    await Promise.all([
+      loadTerminalDetails(),
+      loadTerminalStatus(),
+      loadTerminalConfig(),
+      loadLogs()
+    ]);
+    
+    // 重新连接WebSocket
+    setupWebSocket();
+    
+    loading.value = false;
+  } catch (error) {
+    console.error('切换模式失败:', error);
+    ElMessage.error('切换连接模式失败');
+    loading.value = false;
+  }
+};
+
+// 切换终端
+const switchTerminal = (id) => {
+  if (id === terminal.id) return;
   
-  // 重新连接WebSocket
-  setupWebSocket();
-  
-  loading.value = false;
+  // 保存新ID到路由
+  router.push(`/terminals/${id}`);
 };
 
 // 初始化
 onMounted(async () => {
   loading.value = true;
+  
+  // 加载终端列表
+  await loadTerminalList();
   
   // 检测本地终端
   await detectLocalTerminal();
@@ -105,18 +175,28 @@ onMounted(async () => {
   // 确定连接模式
   if (route.params.id) {
     terminal.id = parseInt(route.params.id);
+    selectedTerminalId.value = terminal.id;
     connectionMode.value = 'remote';
     terminalService.setMode('remote', terminal.id);
   } else if (localAvailable.value) {
     connectionMode.value = 'local';
     terminalService.setMode('local');
+  } else if (terminalList.value.length > 0) {
+    // 如果有终端列表但没有指定ID，使用第一个
+    terminal.id = terminalList.value[0].id;
+    selectedTerminalId.value = terminal.id;
+    connectionMode.value = 'remote';
+    terminalService.setMode('remote', terminal.id);
+    router.replace(`/terminals/${terminal.id}`);
   } else {
-    ElMessage.error('无法连接到终端');
+    // 无终端可用
+    ElMessage.warning('无法连接到终端，请先添加终端');
   }
   
   // 加载数据
   try {
     await Promise.all([
+      loadTerminalDetails(),
       loadTerminalStatus(),
       loadTerminalConfig(),
       loadLogs()
@@ -148,19 +228,6 @@ const loadTerminalStatus = async () => {
   try {
     const data = await terminalService.getStatus();
     Object.assign(status, data);
-    
-    // 更新终端基本信息
-    if (connectionMode.value === 'remote') {
-      // 远程模式下从另一个API获取终端名称
-      try {
-        const terminalData = await fetch(`/api/terminals/${terminal.id}/`).then(res => res.json());
-        terminal.name = terminalData.name || '远程终端';
-      } catch (e) {
-        terminal.name = `终端 #${terminal.id}`;
-      }
-    } else {
-      terminal.name = '本地终端';
-    }
     
     // 更新终端状态
     terminal.status = status.model_loaded || status.push_running || status.pull_running;
@@ -446,10 +513,29 @@ const customColorMethod = (percentage) => {
               {{ terminal.status ? '在线' : '离线' }}
             </el-tag>
           </div>
-          <el-radio-group v-model="connectionMode" size="small">
-            <el-radio-button label="remote" :disabled="!terminal.id">远程模式</el-radio-button>
-            <el-radio-button label="local" :disabled="!localAvailable">本地模式</el-radio-button>
-          </el-radio-group>
+          <div class="connection-controls">
+            <!-- 添加终端选择器 -->
+            <el-select 
+              v-if="connectionMode === 'remote'" 
+              v-model="selectedTerminalId" 
+              placeholder="选择终端" 
+              size="small"
+              @change="switchTerminal"
+              style="margin-right: 10px; width: 140px;"
+            >
+              <el-option 
+                v-for="item in terminalList" 
+                :key="item.id" 
+                :label="item.name || `终端 #${item.id}`" 
+                :value="item.id"
+              />
+            </el-select>
+            
+            <el-radio-group v-model="connectionMode" size="small">
+              <el-radio-button label="remote" :disabled="terminalList.length === 0">远程模式</el-radio-button>
+              <el-radio-button label="local" :disabled="!localAvailable">本地模式</el-radio-button>
+            </el-radio-group>
+          </div>
         </div>
       </template>
       
@@ -483,6 +569,9 @@ const customColorMethod = (percentage) => {
                       <el-tag :type="status.model_loaded ? 'success' : 'warning'" size="small">
                         {{ status.model_loaded ? '已加载' : '未加载' }}
                       </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="terminalDetails.last_active" label="最后活动">
+                      {{ terminalDetails.last_active }}
                     </el-descriptions-item>
                   </el-descriptions>
                 </div>
@@ -956,6 +1045,12 @@ h4 {
   margin-bottom: 15px;
 }
 
+.connection-controls {
+  display: flex;
+  align-items: center;
+}
+
+/* 适配移动设备 */
 @media (max-width: 768px) {
   .terminal-view {
     padding: 10px;

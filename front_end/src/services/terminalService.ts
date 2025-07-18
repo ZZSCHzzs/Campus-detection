@@ -61,12 +61,26 @@ export interface LogEntry {
 export type WebSocketCallback = (data: any) => void;
 
 /**
+ * 终端模型接口
+ */
+export interface Terminal {
+  id: number;
+  name: string;
+  status: boolean;
+  last_active?: string;
+  cpu_usage?: number;
+  memory_usage?: number;
+  [key: string]: any;
+}
+
+/**
  * 终端通信服务 - 支持本地直连和远程连接两种模式
  */
 class TerminalService {
   // 服务配置
   private mode: 'remote' | 'local' = 'remote';
   private terminalId: number | null = null;
+  private terminalData: Terminal | null = null;
   private localEndpoint: string = 'http://localhost:5000';
   
   // WebSocket连接
@@ -81,7 +95,7 @@ class TerminalService {
   private isReconnecting: boolean = false;
 
   // WebSocket URL配置
-  private readonly wsPathTemplate: string = '/ws/terminals/{id}/';
+  private readonly wsPathTemplate: string = '/ws/terminal/{id}/';  // 修改为单数形式
   private readonly localWsId: string = 'local';
   
   /**
@@ -96,8 +110,23 @@ class TerminalService {
       return false;
     }
     
+    if (mode === 'remote') {
+      // 检查远程模式是否有终端ID
+      if (!terminalId) {
+        console.warn('远程模式下未提供终端ID，将使用默认值1');
+        this.terminalId = 1;
+      } else {
+        this.terminalId = terminalId;
+      }
+      // 清除终端数据缓存
+      this.terminalData = null;
+    } else {
+      // 本地模式
+      this.terminalId = null;
+      this.terminalData = null;
+    }
+    
     this.mode = mode;
-    this.terminalId = terminalId;
     
     // 断开现有WebSocket连接
     this.disconnectWebSocket();
@@ -183,11 +212,12 @@ class TerminalService {
    */
   private async sendRemoteCommand(commandData: TerminalCommand): Promise<any> {
     if (!this.terminalId) {
-      throw new Error('远程模式下必须提供终端ID');
+      this.terminalId = 1; // 如果未设置，使用默认值
+      console.warn('未设置终端ID，使用默认值1');
     }
     
     try {
-      // 使用一致的复数形式URL
+      // 使用单数形式URL
       const response = await axios.post(`/api/terminals/${this.terminalId}/command/`, commandData, {
         timeout: 10000,
         headers: {
@@ -425,12 +455,13 @@ class TerminalService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     
     if (this.mode === 'local') {
-      // 本地模式统一使用标准格式
-      return `ws://localhost:5000${this.wsPathTemplate.replace('{id}', this.localWsId)}`;
+      // 本地模式使用localhost
+      return `ws://localhost:5000/ws/terminal/${this.localWsId}/`;
     } else {
-      // 远程模式使用当前域名
+      // 远程模式使用当前域名，确保终端ID存在
       const host = window.location.host;
-      return `${protocol}//${host}${this.wsPathTemplate.replace('{id}', String(this.terminalId))}`;
+      const terminalId = this.terminalId || 1; // 确保始终有终端ID
+      return `${protocol}//${host}${this.wsPathTemplate.replace('{id}', String(terminalId))}`;
     }
   }
   

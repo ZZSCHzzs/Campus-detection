@@ -113,23 +113,15 @@ WSGI_APPLICATION = 'campus_detection.wsgi.application'
 # Channels配置
 ASGI_APPLICATION = 'campus_detection.asgi.application'
 
-# 通道层配置 - 使用内存通道层作为开发环境配置
-# 生产环境建议使用Redis通道层
+# 通道层配置 - 使用Redis通道层
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
     },
 }
-
-# 如果需要使用Redis (生产环境推荐)，请安装channels_redis并使用以下配置:
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {
-#             "hosts": [("127.0.0.1", 6379)],
-#         },
-#     },
-# }
 
 LOGGING = {
     'version': 1,

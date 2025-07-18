@@ -5,10 +5,10 @@ import datetime
 import requests
 import numpy as np
 import detect.run as detect
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 from threading import Thread, Lock, Event
-from camera import apply_camera_config
 import json
 import psutil
 import asyncio
@@ -16,22 +16,24 @@ from websocket_client import TerminalWebSocketClient
 import logging
 from logging.handlers import RotatingFileHandler
 
+# 创建Flask应用
 app = Flask(__name__, 
             static_folder='static',
-            template_folder='templates')
+            template_folder='static')  # 修改模板目录为static目录
+# 添加CORS支持，允许前端跨域访问
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# 运行模式
+# 全局配置变量
 MODE = "push"  # 默认为被动接收模式
 PULL_MODE_INTERVAL = 1  # 主动拉取模式的间隔时间（秒）
 PRE_LOAD_MODEL = True  # 是否预加载模型
 LOADED_MODEL = None  # 全局变量存储预加载的模型
 SAVE_IMAGE = True   # 是否保存图像
-INITIALIZE_CAMERA = False  # 是否初始化摄像头
-CAMERAS = {
-    1: "http://192.168.1.101:81"
-}
-STREAM_URL = "/stream"
+CAMERAS = {1: "http://192.168.1.101:81"}
+TERMINAL_ID = 1  # 当前终端的ID
+SERVER_URL = "wss://smarthit.top"  # 服务器基础URL（用于WebSocket）
+API_URL = "https://smarthit.top/api/upload/"  # API上传URL
 
 # 存储系统状态的全局变量
 system_status = {
@@ -47,6 +49,27 @@ system_status = {
     "started_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 }
 status_lock = Lock()  # 用于线程安全地更新状态
+
+# 存储和加载配置
+def save_config_to_file(config):
+    """保存配置到文件"""
+    try:
+        with open('config.json', 'w') as f:
+            json.dump(config, f, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存配置失败: {e}")
+        return False
+
+def load_config_from_file():
+    """从文件加载配置"""
+    try:
+        if os.path.exists('config.json'):
+            with open('config.json', 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"加载配置失败: {e}")
+    return None
 
 # 检测线程 - 支持两种模式同时运行
 class DetectionManager:
@@ -272,6 +295,11 @@ class DetectionManager:
 # 全局检测线程实例
 detection_manager = DetectionManager()
 
+# 配置日志
+logger = logging.getLogger('detect_app')
+detection_logs = []
+MAX_LOGS = 1000  # 内存中保存的最大日志数
+
 # 预加载模型
 def initialize_model():
     global LOADED_MODEL
@@ -281,14 +309,6 @@ def initialize_model():
         system_status["model_loaded"] = True
     print("模型加载完成！")
     socketio.emit('system_update', {'model_loaded': True})
-
-def initialize_cameras():
-    for camera_id, camera_url in CAMERAS.items():
-        print(f"初始化摄像头 {camera_id}:{camera_url} ...")
-        if not apply_camera_config(camera_url):
-            print(f"摄像头 {camera_id} 初始化失败！")
-            continue
-        print(f"摄像头 {camera_id} 初始化完成！")
 
 # 从 WiFi 摄像头捕获图像
 def capture_image_from_camera(camera_url):
@@ -374,37 +394,6 @@ def analyze_images(images_data):
     
     return camera_results
 
-
-# 配置日志
-LOG_FILE = 'system.log'
-LOG_LEVEL = logging.INFO
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-LOG_MAX_SIZE = 10 * 1024 * 1024  # 10MB
-LOG_BACKUP_COUNT = 5
-
-# 确保日志目录存在
-os.makedirs('logs', exist_ok=True)
-
-# 配置根日志记录器
-logging.basicConfig(
-    level=LOG_LEVEL,
-    format=LOG_FORMAT,
-    handlers=[
-        RotatingFileHandler(
-            f'logs/{LOG_FILE}',
-            maxBytes=LOG_MAX_SIZE,
-            backupCount=LOG_BACKUP_COUNT
-        ),
-        logging.StreamHandler()  # 同时输出到控制台
-    ]
-)
-
-# 获取应用日志记录器
-logger = logging.getLogger('detect_app')
-
-# 存储检测日志
-detection_logs = []
-MAX_LOGS = 1000  # 内存中保存的最大日志数
 
 # 日志记录函数
 def log_event(level, message, source=None):
@@ -521,421 +510,65 @@ def upload_result(camera_id, detected_count):
         socketio.emit('camera_status', {'id': camera_id, 'status': '离线', 'error': str(e)})
         return None
 
-# 主动拉取模式处理
-def pull_mode_handler():
-    interval = PULL_MODE_INTERVAL
-    print("运行在主动拉取模式...")
-    
-    # 初始化摄像头状态
-    for camera_id in CAMERAS:
-        with status_lock:
-            system_status["cameras"][camera_id] = "未知"
-            system_status["detection_count"][camera_id] = 0
-            system_status["last_update"][camera_id] = "从未"
-    
-    while True:
-        images_to_process = []
-        
-        # 更新系统资源使用情况
-        with status_lock:
-            system_status["cpu_usage"] = psutil.cpu_percent()
-            system_status["memory_usage"] = psutil.virtual_memory().percent
-        socketio.emit('system_resources', {
-            'cpu': system_status["cpu_usage"], 
-            'memory': system_status["memory_usage"]
-        })
-        
-        # 收集多个摄像头的图像
-        for camera_id, camera_url in CAMERAS.items():
-            try:
-                # 捕获图像
-                image = capture_image_from_camera(camera_url)
-                with status_lock:
-                    system_status["cameras"][camera_id] = "在线"
-                socketio.emit('camera_status', {'id': camera_id, 'status': '在线'})
-                images_to_process.append((image, camera_id))
-            except Exception as e:
-                print(f"摄像头 {camera_id} 捕获失败: {e}")
-                with status_lock:
-                    system_status["cameras"][camera_id] = "离线"
-                socketio.emit('camera_status', {'id': camera_id, 'status': '离线', 'error': str(e)})
-        
-        if images_to_process:
-            try:
-                # 批量分析图像
-                results = analyze_images(images_to_process)
-                
-                # 上传结果
-                for camera_id, detected_count in results.items():
-                    print(f"摄像头 {camera_id} 检测到人数: {detected_count}")
-                    upload_result(camera_id, detected_count)
-            except Exception as e:
-                print(f"批量处理失败: {e}")
-                socketio.emit('system_error', {'message': f'批量处理失败: {str(e)}'})
-
-        time.sleep(interval)
-
-
-# Flask接收端点
-@app.route('/api/push_frame/<int:camera_id>', methods=['POST'])  # 指定camera_id为整数
-def receive_frame(camera_id):
-    # 检查被动模式是否开启
-    if not detection_manager.push_running:
-        print("被动接收模式未启用，拒绝请求")
-        return jsonify({"error": "被动接收模式未启用"}), 403
-        
-    if camera_id not in CAMERAS:
-        print(f"无效的摄像头ID: {camera_id}")
-        return jsonify({"error": "无效的摄像头ID"}), 404
-
-    if 'file' not in request.files:
-        print("没有文件上传")
-        return jsonify({"error": "没有文件上传"}), 400
-
-    file = request.files['file']
-    try:
-        # 读取图像
-        img_data = file.read()
-        if len(img_data) == 0:
-            print("空文件内容")
-            return jsonify({"error": "空文件内容"}), 415
-
-        image = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
-        if image is None:
-            print("无效的图片格式")
-            return jsonify({"error": "无效的图片格式"}), 415
-
-        # 分析图像
-        detected_count = analyze_image(image, camera_id)
-        print(f"摄像头 {camera_id} 检测到人数: {detected_count}")
-
-        # 上传结果
-        result = upload_result(camera_id, detected_count)
-        if result is None:
-            return jsonify({"error": "云端上传失败"}), 504
-        print("\033[92m" + f"摄像头 {camera_id} 处理成功" + "\033[0m")
-        return jsonify({
-            "status": "success",
-        }), 201
-
-    except Exception as e:
-        print(f"处理异常: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-
-# UI路由
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/config')
-def config_page():
-    return render_template('config.html')
-
-# 日志页面
-@app.route('/logs')
-def logs_page():
-    return render_template('logs.html')
-
-# 获取系统状态API
-@app.route('/api/status')
-def get_status():
-    with status_lock:
-        return jsonify(system_status)
-
-# 获取日志API
-@app.route('/api/logs')
-def get_logs():
-    return jsonify(detection_logs)
-
-# 获取日志统计数据
-@app.route('/api/logs/stats')
-def get_log_stats():
-    # 检查是否需要重置每日统计
-    reset_daily_stats()
-    return jsonify(detection_stats)
-
-# 存储和加载配置
-def save_config_to_file(config):
-    try:
-        with open('config.json', 'w') as f:
-            json.dump(config, f, indent=4)
-        return True
-    except Exception as e:
-        print(f"保存配置失败: {e}")
-        return False
-
-def load_config_from_file():
-    try:
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as f:
-                return json.load(f)
-    except Exception as e:
-        print(f"加载配置失败: {e}")
-    return None
-
-# 修改配置API
-@app.route('/api/config', methods=['POST'])
-def update_config():
-    global MODE, PULL_MODE_INTERVAL, CAMERAS, SAVE_IMAGE, PRE_LOAD_MODEL, SERVER_URL, API_URL
-    
-    data = request.json
-    config_changed = False
-    restart_required = False
-    
-    try:
-        # 保存原始配置用于恢复
-        original_config = {
-            'mode': MODE,
-            'interval': PULL_MODE_INTERVAL,
-            'cameras': CAMERAS,
-            'save_image': SAVE_IMAGE,
-            'preload_model': PRE_LOAD_MODEL
-        }
-        
-        # 更新配置
-        if 'mode' in data and data['mode'] != MODE:
-            # 使用detection_manager来处理模式切换
-            if detection_manager.change_mode(data['mode']):
-                with status_lock:
-                    system_status['mode'] = MODE
-                config_changed = True
-        
-        if 'interval' in data and float(data['interval']) != PULL_MODE_INTERVAL:
-            PULL_MODE_INTERVAL = float(data['interval'])
-            detection_manager.update_interval(PULL_MODE_INTERVAL)
-            config_changed = True
-        
-        if 'cameras' in data and data['cameras'] != CAMERAS:
-            CAMERAS = data['cameras']
-            detection_manager.update_cameras(CAMERAS)
-            config_changed = True
-        
-        if 'save_image' in data and data['save_image'] != SAVE_IMAGE:
-            SAVE_IMAGE = data['save_image']
-            config_changed = True
-        
-        if 'preload_model' in data and data['preload_model'] != PRE_LOAD_MODEL:
-            PRE_LOAD_MODEL = data['preload_model']
-            restart_required = True
-            config_changed = True
-        
-        # 如果配置有变化，保存到文件
-        if config_changed:
-            config_data = {
-                'mode': MODE,
-                'interval': PULL_MODE_INTERVAL,
-                'cameras': CAMERAS,
-                'save_image': SAVE_IMAGE,
-                'preload_model': PRE_LOAD_MODEL,
-                'terminal_id': TERMINAL_ID,
-                'server_url': data.get('server_url', SERVER_URL),
-                'api_url': data.get('api_url', API_URL)
-            }
-            save_config_to_file(config_data)
-        
-        response_data = {'status': 'success', 'config_changed': config_changed}
-        if restart_required:
-            response_data['restart_required'] = True
-            socketio.emit('config_updated', {'success': True, 'restart_required': True})
-        else:
-            socketio.emit('config_updated', {'success': True})
-            
-        return jsonify(response_data)
-    
-    except Exception as e:
-        print(f"配置更新失败: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-# 新增控制API
-@app.route('/api/control', methods=['POST'])
-def control_detection():
-    action = request.json.get('action')
-    mode = request.json.get('mode', 'both')  # 默认操作两种模式
-    
-    if action == 'start':
-        if mode == 'push' or mode == 'both':
-            detection_manager.start_push()
-        
-        if mode == 'pull' or mode == 'both':
-            detection_manager.start_pull()
-        
-        return jsonify({'status': 'success', 'message': f'已启动{mode}模式'})
-    
-    elif action == 'stop':
-        if mode == 'push' or mode == 'both':
-            detection_manager.stop_push()
-        
-        if mode == 'pull' or mode == 'both':
-            detection_manager.stop_pull()
-        
-        return jsonify({'status': 'success', 'message': f'已停止{mode}模式'})
-    
-    elif action == 'restart':
-        if mode == 'push' or mode == 'both':
-            detection_manager.stop_push()
-            time.sleep(0.5)
-            detection_manager.start_push()
-        
-        if mode == 'pull' or mode == 'both':
-            detection_manager.stop_pull()
-            time.sleep(0.5)
-            detection_manager.start_pull()
-        
-        return jsonify({'status': 'success', 'message': f'已重启{mode}模式'})
-    
-    else:
-        return jsonify({'status': 'error', 'message': '无效的操作'}), 400
-
-# WebSocket事件 - 控制事件
-@socketio.on('control_detection')
-def handle_control_detection(data):
-    action = data.get('action')
-    mode = data.get('mode', 'both')
-    
-    if action == 'start':
-        success = False
-        if mode == 'push':
-            success = detection_manager.start_push()
-        elif mode == 'pull':
-            success = detection_manager.start_pull()
-        elif mode == 'both':
-            success1 = detection_manager.start_push()
-            success2 = detection_manager.start_pull()
-            success = success1 or success2
-        
-        emit('system_message', {'message': f'已启动{mode}模式' if success else f'{mode}模式已在运行'})
-    
-    elif action == 'stop':
-        success = False
-        if mode == 'push':
-            success = detection_manager.stop_push()
-        elif mode == 'pull':
-            success = detection_manager.stop_pull()
-        elif mode == 'both':
-            success1 = detection_manager.stop_push()
-            success2 = detection_manager.stop_pull()
-            success = success1 or success2
-        
-        emit('system_message', {'message': f'已停止{mode}模式' if success else f'{mode}模式未在运行'})
-    
-
-# 添加全局WebSocket客户端实例
-ws_client = None
-TERMINAL_ID = 1  # 当前终端的ID
-SERVER_URL = "wss://smarthit.top"  # 服务器基础URL（用于WebSocket）
-API_URL = "https://smarthit.top/api/upload/"  # API上传URL
-
-# 添加WebSocket命令处理函数
-async def handle_ws_command(command_data):
-    """处理从服务器接收到的WebSocket命令"""
-    global SAVE_IMAGE, PRE_LOAD_MODEL, PULL_MODE_INTERVAL, MODE, CAMERAS
-    
-    command = command_data.get('command')
-    params = command_data.get('params', {})
-    
-    log_event('info', f'收到服务器命令: {command}', 'websocket')
-    socketio.emit('system_message', {'message': f'收到服务器命令: {command}'})
-    
-    try:
-        if command == 'start':
-            mode = params.get('mode', 'both')
-            if mode == 'push' or mode == 'both':
-                detection_manager.start_push()
-            if mode == 'pull' or mode == 'both':
-                detection_manager.start_pull()
-            log_event('info', f'服务器命令：启动{mode}模式', 'websocket')
-            
-        elif command == 'stop':
-            mode = params.get('mode', 'both')
-            if mode == 'push' or mode == 'both':
-                detection_manager.stop_push()
-            if mode == 'pull' or mode == 'both':
-                detection_manager.stop_pull()
-            log_event('info', f'服务器命令：停止{mode}模式', 'websocket')
-            
-        elif command == 'update_config':
-            config_changed = False
-            restart_required = False
-            
-            if 'mode' in params and params['mode'] != MODE:
-                detection_manager.change_mode(params['mode'])
-                config_changed = True
-                
-            if 'interval' in params and float(params['interval']) != PULL_MODE_INTERVAL:
-                PULL_MODE_INTERVAL = float(params['interval'])
-                detection_manager.update_interval(PULL_MODE_INTERVAL)
-                config_changed = True
-                
-            if 'cameras' in params and params['cameras'] != CAMERAS:
-                CAMERAS = params['cameras']
-                detection_manager.update_cameras(CAMERAS)
-                config_changed = True
-                
-            if 'save_image' in params and params['save_image'] != SAVE_IMAGE:
-                SAVE_IMAGE = params['save_image']
-                config_changed = True
-                
-            if 'preload_model' in params and params['preload_model'] != PRE_LOAD_MODEL:
-                PRE_LOAD_MODEL = params['preload_model']
-                restart_required = True
-                config_changed = True
-                
-            if config_changed:
-                config_data = {
-                    'mode': MODE,
-                    'interval': PULL_MODE_INTERVAL,
-                    'cameras': CAMERAS,
-                    'save_image': SAVE_IMAGE,
-                    'preload_model': PRE_LOAD_MODEL,
-                    'terminal_id': TERMINAL_ID,
-                    'server_url': SERVER_URL,
-                    'api_url': API_URL
-                }
-                save_config_to_file(config_data)
-                log_event('info', '配置已更新并保存', 'websocket')
-                
-            if restart_required:
-                log_event('warning', '配置更改需要重启应用才能生效', 'websocket')
-                
-        elif command == 'get_status':
-            # 向服务器报告当前状态
-            if ws_client and ws_client.connected:
-                with status_lock:
-                    status_copy = dict(system_status)
-                    status_copy['terminal_id'] = TERMINAL_ID
-                asyncio.run_coroutine_threadsafe(
-                    ws_client.send_status(status_copy),
-                    asyncio.get_event_loop()
-                )
-                
-        else:
-            log_event('warning', f'未知命令: {command}', 'websocket')
-            
-    except Exception as e:
-        error_msg = f'处理命令 {command} 时出错: {str(e)}'
-        log_event('error', error_msg, 'websocket')
-
 # 构建实际的WebSocket URL
 def get_ws_url():
     """获取正确格式的WebSocket URL"""
-    # 确保URL使用正确的WebSocket协议
     base_url = SERVER_URL.rstrip('/')
     
     # 如果URL不是以ws或wss开头，修正协议
     if not (base_url.startswith('ws://') or base_url.startswith('wss://')):
-        # 如果是https协议，转换为wss协议
         if base_url.startswith('https://'):
             base_url = 'wss://' + base_url[8:]
-        # 如果是http协议，转换为ws协议
         elif base_url.startswith('http://'):
             base_url = 'ws://' + base_url[7:]
-        # 如果没有协议，默认使用wss
         else:
             base_url = 'wss://' + base_url
     
-    # 构建完整WebSocket URL
-    return f"{base_url}/ws/terminals/{TERMINAL_ID}/"
+    # 构建完整WebSocket URL - 使用单数形式的路径
+    return f"{base_url}/ws/terminal/{TERMINAL_ID}/"
+
+# WebSocket命令处理函数
+async def handle_ws_command(command_data):
+    """处理从服务器接收到的WebSocket命令"""
+    command_type = command_data.get('type')
+    payload = command_data.get('payload')
+    
+    print(f"接收到WebSocket命令: {command_type}, 数据: {payload}")
+    
+    if command_type == "set_mode":
+        new_mode = payload.get("mode")
+        if new_mode in ["push", "pull", "both"]:
+            detection_manager.change_mode(new_mode)
+            socketio.emit('system_message', {'message': f'模式已切换为: {new_mode}'})
+        else:
+            socketio.emit('system_error', {'message': '无效的模式'})
+    
+    elif command_type == "set_interval":
+        new_interval = payload.get("interval")
+        if isinstance(new_interval, (int, float)) and new_interval > 0:
+            detection_manager.update_interval(new_interval)
+            socketio.emit('system_message', {'message': f'拉取间隔已更新为: {new_interval}秒'})
+        else:
+            socketio.emit('system_error', {'message': '无效的间隔值'})
+    
+    elif command_type == "update_cameras":
+        new_cameras = payload.get("cameras")
+        if isinstance(new_cameras, dict):
+            detection_manager.update_cameras(new_cameras)
+            socketio.emit('system_message', {'message': '摄像头配置已更新'})
+        else:
+            socketio.emit('system_error', {'message': '无效的摄像头配置'})
+    
+    elif command_type == "restart":
+        socketio.emit('system_message', {'message': '正在重启服务...'})
+        time.sleep(2)  # 模拟重启延迟
+        os.execv(sys.executable, ['python'] + sys.argv)
+    
+    else:
+        socketio.emit('system_error', {'message': '未知的命令类型'})
+
+# 全局WebSocket客户端实例
+ws_client = None
 
 # 初始化WebSocket客户端
 def init_websocket_client():
@@ -945,7 +578,6 @@ def init_websocket_client():
     config = load_config_from_file()
     if config:
         TERMINAL_ID = config.get('terminal_id', TERMINAL_ID)
-        # 确保服务器URL正确设置
         SERVER_URL = config.get('server_url', SERVER_URL)
         API_URL = config.get('api_url', API_URL)
     
@@ -953,7 +585,7 @@ def init_websocket_client():
     correct_ws_url = get_ws_url()
     log_event('info', f'初始化WebSocket客户端，终端ID: {TERMINAL_ID}，服务器URL: {correct_ws_url}', 'system')
     
-    # 创建WebSocket客户端
+    # 创建并启动WebSocket客户端
     from websocket_client import TerminalWebSocketClient
     ws_client = TerminalWebSocketClient(correct_ws_url, TERMINAL_ID, on_command=handle_ws_command)
     
@@ -970,7 +602,7 @@ def init_websocket_client():
                     socketio.emit('system_message', {'message': '已连接到远程服务器'})
                     socketio.emit('system_update', {'ws_connected': True})
                     
-                    # 发送初始状态
+                    # 发送初始状态，包含终端ID
                     with status_lock:
                         status_copy = dict(system_status)
                         status_copy['terminal_id'] = TERMINAL_ID
@@ -993,6 +625,165 @@ def init_websocket_client():
     
     return ws_thread
 
+# API路由 
+@app.route('/api/info')
+def get_info():
+    """返回终端基本信息，供Vue前端使用"""
+    return jsonify({
+        "id": TERMINAL_ID,
+        "name": f"终端 #{TERMINAL_ID}",
+        "server_url": SERVER_URL,
+        "version": "1.0.0"
+    })
+
+# 获取系统状态API
+@app.route('/api/status')
+def get_status():
+    with status_lock:
+        return jsonify(system_status)
+
+# 获取日志API
+@app.route('/api/logs')
+def get_logs():
+    return jsonify(detection_logs)
+
+# 获取日志统计数据
+@app.route('/api/logs/stats')
+def get_log_stats():
+    reset_daily_stats()
+    return jsonify(detection_stats)
+
+# 配置API（供Vue前端使用）
+@app.route('/api/config', methods=['GET', 'POST'])
+def config_endpoint():
+    """获取或更新终端配置"""
+    if request.method == 'GET':
+        config_data = {
+            'mode': MODE,
+            'interval': PULL_MODE_INTERVAL,
+            'cameras': CAMERAS,
+            'save_image': SAVE_IMAGE,
+            'preload_model': PRE_LOAD_MODEL,
+            'terminal_id': TERMINAL_ID,
+            'server_url': SERVER_URL,
+            'api_url': API_URL
+        }
+        return jsonify(config_data)
+    elif request.method == 'POST':
+        global MODE, PULL_MODE_INTERVAL, CAMERAS, SAVE_IMAGE, PRE_LOAD_MODEL, SERVER_URL, API_URL
+        
+        data = request.json
+        config_changed = False
+        restart_required = False
+        
+        try:
+            # 更新模式
+            new_mode = data.get('mode')
+            if new_mode in ["push", "pull", "both"] and new_mode != MODE:
+                MODE = new_mode
+                config_changed = True
+            
+            # 更新拉取间隔
+            new_interval = data.get('interval')
+            if isinstance(new_interval, (int, float)) and new_interval > 0 and new_interval != PULL_MODE_INTERVAL:
+                PULL_MODE_INTERVAL = new_interval
+                config_changed = True
+            
+            # 更新摄像头配置
+            new_cameras = data.get('cameras')
+            if isinstance(new_cameras, dict) and new_cameras != CAMERAS:
+                CAMERAS = new_cameras
+                config_changed = True
+            
+            # 更新其他设置
+            SAVE_IMAGE = data.get('save_image', SAVE_IMAGE)
+            PRE_LOAD_MODEL = data.get('preload_model', PRE_LOAD_MODEL)
+            SERVER_URL = data.get('server_url', SERVER_URL)
+            API_URL = data.get('api_url', API_URL)
+            
+            # 如果配置有变化，保存到文件
+            if config_changed:
+                config_data = {
+                    'mode': MODE,
+                    'interval': PULL_MODE_INTERVAL,
+                    'cameras': CAMERAS,
+                    'save_image': SAVE_IMAGE,
+                    'preload_model': PRE_LOAD_MODEL,
+                    'terminal_id': TERMINAL_ID,
+                    'server_url': SERVER_URL,
+                    'api_url': API_URL
+                }
+                save_config_to_file(config_data)
+            
+            response_data = {'status': 'success', 'config_changed': config_changed}
+            if restart_required:
+                response_data['restart_required'] = True
+            
+            return jsonify(response_data)
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 400
+
+# 控制API
+@app.route('/api/control', methods=['POST'])
+def control_detection():
+    """控制检测服务的启动和停止"""
+    action = request.json.get('action')
+    
+    if action == "start_push":
+        detection_manager.start_push()
+        return jsonify({"status": "success", "message": "已启动被动接收模式"})
+    elif action == "stop_push":
+        detection_manager.stop_push()
+        return jsonify({"status": "success", "message": "已停止被动接收模式"})
+    elif action == "start_pull":
+        detection_manager.start_pull()
+        return jsonify({"status": "success", "message": "已启动主动拉取模式"})
+    elif action == "stop_pull":
+        detection_manager.stop_pull()
+        return jsonify({"status": "success", "message": "已停止主动拉取模式"})
+    else:
+        return jsonify({"status": "error", "message": "无效的操作"}), 400
+
+# 接收图像API
+@app.route('/api/push_frame/<int:camera_id>', methods=['POST'])
+def receive_frame(camera_id):
+    """接收并处理上传的图像"""
+    if camera_id not in CAMERAS:
+        return jsonify({"status": "error", "message": "无效的摄像头ID"}), 400
+    
+    try:
+        # 从请求中获取图像数据
+        image_file = request.files.get('image')
+        if not image_file:
+            return jsonify({"status": "error", "message": "未接收到图像数据"}), 400
+        
+        # 将图像数据保存到临时文件
+        image_data = image_file.read()
+        temp_path = f"temp/node{camera_id}/{"".join(str(datetime.datetime.now().timetuple()[:6]))}.jpg"
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        with open(temp_path, 'wb') as f:
+            f.write(image_data)
+        
+        # 使用预加载模型分析图像
+        count = detect.detect(temp_path, model=LOADED_MODEL)
+        
+        # 上传结果
+        upload_result(camera_id, count)
+        
+        return jsonify({"status": "success", "message": "图像处理完成", "detected_count": count})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Vue单页应用入口
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_vue_app(path):
+    """提供Vue单页应用入口点"""
+    if path and (os.path.exists(os.path.join(app.static_folder, path))):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_file(os.path.join(app.static_folder, 'index.html'))
+
 # 主程序入口点
 if __name__ == "__main__":
     # 加载配置
@@ -1010,6 +801,14 @@ if __name__ == "__main__":
     # 创建必要的目录
     os.makedirs('temp', exist_ok=True)
     os.makedirs('logs', exist_ok=True)
+    
+    # 初始化摄像头状态
+    with status_lock:
+        for camera_id in CAMERAS:
+            if camera_id not in system_status["cameras"]:
+                system_status["cameras"][camera_id] = "未知"
+                system_status["detection_count"][camera_id] = 0
+                system_status["last_update"][camera_id] = "从未"
     
     log_event('info', f'系统启动，终端ID: {TERMINAL_ID}，模式: {MODE}', 'system')
     
@@ -1029,5 +828,5 @@ if __name__ == "__main__":
     if MODE == "pull" or MODE == "both":
         detection_manager.start_pull()
     
-    # 使用socketio.run启动Flask应用，添加allow_unsafe_werkzeug=True参数
+    # 使用socketio.run启动Flask应用
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
