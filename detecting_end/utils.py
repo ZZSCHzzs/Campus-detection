@@ -8,6 +8,10 @@ import datetime
 import logging
 import requests
 import numpy as np
+import platform
+import psutil
+import socket
+import uuid
 
 logger = logging.getLogger('utils')
 
@@ -33,26 +37,6 @@ def save_image(image, directory, filename=None):
         return None
     
     return filepath
-
-def load_config(config_file='config.json'):
-    """从JSON文件加载配置"""
-    try:
-        if os.path.exists(config_file):
-            with open(config_file, 'r') as f:
-                return json.load(f)
-    except Exception as e:
-        logger.error(f"加载配置失败: {e}")
-    return None
-
-def save_config(config, config_file='config.json'):
-    """保存配置到JSON文件"""
-    try:
-        with open(config_file, 'w') as f:
-            json.dump(config, f, indent=4)
-        return True
-    except Exception as e:
-        logger.error(f"保存配置失败: {e}")
-        return False
 
 def fix_ws_url(url):
     """修复WebSocket URL，确保使用正确的协议"""
@@ -95,3 +79,44 @@ def capture_frame_from_stream(stream_url, timeout=5):
     except Exception as e:
         logger.error(f"捕获帧失败: {e}")
         raise
+
+def get_system_info():
+    """获取系统信息"""
+    try:
+        system_info = {
+            'platform': platform.platform(),
+            'python_version': platform.python_version(),
+            'hostname': socket.gethostname(),
+            'ip': socket.gethostbyname(socket.gethostname()),
+            'mac': ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
+                              for elements in range(0, 48, 8)][::-1]),
+            'cpu_count': psutil.cpu_count(),
+            'cpu_percent': psutil.cpu_percent(),
+            'memory_total': round(psutil.virtual_memory().total / (1024**3), 2),  # GB
+            'memory_used': round(psutil.virtual_memory().used / (1024**3), 2),    # GB
+            'memory_percent': psutil.virtual_memory().percent,
+            'disk_total': round(psutil.disk_usage('/').total / (1024**3), 2),     # GB
+            'disk_used': round(psutil.disk_usage('/').used / (1024**3), 2),       # GB
+            'disk_percent': psutil.disk_usage('/').percent
+        }
+        return system_info
+    except Exception as e:
+        logger.error(f"获取系统信息失败: {e}")
+        return {'error': str(e)}
+
+def get_terminal_id():
+    """获取终端ID，优先从配置文件读取，否则使用MAC地址生成"""
+    try:
+        # 尝试从配置文件读取
+        if os.path.exists('config.json'):
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+                if 'terminal_id' in config:
+                    return config['terminal_id']
+        
+        # 如果配置文件不存在或没有terminal_id，使用MAC地址的最后6位作为ID
+        mac = uuid.getnode()
+        return mac % 1000000  # 取最后6位作为ID
+    except Exception as e:
+        logger.error(f"获取终端ID失败: {e}")
+        return 1  # 默认ID

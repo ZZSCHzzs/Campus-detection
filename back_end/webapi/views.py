@@ -346,3 +346,22 @@ class TerminalCommandView(APIView):
                 {"error": f"发送命令失败: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# 添加环境信息API
+class EnvironmentView(APIView):
+    """返回环境信息，帮助前端识别当前运行环境"""
+    
+    def get(self, request):
+        return Response({
+            "type": "server",  # 标识这是服务端
+            "version": "2.0.0",
+            "name": "检测服务中心",
+            "id": 0,  # 服务端ID为0
+            "features": {
+                "local_detection": False,
+                "websocket": True,
+                "push_mode": False,
+                "pull_mode": False
+            }
+        })

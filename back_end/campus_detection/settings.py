@@ -113,12 +113,14 @@ WSGI_APPLICATION = 'campus_detection.wsgi.application'
 # Channels配置
 ASGI_APPLICATION = 'campus_detection.asgi.application'
 
-# 通道层配置 - 使用Redis通道层
+# Channel层配置 - 使用Redis作为后端
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],  # 使用本地Redis服务器
+            # 如果Redis有密码，添加如下配置
+            # "hosts": [{'address': ('127.0.0.1', 6379), 'password': 'your-password'}],
         },
     },
 }

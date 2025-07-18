@@ -58,7 +58,7 @@ export interface LogEntry {
 /**
  * WebSocket回调函数类型
  */
-export type WebSocketCallback = (data: any) => void;
+export type MessageCallback = (data: any) => void;
 
 /**
  * 终端模型接口
@@ -74,97 +74,547 @@ export interface Terminal {
 }
 
 /**
- * 终端通信服务 - 支持本地直连和远程连接两种模式
+ * 环境信息接口
+ */
+export interface EnvironmentInfo {
+  type: 'detector' | 'server';  // 环境类型
+  version: string;              // 版本
+  name: string;                 // 环境名称
+  id: number;                   // 环境ID
+  features: {                   // 功能支持
+    local_detection: boolean;   // 本地检测
+    websocket: boolean;         // WebSocket支持
+    push_mode: boolean;         // 推送模式
+    pull_mode: boolean;         // 拉取模式
+  };
+  terminal_mode?: 'local' | 'remote'; // 终端模式
+}
+
+/**
+ * 终端服务类 - 负责终端通信管理
+ * 
+ * 支持两种模式：
+ * 1. 本地模式：直接与本地Flask检测端通信，使用Socket.IO
+ * 2. 远程模式：通过Django服务器与远程终端通信，使用WebSocket
  */
 class TerminalService {
-  // 服务配置
-  private mode: 'remote' | 'local' = 'remote';
+  // 基本配置
+  private mode: 'local' | 'remote' = 'remote';
   private terminalId: number | null = null;
-  private terminalData: Terminal | null = null;
-  private localEndpoint: string = 'http://localhost:5000';
+  private localEndpoint = 'http://localhost:5000';
   
-  // WebSocket连接
-  private ws: WebSocket | null = null;
-  private wsCallbacks: Map<string, WebSocketCallback> = new Map();
+  // 连接状态
+  private connected = false;
   
-  // 重连机制
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private reconnectTimeout: number | null = null;
-  private reconnectDelay: number = 2000; // 初始重连延迟(ms)
-  private isReconnecting: boolean = false;
-
-  // WebSocket URL配置
-  private readonly wsPathTemplate: string = '/ws/terminal/{id}/';  // 修改为单数形式
-  private readonly localWsId: string = 'local';
+  // 消息回调
+  private messageCallbacks: Map<string, MessageCallback> = new Map();
+  
+  // 本地模式Socket.IO连接
+  private socketIO: any = null;
+  
+  // 远程模式WebSocket连接
+  private webSocket: WebSocket | null = null;
+  
+  // 重连相关
+  private reconnecting = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectTimer: number | null = null;
+  
+  // 环境信息缓存
+  private environmentInfo: EnvironmentInfo | null = null;
   
   /**
-   * 设置连接模式
-   * @param mode - 连接模式: 'local' 或 'remote'
-   * @param terminalId - 远程模式下的终端ID
-   * @returns 是否进行了模式切换
+   * 初始化终端服务
    */
-  setMode(mode: 'remote' | 'local', terminalId: number | null = null): boolean {
-    // 检查是否需要更改
-    if (this.mode === mode && this.terminalId === terminalId) {
+  constructor() {
+    // 尝试从localStorage获取上次的配置
+    this.loadSavedConfig();
+  }
+  
+  /**
+   * 从localStorage加载保存的配置
+   * @private
+   */
+  private loadSavedConfig() {
+    try {
+      const savedMode = localStorage.getItem('terminal_mode');
+      const savedId = localStorage.getItem('terminal_id');
+      const savedEndpoint = localStorage.getItem('local_endpoint');
+      
+      if (savedMode) this.mode = savedMode as 'local' | 'remote';
+      if (savedId) this.terminalId = parseInt(savedId);
+      if (savedEndpoint) this.localEndpoint = savedEndpoint;
+    } catch (e) {
+      console.warn('无法加载保存的终端配置', e);
+    }
+  }
+  
+  /**
+   * 保存当前连接配置到localStorage
+   * @private
+   */
+  private saveConnectionConfig() {
+    try {
+      localStorage.setItem('terminal_mode', this.mode);
+      if (this.terminalId !== null) {
+        localStorage.setItem('terminal_id', this.terminalId.toString());
+      }
+      localStorage.setItem('local_endpoint', this.localEndpoint);
+    } catch (e) {
+      console.warn('无法保存终端配置', e);
+    }
+  }
+  
+  /**
+   * 设置终端模式
+   * @param mode 终端模式 - local或remote
+   * @param terminalId 远程模式下的终端ID
+   * @param serverUrl 远程模式下的服务器URL
+   */
+  async setMode(mode: 'local' | 'remote', terminalId?: number, serverUrl?: string): Promise<boolean> {
+    // 如果模式没变并且ID也没变，则不进行任何操作
+    if (this.mode === mode && (mode === 'local' || this.terminalId === terminalId)) {
       return false;
     }
     
-    if (mode === 'remote') {
-      // 检查远程模式是否有终端ID
-      if (!terminalId) {
-        console.warn('远程模式下未提供终端ID，将使用默认值1');
-        this.terminalId = 1;
-      } else {
-        this.terminalId = terminalId;
-      }
-      // 清除终端数据缓存
-      this.terminalData = null;
-    } else {
-      // 本地模式
-      this.terminalId = null;
-      this.terminalData = null;
-    }
+    console.log(`切换终端模式: ${this.mode} -> ${mode}`);
     
+    const oldMode = this.mode;
     this.mode = mode;
     
-    // 断开现有WebSocket连接
-    this.disconnectWebSocket();
+    // 断开现有连接
+    this.disconnect();
     
-    // 重置重连计数
-    this.reconnectAttempts = 0;
+    if (mode === 'remote') {
+      // 远程模式需要终端ID
+      this.terminalId = terminalId || 1;
+    } else {
+      // 本地模式不需要终端ID
+      this.terminalId = null;
+      
+      // 如果提供了新的本地终端URL，更新它
+      if (serverUrl && serverUrl !== this.localEndpoint) {
+        this.localEndpoint = serverUrl;
+      }
+    }
     
+    // 保存新配置
+    this.saveConnectionConfig();
+    
+    // 如果是从本地切换到远程，通知本地终端
+    if (oldMode === 'local' && mode === 'remote' && serverUrl) {
+      try {
+        await axios.post(`${this.localEndpoint}/api/switch_mode`, {
+          mode: 'remote',
+          server_url: serverUrl,
+          terminal_id: this.terminalId
+        });
+        console.log('已通知本地终端切换到远程模式');
+      } catch (error) {
+        console.error('通知本地终端切换模式失败:', error);
+      }
+    }
+    
+    // 如果是从远程切换到本地，通知本地终端
+    if (oldMode === 'remote' && mode === 'local') {
+      try {
+        await axios.post(`${this.localEndpoint}/api/switch_mode`, {
+          mode: 'local'
+        });
+        console.log('已通知本地终端切换到本地模式');
+      } catch (error) {
+        console.error('通知本地终端切换模式失败:', error);
+      }
+    }
+    
+    // 返回模式是否成功切换
     return true;
   }
   
   /**
-   * 检测本地终端是否可用
-   * @returns 是否可用
+   * 连接到终端
+   * @param callback 接收消息的回调函数
+   * @returns 回调ID，用于后续移除回调
    */
-  async detectLocalTerminal(): Promise<boolean> {
+  connect(callback: MessageCallback): string {
+    if (!callback) {
+      throw new Error('必须提供消息回调函数');
+    }
+    
+    // 生成唯一回调ID
+    const callbackId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+    this.messageCallbacks.set(callbackId, callback);
+    
+    // 根据模式选择连接方法
+    if (this.mode === 'local') {
+      this.connectLocalSocketIO();
+    } else {
+      this.connectRemoteWebSocket();
+    }
+    
+    return callbackId;
+  }
+  
+  /**
+   * 断开连接
+   * @param callbackId 可选的回调ID，如果提供，只移除该回调而不断开连接
+   */
+  disconnect(callbackId?: string): void {
+    // 如果提供了回调ID，只移除该回调
+    if (callbackId && this.messageCallbacks.has(callbackId)) {
+      this.messageCallbacks.delete(callbackId);
+      
+      // 如果还有其他回调，不断开连接
+      if (this.messageCallbacks.size > 0) {
+        return;
+      }
+    }
+    
+    // 没有活跃回调，断开所有连接
+    
+    // 断开Socket.IO连接
+    if (this.socketIO) {
+      try {
+        console.log('断开Socket.IO连接');
+        this.socketIO.off(); // 移除所有事件监听
+        this.socketIO.disconnect();
+      } catch (e) {
+        console.error('断开Socket.IO连接时出错:', e);
+      } finally {
+        this.socketIO = null;
+      }
+    }
+    
+    // 断开WebSocket连接
+    if (this.webSocket) {
+      try {
+        console.log('断开WebSocket连接');
+        if (this.webSocket.readyState === WebSocket.OPEN || 
+            this.webSocket.readyState === WebSocket.CONNECTING) {
+          this.webSocket.close();
+        }
+      } catch (e) {
+        console.error('断开WebSocket连接时出错:', e);
+      } finally {
+        this.webSocket = null;
+      }
+    }
+    
+    // 清理重连计时器
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    // 重置连接状态
+    this.connected = false;
+    this.reconnecting = false;
+    this.reconnectAttempts = 0;
+    
+    // 如果没有提供callbackId，清空所有回调
+    if (!callbackId) {
+      this.messageCallbacks.clear();
+    }
+  }
+  
+  /**
+   * 连接到本地终端的Socket.IO
+   * @private
+   */
+  private connectLocalSocketIO(): void {
+    // 避免重复连接
+    if (this.socketIO) {
+      console.log('Socket.IO已连接，无需重新连接');
+      return;
+    }
+    
+    console.log(`正在连接本地Socket.IO: ${this.localEndpoint}`);
+    
     try {
-      const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 2000 });
-      return response.status === 200;
+      // 动态导入socket.io-client
+      import('socket.io-client').then(io => {
+        // 创建Socket.IO连接
+        this.socketIO = io.default(this.localEndpoint, {
+          reconnection: true,                // 启用自动重连
+          reconnectionAttempts: 10,          // 最大重连次数
+          reconnectionDelay: 1000,           // 初始重连延迟
+          reconnectionDelayMax: 5000,        // 最大重连延迟
+          timeout: 10000,                    // 连接超时
+          transports: ['websocket', 'polling'] // 传输方式
+        });
+        
+        // 连接事件
+        this.socketIO.on('connect', () => {
+          console.log('已连接到本地Socket.IO');
+          this.connected = true;
+          this.broadcastMessage({
+            type: 'connection_status',
+            data: { connected: true, mode: 'local' },
+            timestamp: new Date().toISOString()
+          });
+          
+          // 发送初始化消息
+          this.socketIO.emit('client_connected', {
+            client_id: 'web_client',
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 连接错误
+        this.socketIO.on('connect_error', (error: any) => {
+          console.error('Socket.IO连接错误:', error);
+          this.broadcastMessage({
+            type: 'error',
+            data: { message: `连接错误: ${error.message}`, mode: 'local' },
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 系统状态
+        this.socketIO.on('system_status', (data: any) => {
+          this.broadcastMessage({
+            type: 'status',
+            data: data,
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 系统更新
+        this.socketIO.on('system_update', (data: any) => {
+          this.broadcastMessage({
+            type: 'update',
+            data: data,
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 系统消息
+        this.socketIO.on('system_message', (data: any) => {
+          this.broadcastMessage({
+            type: 'message',
+            data: data,
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 系统错误
+        this.socketIO.on('system_error', (data: any) => {
+          this.broadcastMessage({
+            type: 'error',
+            data: data,
+            timestamp: new Date().toISOString()
+          });
+        });
+        
+        // 断开连接
+        this.socketIO.on('disconnect', (reason: string) => {
+          console.log(`Socket.IO断开连接: ${reason}`);
+          this.connected = false;
+          this.broadcastMessage({
+            type: 'connection_status',
+            data: { connected: false, reason: reason, mode: 'local' },
+            timestamp: new Date().toISOString()
+          });
+        });
+      }).catch(err => {
+        console.error('加载socket.io-client失败:', err);
+        this.broadcastMessage({
+          type: 'error',
+          data: { message: `加载Socket.IO客户端失败: ${err.message}`, mode: 'local' },
+          timestamp: new Date().toISOString()
+        });
+      });
     } catch (error) {
-      console.warn('本地终端检测失败:', error);
-      return false;
+      console.error('初始化Socket.IO连接失败:', error);
+      this.broadcastMessage({
+        type: 'error',
+        data: { message: `初始化Socket.IO失败: ${error}`, mode: 'local' },
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+  
+  /**
+   * 连接到远程终端的WebSocket
+   * @private
+   */
+  private connectRemoteWebSocket(): void {
+    // 避免重复连接
+    if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+      console.log('WebSocket已连接，无需重新连接');
+      return;
+    }
+    
+    // 避免同时进行多次重连
+    if (this.reconnecting) {
+      console.log('WebSocket正在重连中，跳过此次连接请求');
+      return;
+    }
+    
+    // 构建WebSocket URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const terminalId = this.terminalId || 1;
+    const wsUrl = `${protocol}//${host}/ws/terminal/${terminalId}`;
+    
+    console.log(`正在连接远程WebSocket: ${wsUrl}`);
+    
+    try {
+      // 创建WebSocket连接
+      this.webSocket = new WebSocket(wsUrl);
+      
+      // 连接成功
+      this.webSocket.onopen = () => {
+        console.log('已连接到远程WebSocket');
+        this.connected = true;
+        this.reconnecting = false;
+        this.reconnectAttempts = 0;
+        
+        this.broadcastMessage({
+          type: 'connection_status',
+          data: { connected: true, mode: 'remote' },
+          timestamp: new Date().toISOString()
+        });
+      };
+      
+      // 接收消息
+      this.webSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.broadcastMessage(data);
+        } catch (error) {
+          console.error('解析WebSocket消息失败:', error);
+        }
+      };
+      
+      // 连接关闭
+      this.webSocket.onclose = (event) => {
+        console.log(`WebSocket连接关闭: ${event.code} - ${event.reason}`);
+        this.connected = false;
+        this.webSocket = null;
+        
+        this.broadcastMessage({
+          type: 'connection_status',
+          data: { 
+            connected: false, 
+            code: event.code,
+            reason: event.reason,
+            mode: 'remote'
+          },
+          timestamp: new Date().toISOString()
+        });
+        
+        // 如果不是主动关闭，尝试重连
+        if (!event.wasClean && this.messageCallbacks.size > 0) {
+          this.scheduleReconnect();
+        }
+      };
+      
+      // 连接错误
+      this.webSocket.onerror = (event) => {
+        console.error('WebSocket连接错误:', event);
+        
+        this.broadcastMessage({
+          type: 'error',
+          data: { message: 'WebSocket连接错误', mode: 'remote' },
+          timestamp: new Date().toISOString()
+        });
+      };
+    } catch (error) {
+      console.error('创建WebSocket连接失败:', error);
+      
+      this.broadcastMessage({
+        type: 'error',
+        data: { message: `创建WebSocket连接失败: ${error}`, mode: 'remote' },
+        timestamp: new Date().toISOString()
+      });
+      
+      // 尝试重连
+      this.scheduleReconnect();
+    }
+  }
+  
+  /**
+   * 安排WebSocket重连
+   * @private
+   */
+  private scheduleReconnect(): void {
+    // 避免同时多次重连
+    if (this.reconnecting) {
+      return;
+    }
+    
+    this.reconnecting = true;
+    this.reconnectAttempts++;
+    
+    // 超过最大重试次数
+    if (this.reconnectAttempts > this.maxReconnectAttempts) {
+      console.log(`已达到最大重连次数(${this.maxReconnectAttempts})，停止重连`);
+      this.reconnecting = false;
+      
+      this.broadcastMessage({
+        type: 'error',
+        data: { message: `WebSocket重连失败，已达到最大尝试次数: ${this.maxReconnectAttempts}`, mode: 'remote' },
+        timestamp: new Date().toISOString()
+      });
+      
+      return;
+    }
+    
+    // 计算重连延迟（指数退避）
+    const delay = Math.min(30000, 1000 * Math.pow(1.5, this.reconnectAttempts - 1));
+    
+    console.log(`安排WebSocket重连，${delay}ms后尝试 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    
+    // 清理现有重连计时器
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+    }
+    
+    // 设置新的重连计时器
+    this.reconnectTimer = window.setTimeout(() => {
+      console.log(`执行WebSocket重连尝试 #${this.reconnectAttempts}`);
+      this.reconnectTimer = null;
+      this.connectRemoteWebSocket();
+    }, delay);
+  }
+  
+  /**
+   * 向所有回调广播消息
+   * @param message 要广播的消息
+   * @private
+   */
+  private broadcastMessage(message: any): void {
+    // 创建一个回调副本，防止在迭代过程中修改
+    const callbacks = [...this.messageCallbacks.entries()];
+    
+    for (const [id, callback] of callbacks) {
+      try {
+        if (this.messageCallbacks.has(id)) { // 确保回调仍然存在
+          callback(message);
+        }
+      } catch (error) {
+        console.error('执行消息回调出错:', error);
+      }
     }
   }
   
   /**
    * 发送命令到终端
-   * @param command - 命令名称
-   * @param params - 命令参数
+   * @param command 命令名称
+   * @param params 命令参数
    * @returns 命令执行结果
    */
   async sendCommand(command: string, params: Record<string, any> = {}): Promise<any> {
-    // 统一命令格式
+    // 构建命令数据
     const commandData: TerminalCommand = {
-      command: command,
-      params: params,
+      command,
+      params,
       timestamp: new Date().toISOString()
     };
     
+    // 根据模式选择发送方法
     if (this.mode === 'local') {
       return this.sendLocalCommand(commandData);
     } else {
@@ -174,11 +624,12 @@ class TerminalService {
   
   /**
    * 发送命令到本地终端
+   * @param commandData 命令数据
    * @private
    */
   private async sendLocalCommand(commandData: TerminalCommand): Promise<any> {
     try {
-      // 根据命令类型选择合适的终端API
+      // 根据命令类型选择API路径
       let endpoint = `${this.localEndpoint}/api/control`;
       let requestData: Record<string, any> = {
         action: commandData.command,
@@ -191,43 +642,40 @@ class TerminalService {
         requestData = commandData.params || {};
       }
       
+      // 发送命令
       const response = await axios.post(endpoint, requestData, {
         timeout: 5000,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
       
       return response.data;
     } catch (error) {
-      console.error('本地命令执行失败:', error);
-      this.handleApiError('local_command', error);
+      console.error('发送本地命令失败:', error);
       throw error;
     }
   }
   
   /**
    * 发送命令到远程终端
+   * @param commandData 命令数据
    * @private
    */
   private async sendRemoteCommand(commandData: TerminalCommand): Promise<any> {
     if (!this.terminalId) {
-      this.terminalId = 1; // 如果未设置，使用默认值
       console.warn('未设置终端ID，使用默认值1');
+      this.terminalId = 1;
     }
     
     try {
-      // 使用单数形式URL
+      // 发送命令
       const response = await axios.post(`/api/terminals/${this.terminalId}/command/`, commandData, {
         timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
+      
       return response.data;
     } catch (error) {
-      console.error('远程命令执行失败:', error);
-      this.handleApiError('remote_command', error);
+      console.error('发送远程命令失败:', error);
       throw error;
     }
   }
@@ -237,40 +685,17 @@ class TerminalService {
    * @returns 终端状态
    */
   async getStatus(): Promise<TerminalStatus> {
-    if (this.mode === 'local') {
-      try {
-        const response = await axios.get(`${this.localEndpoint}/api/status`, {
-          timeout: 5000
-        });
+    try {
+      if (this.mode === 'local') {
+        const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
         return this.normalizeStatusData(response.data);
-      } catch (error) {
-        console.error('获取本地状态失败:', error);
-        this.handleApiError('local_status', error);
-        throw error;
-      }
-    } else {
-      try {
-        // 使用一致的复数形式URL
-        const response = await axios.get(`/api/terminals/${this.terminalId}/status/`, {
-          timeout: 8000
-        });
+      } else {
+        const response = await axios.get(`/api/terminals/${this.terminalId}/status/`, { timeout: 8000 });
         return this.normalizeStatusData(response.data);
-      } catch (error) {
-        // 如果API不可用，尝试通过命令获取
-        try {
-          console.warn('通过API获取远程状态失败，尝试使用命令获取');
-          const commandResponse = await this.sendRemoteCommand({
-            command: 'get_status',
-            params: {},
-            timestamp: new Date().toISOString()
-          });
-          return this.normalizeStatusData(commandResponse);
-        } catch (cmdError) {
-          console.error('获取远程状态失败:', error, cmdError);
-          this.handleApiError('remote_status', error);
-          throw error;
-        }
       }
+    } catch (error) {
+      console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端状态失败:`, error);
+      throw error;
     }
   }
   
@@ -279,7 +704,6 @@ class TerminalService {
    * @private
    */
   private normalizeStatusData(data: any): TerminalStatus {
-    // 确保返回数据格式一致
     return {
       cameras: data.cameras || {},
       cpu_usage: data.cpu_usage || 0,
@@ -296,31 +720,20 @@ class TerminalService {
    * @returns 终端配置
    */
   async getConfig(): Promise<TerminalConfig> {
-    if (this.mode === 'local') {
-      try {
-        const response = await axios.get(`${this.localEndpoint}/api/config`, {
-          timeout: 5000
-        });
+    try {
+      if (this.mode === 'local') {
+        const response = await axios.get(`${this.localEndpoint}/api/config`, { timeout: 5000 });
         return this.normalizeConfigData(response.data);
-      } catch (error) {
-        console.error('获取本地配置失败:', error);
-        this.handleApiError('local_config', error);
-        throw error;
-      }
-    } else {
-      // 通过命令获取配置
-      try {
+      } else {
         const response = await this.sendRemoteCommand({
           command: 'get_config',
-          params: {},
-          timestamp: new Date().toISOString()
+          params: {}
         });
         return this.normalizeConfigData(response);
-      } catch (error) {
-        console.error('获取远程配置失败:', error);
-        this.handleApiError('remote_config', error);
-        throw error;
       }
+    } catch (error) {
+      console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端配置失败:`, error);
+      throw error;
     }
   }
   
@@ -329,7 +742,6 @@ class TerminalService {
    * @private
    */
   private normalizeConfigData(data: any): TerminalConfig {
-    // 确保返回配置格式一致
     return {
       mode: data.mode || 'both',
       interval: data.interval || 5,
@@ -342,37 +754,26 @@ class TerminalService {
   
   /**
    * 保存终端配置
-   * @param config - 配置对象
+   * @param config 要保存的配置
    * @returns 保存结果
    */
   async saveConfig(config: Partial<TerminalConfig>): Promise<any> {
-    if (this.mode === 'local') {
-      try {
+    try {
+      if (this.mode === 'local') {
         const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
           timeout: 5000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' }
         });
         return response.data;
-      } catch (error) {
-        console.error('保存本地配置失败:', error);
-        this.handleApiError('save_local_config', error);
-        throw error;
-      }
-    } else {
-      // 通过命令更新配置
-      try {
+      } else {
         return await this.sendRemoteCommand({
           command: 'update_config',
-          params: config,
-          timestamp: new Date().toISOString()
+          params: config
         });
-      } catch (error) {
-        console.error('保存远程配置失败:', error);
-        this.handleApiError('save_remote_config', error);
-        throw error;
       }
+    } catch (error) {
+      console.error(`保存${this.mode === 'local' ? '本地' : '远程'}终端配置失败:`, error);
+      throw error;
     }
   }
   
@@ -381,40 +782,19 @@ class TerminalService {
    * @returns 日志数据
    */
   async getLogs(): Promise<LogEntry[]> {
-    if (this.mode === 'local') {
-      try {
-        const response = await axios.get(`${this.localEndpoint}/api/logs`, {
-          timeout: 5000
-        });
+    try {
+      if (this.mode === 'local') {
+        const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
         return this.normalizeLogData(response.data);
-      } catch (error) {
-        console.error('获取本地日志失败:', error);
-        this.handleApiError('local_logs', error);
-        throw error;
-      }
-    } else {
-      // 尝试通过API获取日志
-      try {
-        const response = await axios.get(`/api/terminals/${this.terminalId}/logs/`, {
-          timeout: 8000
-        });
+      } else {
+        const response = await axios.get(`/api/terminals/${this.terminalId}/logs/`, { timeout: 8000 });
         return this.normalizeLogData(response.data);
-      } catch (error) {
-        // 如果API不可用，尝试通过命令获取
-        try {
-          console.warn('通过API获取远程日志失败，尝试使用命令获取');
-          const commandResponse = await this.sendRemoteCommand({
-            command: 'get_logs',
-            params: {},
-            timestamp: new Date().toISOString()
-          });
-          return this.normalizeLogData(commandResponse);
-        } catch (cmdError) {
-          console.error('获取远程日志失败:', error, cmdError);
-          this.handleApiError('remote_logs', error);
-          return []; // 返回空数组而非抛出错误，确保UI不会崩溃
-        }
       }
+    } catch (error) {
+      console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端日志失败:`, error);
+      
+      // 日志获取失败返回空数组而不是抛出错误
+      return [];
     }
   }
   
@@ -434,192 +814,161 @@ class TerminalService {
   }
   
   /**
-   * 处理API错误
-   * @private
+   * 获取终端详情
+   * @returns 终端详情
    */
-  private handleApiError(context: string, error: any): void {
-    // 可以在这里添加错误上报逻辑
-    const errorMessage = error.response ? 
-      `${error.response.status}: ${JSON.stringify(error.response.data)}` : 
-      error.message;
-    
-    console.error(`API错误 [${context}]: ${errorMessage}`);
-  }
-  
-  /**
-   * 构建WebSocket URL
-   * @private
-   */
-  private getWebSocketUrl(): string {
-    // 确定协议(ws/wss)
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    
-    if (this.mode === 'local') {
-      // 本地模式使用localhost
-      return `ws://localhost:5000/ws/terminal/${this.localWsId}/`;
-    } else {
-      // 远程模式使用当前域名，确保终端ID存在
-      const host = window.location.host;
-      const terminalId = this.terminalId || 1; // 确保始终有终端ID
-      return `${protocol}//${host}${this.wsPathTemplate.replace('{id}', String(terminalId))}`;
-    }
-  }
-  
-  /**
-   * 建立WebSocket连接获取实时数据
-   * @param callback - 接收消息的回调函数
-   * @returns 回调ID
-   */
-  connectWebSocket(callback: WebSocketCallback): string | null {
-    if (!callback) return null;
-    
-    // 生成唯一回调ID
-    const callbackId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
-    this.wsCallbacks.set(callbackId, callback);
-    
-    // 如果已有活跃连接，无需再次连接
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      return callbackId;
-    }
-    
-    // 清理任何现有的重连计时器
-    if (this.reconnectTimeout !== null) {
-      window.clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    
-    // 创建新连接
-    this.createWebSocketConnection();
-    
-    return callbackId;
-  }
-  
-  /**
-   * 创建WebSocket连接
-   * @private
-   */
-  private createWebSocketConnection(): void {
+  async getTerminalDetails(): Promise<Terminal> {
     try {
-      // 断开现有连接
-      this.disconnectWebSocket();
-      
-      // 获取统一格式的WebSocket URL
-      const wsUrl = this.getWebSocketUrl();
-      
-      console.log(`尝试WebSocket连接: ${wsUrl}`);
-      this.ws = new WebSocket(wsUrl);
-      
-      this.ws.onopen = () => {
-        console.log('WebSocket连接已建立');
-        this.reconnectAttempts = 0;
-        this.isReconnecting = false;
+      if (this.mode === 'local') {
+        // 本地模式获取终端信息
+        const infoResponse = await axios.get(`${this.localEndpoint}/api/info`, { timeout: 3000 });
+        const statusResponse = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 3000 });
         
-        // 如果是远程模式，发送认证消息
-        if (this.mode === 'remote' && this.terminalId) {
-          this.ws.send(JSON.stringify({
-            type: 'authenticate',
-            terminal_id: this.terminalId
-          }));
-        }
-      };
-      
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // 调用所有注册的回调
-          this.wsCallbacks.forEach(cb => cb(data));
-        } catch (e) {
-          console.error('WebSocket消息解析错误:', e, event.data);
-        }
-      };
-      
-      this.ws.onclose = (event) => {
-        console.log(`WebSocket连接已关闭 (代码: ${event.code})`);
+        return {
+          id: infoResponse.data.id || 0,
+          name: infoResponse.data.name || '本地终端',
+          status: true,
+          cpu_usage: statusResponse.data.cpu_usage || 0,
+          memory_usage: statusResponse.data.memory_usage || 0,
+          version: infoResponse.data.version || 'unknown'
+        };
+      } else {
+        // 远程模式获取终端详情
+        const response = await axios.get(`/api/terminals/${this.terminalId}/`);
         
-        // 如果不是主动断开，则尝试重连
-        if (this.wsCallbacks.size > 0 && !this.isReconnecting) {
-          this.scheduleReconnect();
-        }
-      };
-      
-      this.ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
-        
-        // 错误后会触发onclose，所以在onclose中处理重连
-      };
-    } catch (error) {
-      console.error('创建WebSocket连接失败:', error);
-      
-      // 尝试重连
-      if (this.wsCallbacks.size > 0 && !this.isReconnecting) {
-        this.scheduleReconnect();
+        return {
+          id: response.data.id,
+          name: response.data.name || `终端 #${response.data.id}`,
+          status: response.data.status || false,
+          cpu_usage: response.data.cpu_usage || 0,
+          memory_usage: response.data.memory_usage || 0,
+          last_active: response.data.last_active
+        };
       }
+    } catch (error) {
+      console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端详情失败:`, error);
+      
+      // 返回最小可用的终端数据
+      return {
+        id: this.terminalId || 0,
+        name: this.mode === 'local' ? '本地终端' : `终端 #${this.terminalId || 1}`,
+        status: false
+      };
     }
   }
   
   /**
-   * 安排WebSocket重连
+   * 自动检测环境并设置合适的模式
+   * @returns 环境信息
+   */
+  async autoDetectEnvironment(): Promise<EnvironmentInfo> {
+    // 如果已有环境信息，直接返回
+    if (this.environmentInfo) {
+      return this.environmentInfo;
+    }
+    
+    try {
+      // 首先尝试检测本地环境
+      const isLocalAvailable = await this.isLocalAvailable();
+      
+      if (isLocalAvailable) {
+        // 本地环境可用，获取环境信息
+        try {
+          const response = await axios.get(`${this.localEndpoint}/api/environment`, { timeout: 2000 });
+          const envInfo: EnvironmentInfo = response.data;
+          
+          // 根据环境信息设置模式
+          if (envInfo.terminal_mode === 'remote') {
+            // 如果本地终端报告它处于远程模式，则跟随切换
+            console.log('本地终端处于远程模式，跟随切换');
+            await this.setMode('remote', envInfo.id);
+          } else {
+            // 否则使用本地模式
+            await this.setMode('local');
+          }
+          
+          // 缓存环境信息
+          this.environmentInfo = envInfo;
+          return envInfo;
+        } catch (error) {
+          console.warn('获取本地环境信息失败:', error);
+        }
+      }
+      
+      // 本地环境不可用或获取信息失败，尝试获取远程环境信息
+      try {
+        const response = await axios.get('/api/environment', { timeout: 5000 });
+        const envInfo: EnvironmentInfo = response.data;
+        
+        // 设置为远程模式
+        await this.setMode('remote', this.terminalId || envInfo.id);
+        
+        // 缓存环境信息
+        this.environmentInfo = envInfo;
+        return envInfo;
+      } catch (error) {
+        console.warn('获取远程环境信息失败:', error);
+        
+        // 创建默认环境信息
+        const defaultEnv: EnvironmentInfo = {
+          type: 'server',
+          version: 'unknown',
+          name: '未知环境',
+          id: 1,
+          features: {
+            local_detection: false,
+            websocket: true,
+            push_mode: true,
+            pull_mode: true
+          }
+        };
+        
+        // 默认使用远程模式
+        await this.setMode('remote', 1);
+        
+        // 缓存环境信息
+        this.environmentInfo = defaultEnv;
+        return defaultEnv;
+      }
+    } catch (error) {
+      console.error('自动检测环境失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 检查本地终端是否可用
+   * @returns 是否可用
    * @private
    */
-  private scheduleReconnect(): void {
-    if (this.isReconnecting || this.reconnectAttempts >= this.maxReconnectAttempts) {
-      return;
-    }
-    
-    this.isReconnecting = true;
-    this.reconnectAttempts++;
-    
-    // 指数退避重连
-    const delay = Math.min(30000, this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1));
-    
-    console.log(`计划WebSocket重连 (尝试 ${this.reconnectAttempts}/${this.maxReconnectAttempts}, 延迟 ${delay}ms)`);
-    
-    this.reconnectTimeout = window.setTimeout(() => {
-      if (this.wsCallbacks.size > 0) {
-        console.log('正在尝试重新连接WebSocket...');
-        this.createWebSocketConnection();
-      }
-      this.reconnectTimeout = null;
-    }, delay);
-  }
-  
-  /**
-   * 移除WebSocket回调
-   * @param callbackId - 回调ID
-   */
-  removeWebSocketCallback(callbackId: string): void {
-    if (this.wsCallbacks.has(callbackId)) {
-      this.wsCallbacks.delete(callbackId);
-      
-      // 如果没有回调了，断开连接
-      if (this.wsCallbacks.size === 0) {
-        this.disconnectWebSocket();
-      }
+  private async isLocalAvailable(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 2000 });
+      return response.status === 200;
+    } catch (error) {
+      return false;
     }
   }
   
   /**
-   * 断开WebSocket连接
+   * 获取当前连接状态
+   * @returns 连接状态
    */
-  disconnectWebSocket(): void {
-    // 清理重连计时器
-    if (this.reconnectTimeout !== null) {
-      window.clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    
-    if (this.ws) {
-      // 只有在连接打开或正在连接时才需要close()
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close();
-      }
-      this.ws = null;
-    }
-    
-    this.isReconnecting = false;
+  getConnectionState(): { connected: boolean, mode: 'local' | 'remote' } {
+    return {
+      connected: this.connected,
+      mode: this.mode
+    };
+  }
+  
+  /**
+   * 获取当前终端ID
+   * @returns 终端ID，如果是本地模式则返回null
+   */
+  getTerminalId(): number | null {
+    return this.terminalId;
   }
 }
 
-// 导出服务实例
+// 导出单例实例
 export const terminalService = new TerminalService();

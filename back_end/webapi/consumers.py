@@ -3,6 +3,7 @@ from channels.generic.websocket import WebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from .models import ProcessTerminal, HardwareNode, HistoricalData, Area
 import logging
 
@@ -14,6 +15,14 @@ class TerminalConsumer(WebsocketConsumer):
         # 从URL路径中获取terminal_id
         self.terminal_id = self.scope['url_route']['kwargs']['terminal_id']
         
+        # 确保terminal_id是整数
+        try:
+            self.terminal_id = int(self.terminal_id)
+        except (ValueError, TypeError):
+            logger.warning(f"无效的终端ID: {self.terminal_id}，拒绝连接")
+            self.close()
+            return
+        
         # 验证终端是否存在
         terminal = self.get_terminal()
         if not terminal:
@@ -21,12 +30,28 @@ class TerminalConsumer(WebsocketConsumer):
             self.close()
             return
         
+        # 确保channel_layer可用
+        if not hasattr(self, 'channel_layer'):
+            try:
+                self.channel_layer = get_channel_layer()
+                if self.channel_layer is None:
+                    raise ValueError("无法获取channel_layer")
+            except Exception as e:
+                logger.error(f"无法获取channel_layer: {str(e)}")
+                self.close()
+                return
+                
         # 将连接添加到组
         self.group_name = f"terminal_{self.terminal_id}"
-        async_to_sync(self.channel_layer.group_add)(
-            self.group_name,
-            self.channel_name
-        )
+        try:
+            async_to_sync(self.channel_layer.group_add)(
+                self.group_name,
+                self.channel_name
+            )
+        except Exception as e:
+            logger.error(f"将连接添加到组失败: {str(e)}")
+            self.close()
+            return
         
         # 更新终端状态为在线
         self.update_terminal_status(True)
@@ -41,14 +66,15 @@ class TerminalConsumer(WebsocketConsumer):
         self.update_terminal_status(False)
         
         # 从组中移除
-        try:
-            async_to_sync(self.channel_layer.group_discard)(
-                self.group_name,
-                self.channel_name
-            )
-        except Exception as e:
-            logger.error(f"从组移除通道时出错: {str(e)}")
-            
+        if hasattr(self, 'channel_layer') and hasattr(self, 'group_name'):
+            try:
+                async_to_sync(self.channel_layer.group_discard)(
+                    self.group_name,
+                    self.channel_name
+                )
+            except Exception as e:
+                logger.error(f"从组移除通道时出错: {str(e)}")
+        
         logger.info(f"终端 {self.terminal_id} 已断开连接，代码: {close_code}")
         
     def receive(self, text_data):
@@ -203,6 +229,19 @@ class TerminalConsumer(WebsocketConsumer):
     
     @database_sync_to_async
     def process_log(self, log_data):
+        """处理日志消息"""
+        try:
+            level = log_data.get('level', 'info')
+            message = log_data.get('message', '')
+            source = log_data.get('source', 'system')
+            
+            # 可以选择将日志保存到数据库或仅记录到服务器日志
+            logger.info(f"终端 {self.terminal_id} 日志 [{level}] {source}: {message}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"处理日志消息时出错: {str(e)}")
+            return False
         """处理日志消息"""
         try:
             level = log_data.get('level', 'info')

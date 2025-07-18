@@ -1,8 +1,22 @@
 {
-    "mode": "push",
-    "interval": 1.0,
-    "cameras": {},
-    "save_image": true,
+    "mode": "local",
+    "interval": 3,
+    "cameras": {
+        "1": "192.168.1.100"
+    },
+    "save_image": false,
     "preload_model": true,
-    "server_url": "https://smarthit.top/"
+    "terminal_id": 1,
+    "server_url": "https://smarthit.top",
+    "api_url": "https://smarthit.top/api/upload/",
+    "camera_config": {
+        "framesize": 8,
+        "quality": 10,
+        "brightness": 1,
+        "contrast": 0,
+        "saturation": 0,
+        "special_effect": 0,
+        "hmirror": false,
+        "vflip": false
+    }
 }

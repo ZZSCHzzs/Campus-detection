@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { terminalService } from '../services/terminalService';
+import { debounce } from 'lodash';
 
 const route = useRoute();
 const router = useRouter();
@@ -65,6 +66,9 @@ const terminalDetails = reactive({
   last_active: null
 });
 
+// 环境信息
+const environmentInfo = ref(null);
+
 // 检测本地终端是否可用
 const detectLocalTerminal = async () => {
   try {
@@ -109,119 +113,6 @@ const loadTerminalDetails = async () => {
     return null;
   }
 };
-
-// 处理连接模式变更
-const handleModeChange = async () => {
-  loading.value = true;
-  if (connectionMode.value === 'remote') {
-    if (!terminal.id) {
-      if (terminalList.value.length > 0) {
-        // 如果有可用终端，使用第一个
-        terminal.id = terminalList.value[0].id;
-        selectedTerminalId.value = terminal.id;
-      } else {
-        ElMessage.error('远程模式需要终端ID，但无可用终端');
-        if (localAvailable.value) {
-          connectionMode.value = 'local';
-        } else {
-          router.push('/terminals');
-          return;
-        }
-      }
-    }
-    terminalService.setMode('remote', terminal.id);
-  } else {
-    terminalService.setMode('local');
-  }
-  
-  // 重新加载数据
-  try {
-    await Promise.all([
-      loadTerminalDetails(),
-      loadTerminalStatus(),
-      loadTerminalConfig(),
-      loadLogs()
-    ]);
-    
-    // 重新连接WebSocket
-    setupWebSocket();
-    
-    loading.value = false;
-  } catch (error) {
-    console.error('切换模式失败:', error);
-    ElMessage.error('切换连接模式失败');
-    loading.value = false;
-  }
-};
-
-// 切换终端
-const switchTerminal = (id) => {
-  if (id === terminal.id) return;
-  
-  // 保存新ID到路由
-  router.push(`/terminals/${id}`);
-};
-
-// 初始化
-onMounted(async () => {
-  loading.value = true;
-  
-  // 加载终端列表
-  await loadTerminalList();
-  
-  // 检测本地终端
-  await detectLocalTerminal();
-  
-  // 确定连接模式
-  if (route.params.id) {
-    terminal.id = parseInt(route.params.id);
-    selectedTerminalId.value = terminal.id;
-    connectionMode.value = 'remote';
-    terminalService.setMode('remote', terminal.id);
-  } else if (localAvailable.value) {
-    connectionMode.value = 'local';
-    terminalService.setMode('local');
-  } else if (terminalList.value.length > 0) {
-    // 如果有终端列表但没有指定ID，使用第一个
-    terminal.id = terminalList.value[0].id;
-    selectedTerminalId.value = terminal.id;
-    connectionMode.value = 'remote';
-    terminalService.setMode('remote', terminal.id);
-    router.replace(`/terminals/${terminal.id}`);
-  } else {
-    // 无终端可用
-    ElMessage.warning('无法连接到终端，请先添加终端');
-  }
-  
-  // 加载数据
-  try {
-    await Promise.all([
-      loadTerminalDetails(),
-      loadTerminalStatus(),
-      loadTerminalConfig(),
-      loadLogs()
-    ]);
-    
-    // 设置WebSocket连接
-    setupWebSocket();
-    
-    loading.value = false;
-  } catch (error) {
-    console.error('初始化失败:', error);
-    ElMessage.error('加载终端数据失败');
-    loading.value = false;
-  }
-});
-
-// 在组件销毁时清理
-onUnmounted(() => {
-  if (wsCallbackId.value) {
-    terminalService.removeWebSocketCallback(wsCallbackId.value);
-  }
-});
-
-// 监听连接模式变化
-watch(connectionMode, handleModeChange);
 
 // 加载终端状态
 const loadTerminalStatus = async () => {
@@ -284,55 +175,92 @@ const loadLogs = async () => {
 // 设置WebSocket连接
 const setupWebSocket = () => {
   if (wsCallbackId.value) {
-    terminalService.removeWebSocketCallback(wsCallbackId.value);
+    terminalService.disconnect(wsCallbackId.value);
   }
   
-  wsCallbackId.value = terminalService.connectWebSocket(handleWebSocketMessage);
+  wsCallbackId.value = terminalService.connect(handleWebSocketMessage);
 };
 
-// 处理WebSocket消息
+// 使用防抖处理 WebSocket 消息
 const handleWebSocketMessage = (data) => {
-  // 处理日志消息
-  if (data.type === 'new_log' || data.message) {
-    const logEntry = {
-      timestamp: data.timestamp || new Date().toISOString(),
-      level: data.level || 'info',
-      message: data.message || JSON.stringify(data),
-      source: data.source
-    };
-    
-    logs.value.unshift(logEntry);
-    if (logs.value.length > 100) {
-      logs.value = logs.value.slice(0, 100);
-    }
+  // 处理连接状态消息
+  if (data.type === 'connection_status') {
+    processConnectionStatus(data);
+    return;
   }
   
-  // 处理状态更新
-  if (data.type === 'system_update' || data.type === 'system_resources') {
-    // 更新CPU和内存
-    if (data.cpu !== undefined) status.cpu_usage = data.cpu;
-    if (data.memory !== undefined) status.memory_usage = data.memory;
-    
-    // 更新运行状态
-    if (data.model_loaded !== undefined) status.model_loaded = data.model_loaded;
-    if (data.push_running !== undefined) status.push_running = data.push_running;
-    if (data.pull_running !== undefined) status.pull_running = data.pull_running;
-    
-    // 更新终端状态
-    terminal.status = status.model_loaded || status.push_running || status.pull_running;
+  // 处理日志消息 - 使用防抖减少更新频率
+  if (data.type === 'new_log' || data.message) {
+    processLogMessage(data);
+    return;
+  }
+  
+  // 处理状态更新 - 使用防抖减少更新频率
+  if (data.type === 'status' || data.type === 'system_update' || data.type === 'system_resources') {
+    debouncedProcessStatusUpdate(data);
+    return;
   }
   
   // 处理相机状态
   if (data.type === 'camera_status') {
-    if (data.id && data.status) {
-      status.cameras[data.id] = data.status;
-    }
+    processCameraStatus(data);
+    return;
   }
   
   // 处理检测结果
   if (data.type === 'detection_result') {
     // 可以在UI中显示最新检测结果
     console.log('检测结果:', data);
+  }
+};
+
+// 处理连接状态
+const processConnectionStatus = (data) => {
+  // 处理连接状态变化
+  if (data.data && typeof data.data.connected !== 'undefined') {
+    terminal.status = data.data.connected;
+  }
+};
+
+// 处理日志消息
+const processLogMessage = (data) => {
+  const logEntry = {
+    timestamp: data.timestamp || new Date().toISOString(),
+    level: data.level || 'info',
+    message: data.message || JSON.stringify(data),
+    source: data.source || '系统'
+  };
+  
+  if (logs.value.length > 0 && logs.value[0].timestamp === logEntry.timestamp && 
+      logs.value[0].message === logEntry.message) {
+    return; // 避免重复日志
+  }
+  
+  logs.value.unshift(logEntry);
+  if (logs.value.length > 100) {
+    logs.value = logs.value.slice(0, 100);
+  }
+};
+
+// 使用防抖处理状态更新
+const debouncedProcessStatusUpdate = debounce((data) => {
+  // 更新CPU和内存
+  if (data.cpu_usage !== undefined) status.cpu_usage = data.cpu_usage;
+  if (data.memory_usage !== undefined) status.memory_usage = data.memory_usage;
+  
+  // 更新运行状态
+  if (data.model_loaded !== undefined) status.model_loaded = data.model_loaded;
+  if (data.push_running !== undefined) status.push_running = data.push_running;
+  if (data.pull_running !== undefined) status.pull_running = data.pull_running;
+  
+  // 更新终端状态
+  terminal.status = status.model_loaded || status.push_running || status.pull_running;
+}, 300);
+
+// 处理相机状态
+const processCameraStatus = (data) => {
+  if (data.id && data.status) {
+    status.cameras[data.id] = data.status;
   }
 };
 
@@ -416,8 +344,28 @@ const saveConfig = async () => {
       preload_model: config.preload_model
     };
     
+    // 保存原始配置用于比较
+    const oldMode = originalConfig.mode;
+    const oldInterval = originalConfig.interval;
+    
     const result = await terminalService.saveConfig(configToSave);
-    ElMessage.success('配置已保存');
+    
+    // 检查是否需要手动应用变更
+    if (oldMode !== config.mode) {
+      // 模式已变更，通知用户
+      ElMessage.success(`配置已保存，检测模式已更改为: ${config.mode}`);
+      
+      // 刷新状态
+      await loadTerminalStatus();
+    } else if (oldInterval !== config.interval) {
+      // 间隔已变更
+      ElMessage.success(`配置已保存，拉取间隔已更新为: ${config.interval}秒`);
+      
+      // 刷新状态
+      await loadTerminalStatus();
+    } else {
+      ElMessage.success('配置已保存');
+    }
     
     // 如果配置要求重启，提示用户
     if (result && result.restart_required) {
@@ -438,10 +386,10 @@ const saveConfig = async () => {
     
     // 更新原始配置
     Object.assign(originalConfig, JSON.parse(JSON.stringify(config)));
-    loading.value = false;
   } catch (error) {
     console.error('保存配置失败:', error);
     ElMessage.error('保存配置失败');
+  } finally {
     loading.value = false;
   }
 };
@@ -500,6 +448,210 @@ const customColorMethod = (percentage) => {
     return '#F56C6C';
   }
 };
+
+// 状态更新定时器
+const statusRefreshTimer = ref(null);
+
+// 改进初始化流程
+onMounted(async () => {
+  loading.value = true;
+  
+  try {
+    // 1. 自动检测环境并配置连接模式
+    environmentInfo.value = await terminalService.autoDetectEnvironment();
+    console.log('检测到环境:', environmentInfo.value);
+    
+    // 2. 根据环境信息设置连接模式
+    if (environmentInfo.value.type === 'detector') {
+      // 如果是检测端环境，默认使用本地模式
+      connectionMode.value = 'local';
+      localAvailable.value = true;
+      terminal.id = environmentInfo.value.id;
+      terminal.name = environmentInfo.value.name;
+    } else {
+      // 如果是服务端环境
+      
+      // 加载终端列表
+      await loadTerminalList();
+      
+      // 检测本地终端可用性（可选）
+      await detectLocalTerminal();
+      
+      // 确定终端ID - 优先使用路由参数
+      if (route.params.id) {
+        terminal.id = parseInt(route.params.id);
+        selectedTerminalId.value = terminal.id;
+        connectionMode.value = 'remote';
+      } else if (localAvailable.value) {
+        // 如果本地可用且没有指定ID，使用本地模式
+        connectionMode.value = 'local';
+      } else if (terminalList.value.length > 0) {
+        // 否则使用列表中第一个终端
+        terminal.id = terminalList.value[0].id;
+        selectedTerminalId.value = terminal.id;
+        connectionMode.value = 'remote';
+        router.replace(`/terminals/${terminal.id}`);
+      }
+    }
+    
+    // 3. 根据选定的模式设置终端服务
+    terminalService.setMode(
+      connectionMode.value, 
+      connectionMode.value === 'remote' ? terminal.id : null
+    );
+    
+    // 4. 加载数据
+    await Promise.all([
+      loadTerminalDetails(),
+      loadTerminalStatus(),
+      loadTerminalConfig(),
+      loadLogs()
+    ]);
+    
+    // 5. 设置WebSocket连接
+    setupWebSocket();
+    
+    // 6. 设置定时刷新状态 (每15秒刷新一次)
+    statusRefreshTimer.value = setInterval(async () => {
+      try {
+        await loadTerminalStatus();
+      } catch (error) {
+        console.error('自动刷新状态失败:', error);
+      }
+    }, 15000);
+  } catch (error) {
+    console.error('初始化失败:', error);
+    ElMessage.error('加载终端数据失败');
+  } finally {
+    loading.value = false;
+  }
+});
+
+// 改进模式变更处理
+const handleModeChange = async () => {
+  loading.value = true;
+  
+  try {
+    // 根据模式设置终端服务
+    if (connectionMode.value === 'remote') {
+      // 确保有终端ID
+      if (!terminal.id) {
+        if (terminalList.value.length > 0) {
+          terminal.id = terminalList.value[0].id;
+          selectedTerminalId.value = terminal.id;
+        } else {
+          throw new Error('远程模式需要终端ID，但无可用终端');
+        }
+      }
+      
+      // 设置服务模式并更新路由
+      terminalService.setMode('remote', terminal.id);
+      if (route.path !== `/terminals/${terminal.id}`) {
+        router.push(`/terminals/${terminal.id}`);
+      }
+    } else {
+      // 本地模式
+      terminalService.setMode('local');
+      
+      // 如果当前在终端详情页，跳转到终端列表页
+      if (route.name === 'terminal-detail') {
+        router.push('/terminals');
+      }
+    }
+    
+    // 重新加载数据
+    await Promise.all([
+      loadTerminalDetails(),
+      loadTerminalStatus(),
+      loadTerminalConfig(),
+      loadLogs()
+    ]);
+    
+    // 重新连接WebSocket
+    setupWebSocket();
+  } catch (error) {
+    console.error('切换模式失败:', error);
+    ElMessage.error(`切换连接模式失败: ${error.message}`);
+    
+    // 如果失败，回退到之前的模式
+    connectionMode.value = connectionMode.value === 'remote' ? 'local' : 'remote';
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 切换终端
+const switchTerminal = async (id) => {
+  if (id !== terminal.id) {
+    loading.value = true;
+    try {
+      terminal.id = id;
+      await terminalService.setMode('remote', id);
+      router.push(`/terminals/${id}`);
+      
+      // 重新加载数据
+      await Promise.all([
+        loadTerminalDetails(),
+        loadTerminalStatus(),
+        loadTerminalConfig(),
+        loadLogs()
+      ]);
+      
+      // 重新连接WebSocket
+      setupWebSocket();
+    } catch (error) {
+      console.error('切换终端失败:', error);
+      ElMessage.error(`切换终端失败: ${error.message}`);
+    } finally {
+      loading.value = false;
+    }
+  }
+};
+
+// 发送命令并立即应用配置变更
+const applyConfig = async () => {
+  try {
+    loading.value = true;
+    await sendCommand('change_mode', { mode: config.mode });
+    await sendCommand('set_interval', { interval: parseFloat(config.interval) });
+    ElMessage.success('配置已立即应用');
+    
+    // 刷新状态
+    await loadTerminalStatus();
+  } catch (error) {
+    console.error('应用配置失败:', error);
+    ElMessage.error('应用配置失败: ' + error.message);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 改进组件卸载时的清理
+onUnmounted(() => {
+  // 清除所有防抖函数
+  if (debouncedProcessStatusUpdate && debouncedProcessStatusUpdate.cancel) {
+    debouncedProcessStatusUpdate.cancel();
+  }
+  
+  // 确保清除WebSocket回调
+  if (wsCallbackId.value) {
+    try {
+      terminalService.disconnect(wsCallbackId.value);
+      wsCallbackId.value = null;
+    } catch (e) {
+      console.error('清除WebSocket回调失败:', e);
+    }
+  }
+  
+  // 清除状态刷新定时器
+  if (statusRefreshTimer.value) {
+    clearInterval(statusRefreshTimer.value);
+    statusRefreshTimer.value = null;
+  }
+});
+
+// 监听连接模式变化
+watch(connectionMode, handleModeChange);
 </script>
 
 <template>
@@ -512,11 +664,15 @@ const customColorMethod = (percentage) => {
             <el-tag :type="terminal.status ? 'success' : 'danger'" class="status-tag">
               {{ terminal.status ? '在线' : '离线' }}
             </el-tag>
+            
+            <el-tag v-if="environmentInfo" :type="environmentInfo.type === 'detector' ? 'warning' : 'info'" class="env-tag">
+              {{ environmentInfo.type === 'detector' ? '检测端' : '服务端' }}
+            </el-tag>
           </div>
+          
           <div class="connection-controls">
-            <!-- 添加终端选择器 -->
             <el-select 
-              v-if="connectionMode === 'remote'" 
+              v-if="connectionMode === 'remote' && terminalList.length > 0" 
               v-model="selectedTerminalId" 
               placeholder="选择终端" 
               size="small"
@@ -531,7 +687,11 @@ const customColorMethod = (percentage) => {
               />
             </el-select>
             
-            <el-radio-group v-model="connectionMode" size="small">
+            <el-radio-group 
+              v-if="localAvailable || terminalList.length > 0" 
+              v-model="connectionMode" 
+              size="small"
+            >
               <el-radio-button label="remote" :disabled="terminalList.length === 0">远程模式</el-radio-button>
               <el-radio-button label="local" :disabled="!localAvailable">本地模式</el-radio-button>
             </el-radio-group>
@@ -539,196 +699,191 @@ const customColorMethod = (percentage) => {
         </div>
       </template>
       
-      <!-- 使用标签页布局代替垂直堆叠卡片 -->
-      <el-tabs type="border-card" class="main-tabs">
-        <!-- 状态监控标签页 -->
-        <el-tab-pane>
-          <template #label>
-            <span><i class="el-icon-monitor"></i> 状态监控</span>
-          </template>
-          
-          <div class="tab-content">
-            <el-row :gutter="20">
-              <!-- 基本状态信息 -->
-              <el-col :xs="24" :sm="24" :md="12">
-                <div class="status-panel">
-                  <div class="panel-header">
-                    <h3>系统状态</h3>
-                    <el-button type="text" @click="refreshStatus" icon="el-icon-refresh">刷新</el-button>
-                  </div>
-                  
-                  <el-descriptions :column="1" border size="small" class="descriptions-block">
-                    <el-descriptions-item label="终端ID">{{ terminal.id || '本地终端' }}</el-descriptions-item>
-                    <el-descriptions-item label="CPU使用率">
-                      <el-progress :percentage="status.cpu_usage" :color="customColorMethod"></el-progress>
-                    </el-descriptions-item>
-                    <el-descriptions-item label="内存使用率">
-                      <el-progress :percentage="status.memory_usage" :color="customColorMethod"></el-progress>
-                    </el-descriptions-item>
-                    <el-descriptions-item label="模型状态">
-                      <el-tag :type="status.model_loaded ? 'success' : 'warning'" size="small">
-                        {{ status.model_loaded ? '已加载' : '未加载' }}
-                      </el-tag>
-                    </el-descriptions-item>
-                    <el-descriptions-item v-if="terminalDetails.last_active" label="最后活动">
-                      {{ terminalDetails.last_active }}
-                    </el-descriptions-item>
-                  </el-descriptions>
-                </div>
-              </el-col>
-              
-              <!-- 服务控制 -->
-              <el-col :xs="24" :sm="24" :md="12">
-                <div class="status-panel">
-                  <div class="panel-header">
-                    <h3>服务控制</h3>
-                  </div>
-                  
-                  <div class="service-controls">
-                    <!-- 拉取模式 -->
-                    <div class="service-item">
-                      <div class="service-info">
-                        <span class="service-name">拉取模式</span>
-                        <el-tag :type="status.pull_running ? 'success' : 'info'" size="small">
-                          {{ status.pull_running ? '运行中' : '已停止' }}
-                        </el-tag>
-                      </div>
-                      <div class="service-actions">
-                        <el-button 
-                          type="primary" 
-                          size="small" 
-                          @click="startService('pull')" 
-                          :disabled="status.pull_running"
-                          plain
-                        >启动</el-button>
-                        <el-button 
-                          type="danger" 
-                          size="small" 
-                          @click="stopService('pull')"
-                          :disabled="!status.pull_running"
-                          plain
-                        >停止</el-button>
-                      </div>
-                    </div>
-                    
-                    <!-- 接收模式 -->
-                    <div class="service-item">
-                      <div class="service-info">
-                        <span class="service-name">接收模式</span>
-                        <el-tag :type="status.push_running ? 'success' : 'info'" size="small">
-                          {{ status.push_running ? '运行中' : '已停止' }}
-                        </el-tag>
-                      </div>
-                      <div class="service-actions">
-                        <el-button 
-                          type="primary" 
-                          size="small" 
-                          @click="startService('push')"
-                          :disabled="status.push_running"
-                          plain
-                        >启动</el-button>
-                        <el-button 
-                          type="danger" 
-                          size="small" 
-                          @click="stopService('push')"
-                          :disabled="!status.push_running"
-                          plain
-                        >停止</el-button>
-                      </div>
-                    </div>
-                    
-                    <!-- 所有服务 -->
-                    <div class="service-item">
-                      <div class="service-info">
-                        <span class="service-name">所有服务</span>
-                      </div>
-                      <div class="service-actions">
-                        <el-button 
-                          type="primary" 
-                          size="small" 
-                          @click="startService('both')"
-                          :disabled="status.pull_running && status.push_running"
-                        >全部启动</el-button>
-                        <el-button 
-                          type="danger" 
-                          size="small" 
-                          @click="stopService('both')"
-                          :disabled="!status.pull_running && !status.push_running"
-                        >全部停止</el-button>
-                      </div>
-                    </div>
-                    
-                    <div class="divider"></div>
-                    
-                    <!-- 系统操作 -->
-                    <div class="service-item">
-                      <el-button 
-                        type="warning" 
-                        @click="restartTerminal" 
-                        :disabled="!terminal.status"
-                        icon="el-icon-refresh-right"
-                      >重启终端</el-button>
-                    </div>
-                  </div>
-                </div>
-              </el-col>
-            </el-row>
+      <!-- 重新设计布局：不再使用标签页，而是使用统一的卡片式布局 -->
+      <div class="dashboard-layout">
+        <!-- 左侧：系统状态和服务控制 -->
+        <div class="left-panel">
+          <!-- 系统资源监控 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>系统资源</h3>
+              <el-button type="text" @click="refreshStatus" icon="el-icon-refresh">刷新</el-button>
+            </div>
             
-            <!-- 摄像头状态 -->
-            <div class="camera-status-panel">
-              <div class="panel-header">
-                <h3>摄像头状态</h3>
+            <div class="resource-metrics">
+              <div class="metric-item">
+                <span class="metric-label">CPU 使用率</span>
+                <el-progress :percentage="status.cpu_usage" :color="customColorMethod" :stroke-width="18" />
+                <span class="metric-value">{{ status.cpu_usage.toFixed(1) }}%</span>
               </div>
               
-              <el-empty v-if="Object.keys(status.cameras).length === 0" description="暂无摄像头数据"></el-empty>
-              <el-table 
-                v-else
-                :data="Object.entries(status.cameras).map(([id, status]) => ({ id, status }))" 
-                border
-                stripe
-                size="small"
-                style="width: 100%"
-              >
-                <el-table-column prop="id" label="摄像头ID" width="100" align="center"></el-table-column>
-                <el-table-column prop="status" label="状态" align="center">
-                  <template #default="scope">
-                    <el-tag 
-                      :type="scope.row.status === '在线' ? 'success' : 'danger'"
-                      size="small"
-                    >
-                      {{ scope.row.status }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div class="metric-item">
+                <span class="metric-label">内存使用率</span>
+                <el-progress :percentage="status.memory_usage" :color="customColorMethod" :stroke-width="18" />
+                <span class="metric-value">{{ status.memory_usage.toFixed(1) }}%</span>
+              </div>
             </div>
           </div>
-        </el-tab-pane>
-        
-        <!-- 配置管理标签页 -->
-        <el-tab-pane>
-          <template #label>
-            <span><i class="el-icon-setting"></i> 配置管理</span>
-          </template>
           
-          <div class="tab-content">
-            <div class="config-toolbar">
-              <div class="config-summary">
-                <el-tag>{{ 
-                  config.mode === 'pull' ? '拉取模式' : 
-                  config.mode === 'push' ? '接收模式' : '双模式' 
-                }}</el-tag>
-                <el-tag type="info">拉取间隔: {{ config.interval }}秒</el-tag>
-                <el-tag type="info">摄像头: {{ config.cameras.length }}个</el-tag>
-                <el-tag v-if="config.save_image" type="success">保存图像</el-tag>
-                <el-tag v-if="config.preload_model" type="success">预加载模型</el-tag>
+          <!-- 系统信息 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>系统信息</h3>
+            </div>
+            
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">终端ID</span>
+                <span class="info-value">{{ terminal.id || '本地终端' }}</span>
               </div>
-              <div class="config-actions">
+              
+              <div class="info-item">
+                <span class="info-label">模型状态</span>
+                <el-tag :type="status.model_loaded ? 'success' : 'warning'" size="small">
+                  {{ status.model_loaded ? '已加载' : '未加载' }}
+                </el-tag>
+              </div>
+              
+              <div class="info-item" v-if="terminalDetails.last_active">
+                <span class="info-label">最后活动</span>
+                <span class="info-value">{{ terminalDetails.last_active }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 服务控制 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>服务控制</h3>
+            </div>
+            
+            <div class="service-controls">
+              <!-- 拉取模式 -->
+              <div class="service-item">
+                <div class="service-info">
+                  <span class="service-name">拉取模式</span>
+                  <el-tag :type="status.pull_running ? 'success' : 'info'" size="small">
+                    {{ status.pull_running ? '运行中' : '已停止' }}
+                  </el-tag>
+                </div>
+                <div class="service-actions">
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    @click="startService('pull')" 
+                    :disabled="status.pull_running"
+                    plain
+                  >启动</el-button>
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="stopService('pull')"
+                    :disabled="!status.pull_running"
+                    plain
+                  >停止</el-button>
+                </div>
+              </div>
+              
+              <!-- 接收模式 -->
+              <div class="service-item">
+                <div class="service-info">
+                  <span class="service-name">接收模式</span>
+                  <el-tag :type="status.push_running ? 'success' : 'info'" size="small">
+                    {{ status.push_running ? '运行中' : '已停止' }}
+                  </el-tag>
+                </div>
+                <div class="service-actions">
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    @click="startService('push')"
+                    :disabled="status.push_running"
+                    plain
+                  >启动</el-button>
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="stopService('push')"
+                    :disabled="!status.push_running"
+                    plain
+                  >停止</el-button>
+                </div>
+              </div>
+              
+              <!-- 系统操作 -->
+              <div class="service-item">
+                <div class="service-info">
+                  <span class="service-name">系统操作</span>
+                </div>
+                <div class="service-actions">
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    @click="startService('both')"
+                    :disabled="status.pull_running && status.push_running"
+                  >全部启动</el-button>
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="stopService('both')"
+                    :disabled="!status.pull_running && !status.push_running"
+                  >全部停止</el-button>
+                  <el-button 
+                    type="warning" 
+                    @click="restartTerminal" 
+                    :disabled="!terminal.status"
+                    size="small"
+                  >重启终端</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 摄像头状态 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>摄像头状态</h3>
+            </div>
+            
+            <el-empty v-if="Object.keys(status.cameras).length === 0" description="暂无摄像头数据"></el-empty>
+            <el-table 
+              v-else
+              :data="Object.entries(status.cameras).map(([id, status]) => ({ id, status }))" 
+              border
+              stripe
+              size="small"
+              style="width: 100%"
+            >
+              <el-table-column prop="id" label="摄像头ID" width="100" align="center"></el-table-column>
+              <el-table-column prop="status" label="状态" align="center">
+                <template #default="scope">
+                  <el-tag 
+                    :type="scope.row.status === '在线' ? 'success' : 'danger'"
+                    size="small"
+                  >
+                    {{ scope.row.status }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+        
+        <!-- 右侧：配置管理和日志查看 -->
+        <div class="right-panel">
+          <!-- 配置管理 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>配置管理</h3>
+              <div class="section-actions">
                 <el-button type="primary" size="small" @click="saveConfig">
-                  <i class="el-icon-check"></i> 保存配置
+                  保存配置
+                </el-button>
+                <el-button type="success" size="small" @click="applyConfig">
+                  立即应用
                 </el-button>
                 <el-button size="small" @click="resetConfig">
-                  <i class="el-icon-refresh-left"></i> 重置
+                  重置
                 </el-button>
               </div>
             </div>
@@ -736,7 +891,7 @@ const customColorMethod = (percentage) => {
             <el-form :model="config" label-width="100px" class="config-form">
               <el-row :gutter="20">
                 <!-- 基本配置 -->
-                <el-col :xs="24" :sm="24" :md="12">
+                <el-col :xs="24" :md="12">
                   <div class="form-section">
                     <h4>基本配置</h4>
                     <el-form-item label="工作模式">
@@ -767,7 +922,7 @@ const customColorMethod = (percentage) => {
                 </el-col>
                 
                 <!-- 摄像头配置 -->
-                <el-col :xs="24" :sm="24" :md="12">
+                <el-col :xs="24" :md="12">
                   <div class="form-section">
                     <h4>摄像头配置</h4>
                     <div class="camera-list">
@@ -775,7 +930,7 @@ const customColorMethod = (percentage) => {
                         :data="config.cameras" 
                         border 
                         size="small"
-                        height="250px"
+                        height="200px"
                       >
                         <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
                         <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
@@ -783,7 +938,7 @@ const customColorMethod = (percentage) => {
                           <template #default="scope">
                             <el-button 
                               type="danger" 
-                              size="mini" 
+                              size="small"
                               @click="removeCamera(scope.$index)"
                               icon="el-icon-delete"
                               circle
@@ -803,17 +958,11 @@ const customColorMethod = (percentage) => {
               </el-row>
             </el-form>
           </div>
-        </el-tab-pane>
-        
-        <!-- 日志查看标签页 -->
-        <el-tab-pane>
-          <template #label>
-            <span><i class="el-icon-document"></i> 日志查看</span>
-          </template>
           
-          <div class="tab-content">
-            <div class="log-header">
-              <h3>终端日志</h3>
+          <!-- 日志查看 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>系统日志</h3>
               <el-button size="small" type="primary" plain @click="loadLogs" icon="el-icon-refresh">刷新</el-button>
             </div>
             
@@ -821,7 +970,7 @@ const customColorMethod = (percentage) => {
             <el-table 
               v-else
               :data="logs" 
-              height="400px" 
+              height="350px" 
               border
               stripe
               size="small"
@@ -832,7 +981,7 @@ const customColorMethod = (percentage) => {
                 <template #default="scope">
                   <el-tag 
                     :type="getLogLevelType(scope.row.level)"
-                    size="mini"
+                    size="small"
                   >
                     {{ scope.row.level }}
                   </el-tag>
@@ -842,8 +991,8 @@ const customColorMethod = (percentage) => {
               <el-table-column prop="message" label="消息" show-overflow-tooltip></el-table-column>
             </el-table>
           </div>
-        </el-tab-pane>
-      </el-tabs>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
@@ -851,7 +1000,7 @@ const customColorMethod = (percentage) => {
 <style scoped>
 .terminal-view {
   padding: 15px;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -872,7 +1021,7 @@ const customColorMethod = (percentage) => {
   gap: 10px;
 }
 
-.status-tag {
+.status-tag, .env-tag {
   margin-left: 8px;
 }
 
@@ -897,34 +1046,96 @@ h4 {
   margin-bottom: 12px;
 }
 
-.main-tabs {
-  border: none;
-  box-shadow: none;
+/* 新的布局样式 */
+.dashboard-layout {
+  display: flex;
+  gap: 20px;
+  margin-top: 15px;
 }
 
-.tab-content {
-  padding: 15px 0;
+.left-panel {
+  width: 40%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* 状态监控样式 */
-.status-panel {
-  background: #f8f8f8;
+.right-panel {
+  width: 60%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.panel-section {
+  background-color: #f8f9fa;
+  border: 1px solid #ebeef5;
   border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 15px;
+  padding: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.panel-header {
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.descriptions-block {
-  margin-top: 10px;
+.section-actions {
+  display: flex;
+  gap: 10px;
 }
 
+/* 资源监控样式 */
+.resource-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.metric-label {
+  font-weight: 500;
+  color: #606266;
+}
+
+.metric-value {
+  text-align: right;
+  color: #909399;
+  font-weight: 500;
+}
+
+/* 信息网格 */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.info-label {
+  font-size: 0.9rem;
+  color: #909399;
+}
+
+.info-value {
+  font-weight: 500;
+}
+
+/* 服务控制样式 */
 .service-controls {
   display: flex;
   flex-direction: column;
@@ -935,10 +1146,10 @@ h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px;
+  padding: 12px;
   background-color: #fff;
   border-radius: 4px;
-  border: 1px solid #ebeef5;
+  border-left: 4px solid #ebeef5;
 }
 
 .service-info {
@@ -955,52 +1166,42 @@ h4 {
 .service-actions {
   display: flex;
   gap: 8px;
-}
-
-.divider {
-  height: 1px;
-  background-color: #ebeef5;
-  margin: 5px 0;
-}
-
-.camera-status-panel {
-  background: #f8f8f8;
-  border-radius: 4px;
-  padding: 12px;
-}
-
-/* 配置管理样式 */
-.config-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f8f8f8;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 15px;
-}
-
-.config-summary {
-  display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
 }
 
-.config-actions {
+/* 摄像头配置样式 */
+.camera-list {
+  margin-bottom: 15px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.add-camera-form {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 15px;
+  background-color: #f8f8f8;
+  padding: 10px;
+  border-radius: 4px;
 }
 
+.camera-id-input {
+  width: 80px;
+}
+
+.camera-url-input {
+  flex-grow: 1;
+}
+
+/* 配置表单样式 */
 .config-form {
-  margin-top: 15px;
+  margin-top: 10px;
 }
 
 .form-section {
-  background: #f8f8f8;
-  border-radius: 4px;
   padding: 15px;
-  height: 100%;
+  background-color: #fff;
+  border-radius: 4px;
 }
 
 .switch-group {
@@ -1015,51 +1216,26 @@ h4 {
   gap: 10px;
 }
 
-.camera-list {
-  margin-bottom: 12px;
-}
-
-.add-camera-form {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.camera-id-input {
-  width: 70px;
-  flex-shrink: 0;
-}
-
-.camera-url-input {
-  flex-grow: 1;
-}
-
-/* 日志查看样式 */
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f8f8f8;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 15px;
-}
-
-.connection-controls {
-  display: flex;
-  align-items: center;
-}
-
-/* 适配移动设备 */
-@media (max-width: 768px) {
-  .terminal-view {
-    padding: 10px;
+/* 响应式布局 */
+@media (max-width: 1200px) {
+  .dashboard-layout {
+    flex-direction: column;
   }
   
+  .left-panel, .right-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
   .header-section {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
   }
   
   .service-item {
@@ -1069,17 +1245,6 @@ h4 {
   }
   
   .service-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .config-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  
-  .config-actions {
     width: 100%;
     justify-content: space-between;
   }

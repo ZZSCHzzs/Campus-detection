@@ -25,6 +25,10 @@ class TerminalWebSocketClient:
         
         # 修改：不再需要路径模板，直接使用完整URL
         
+    def is_connected(self):
+        """返回当前WebSocket连接状态"""
+        return self.connected and self.ws is not None
+    
     async def start(self):
         """启动WebSocket客户端"""
         self.running = True
