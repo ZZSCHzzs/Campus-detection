@@ -895,14 +895,6 @@ function formatTime(value: string) {
     rgba(0, 0, 0, 0.3) 90%,
     transparent 100%
   );
-  -webkit-mask-image: radial-gradient(
-    ellipse 90% 90% at center,
-    black 60%,
-    rgba(0, 0, 0, 0.8) 70%,
-    rgba(0, 0, 0, 0.6) 80%,
-    rgba(0, 0, 0, 0.3) 90%,
-    transparent 100%
-  );
 }
 
 /* 可选：添加发光效果增强过渡感 */
