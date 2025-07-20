@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { terminalService } from '../services/terminalService';
+import { terminalService as terminalsService } from '../services/apiService';
 import { debounce } from 'lodash';
 
 const route = useRoute();
@@ -69,23 +70,10 @@ const terminalDetails = reactive({
 // 环境信息
 const environmentInfo = ref(null);
 
-// 检测本地终端是否可用
-const detectLocalTerminal = async () => {
-  try {
-    localAvailable.value = await terminalService.detectLocalTerminal();
-    if (localAvailable.value) {
-      ElMessage.success('检测到本地终端');
-    }
-  } catch (e) {
-    localAvailable.value = false;
-  }
-};
-
 // 加载终端列表
 const loadTerminalList = async () => {
   try {
-    const response = await fetch('/api/terminals/');
-    const data = await response.json();
+    const data = await terminalsService.getAll();
     terminalList.value = data;
     return data;
   } catch (error) {
@@ -461,6 +449,9 @@ onMounted(async () => {
     environmentInfo.value = await terminalService.autoDetectEnvironment();
     console.log('检测到环境:', environmentInfo.value);
     
+    // 无论是什么环境，都加载终端列表，以便切换
+    await loadTerminalList();
+    
     // 2. 根据环境信息设置连接模式
     if (environmentInfo.value.type === 'detector') {
       // 如果是检测端环境，默认使用本地模式
@@ -470,13 +461,6 @@ onMounted(async () => {
       terminal.name = environmentInfo.value.name;
     } else {
       // 如果是服务端环境
-      
-      // 加载终端列表
-      await loadTerminalList();
-      
-      // 检测本地终端可用性（可选）
-      await detectLocalTerminal();
-      
       // 确定终端ID - 优先使用路由参数
       if (route.params.id) {
         terminal.id = parseInt(route.params.id);
@@ -490,7 +474,8 @@ onMounted(async () => {
         terminal.id = terminalList.value[0].id;
         selectedTerminalId.value = terminal.id;
         connectionMode.value = 'remote';
-        router.replace(`/terminals/${terminal.id}`);
+        // 修正路由路径
+        router.replace(`/terminal/${terminal.id}`);
       }
     }
     
@@ -535,27 +520,37 @@ const handleModeChange = async () => {
     // 根据模式设置终端服务
     if (connectionMode.value === 'remote') {
       // 确保有终端ID
-      if (!terminal.id) {
+      if (!terminal.id || !terminalList.value.some(t => t.id === terminal.id)) {
         if (terminalList.value.length > 0) {
           terminal.id = terminalList.value[0].id;
           selectedTerminalId.value = terminal.id;
         } else {
-          throw new Error('远程模式需要终端ID，但无可用终端');
+          // 如果没有可用终端，尝试重新加载终端列表
+          await loadTerminalList();
+          
+          if (terminalList.value.length > 0) {
+            terminal.id = terminalList.value[0].id;
+            selectedTerminalId.value = terminal.id;
+          } else {
+            throw new Error('远程模式需要终端ID，但无可用终端');
+          }
         }
       }
       
       // 设置服务模式并更新路由
       terminalService.setMode('remote', terminal.id);
-      if (route.path !== `/terminals/${terminal.id}`) {
-        router.push(`/terminals/${terminal.id}`);
+      
+      // 修复路由逻辑，使用正确的路径格式
+      if (route.name !== 'terminal-detail' || parseInt(route.params.id) !== terminal.id) {
+        router.push(`/terminal/${terminal.id}`);
       }
     } else {
       // 本地模式
       terminalService.setMode('local');
       
-      // 如果当前在终端详情页，跳转到终端列表页
+      // 如果当前在终端详情页，跳转到终端页
       if (route.name === 'terminal-detail') {
-        router.push('/terminals');
+        router.push('/terminal');
       }
     }
     
@@ -587,7 +582,8 @@ const switchTerminal = async (id) => {
     try {
       terminal.id = id;
       await terminalService.setMode('remote', id);
-      router.push(`/terminals/${id}`);
+      // 修正路由路径
+      router.push(`/terminal/${id}`);
       
       // 重新加载数据
       await Promise.all([
@@ -692,7 +688,8 @@ watch(connectionMode, handleModeChange);
               v-model="connectionMode" 
               size="small"
             >
-              <el-radio-button label="remote" :disabled="terminalList.length === 0">远程模式</el-radio-button>
+              <!-- 移除了禁用条件，允许随时切换到远程模式 -->
+              <el-radio-button label="remote">远程模式</el-radio-button>
               <el-radio-button label="local" :disabled="!localAvailable">本地模式</el-radio-button>
             </el-radio-group>
           </div>

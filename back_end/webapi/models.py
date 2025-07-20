@@ -19,8 +19,40 @@ class HardwareNode(models.Model):
 
 
 class ProcessTerminal(models.Model):
-    name = models.CharField(max_length=100, verbose_name="终端名称")
-    status = models.BooleanField(default=False, verbose_name="状态")
+    name = models.CharField(max_length=100, default='终端')
+    status = models.BooleanField(default=False)
+    last_active = models.DateTimeField(null=True, blank=True)
+    
+    # 终端性能状态
+    cpu_usage = models.FloatField(default=0)
+    memory_usage = models.FloatField(default=0)
+    
+    # 检测服务状态
+    model_loaded = models.BooleanField(default=False)
+    push_running = models.BooleanField(default=False)
+    pull_running = models.BooleanField(default=False)
+    
+    # 终端配置
+    mode = models.CharField(max_length=10, default='both', choices=[
+        ('pull', '拉取模式'),
+        ('push', '接收模式'),
+        ('both', '双模式')
+    ])
+    interval = models.FloatField(default=5.0)
+    camera_config = models.JSONField(default=dict, blank=True)
+    save_image = models.BooleanField(default=True)
+    preload_model = models.BooleanField(default=True)
+    
+    # 摄像头状态
+    cameras = models.JSONField(default=dict, blank=True)
+
+    def update_status(self, status_data):
+        # 更新状态字段
+        if 'model_loaded' in status_data:
+            self.model_loaded = status_data['model_loaded']
+        # 更新其他字段...
+        self.last_active = timezone.now()
+        self.save()
 
 
 class Building(models.Model):

@@ -62,6 +62,12 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/terminal/:id',
+    name: 'terminal-detail',
+    component: TerminalView,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: AdminView,

@@ -1,257 +1,286 @@
 import json
-from channels.generic.websocket import WebsocketConsumer
-from channels.db import database_sync_to_async
-from django.utils import timezone
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-from .models import ProcessTerminal, HardwareNode, HistoricalData, Area
 import logging
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from django.core.cache import cache
+from django.utils import timezone
+from .models import ProcessTerminal
 
-# 配置日志
-logger = logging.getLogger('terminal_ws')
+logger = logging.getLogger('django')
 
-class TerminalConsumer(WebsocketConsumer):
-    def connect(self):
-        # 从URL路径中获取terminal_id
+class TerminalConsumer(AsyncWebsocketConsumer):
+    """终端WebSocket消费者，处理终端连接和消息"""
+    
+    async def connect(self):
+        """处理WebSocket连接"""
+        # 获取终端ID - 从URL路由参数
         self.terminal_id = self.scope['url_route']['kwargs']['terminal_id']
-        
-        # 确保terminal_id是整数
-        try:
-            self.terminal_id = int(self.terminal_id)
-        except (ValueError, TypeError):
-            logger.warning(f"无效的终端ID: {self.terminal_id}，拒绝连接")
-            self.close()
-            return
-        
-        # 验证终端是否存在
-        terminal = self.get_terminal()
-        if not terminal:
-            logger.warning(f"终端 {self.terminal_id} 不存在，拒绝连接")
-            self.close()
-            return
-        
-        # 确保channel_layer可用
-        if not hasattr(self, 'channel_layer'):
-            try:
-                self.channel_layer = get_channel_layer()
-                if self.channel_layer is None:
-                    raise ValueError("无法获取channel_layer")
-            except Exception as e:
-                logger.error(f"无法获取channel_layer: {str(e)}")
-                self.close()
-                return
-                
-        # 将连接添加到组
         self.group_name = f"terminal_{self.terminal_id}"
-        try:
-            async_to_sync(self.channel_layer.group_add)(
-                self.group_name,
-                self.channel_name
-            )
-        except Exception as e:
-            logger.error(f"将连接添加到组失败: {str(e)}")
-            self.close()
-            return
         
-        # 更新终端状态为在线
-        self.update_terminal_status(True)
+        # 检查终端是否存在
+        terminal_exists = await self.check_terminal_exists(self.terminal_id)
+        if not terminal_exists:
+            # 终端不存在，拒绝连接
+            await self.close(code=4004)
+            return
+            
+        # 将连接添加到组
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+        
+        # 更新终端的连接状态
+        await self.update_terminal_status(self.terminal_id, True)
         
         # 接受WebSocket连接
-        self.accept()
+        await self.accept()
         
-        logger.info(f"终端 {self.terminal_id} 已连接")
+        # 发送连接确认消息
+        await self.send(text_data=json.dumps({
+            'type': 'connection_status',
+            'status': 'connected',
+            'terminal_id': self.terminal_id,
+            'timestamp': timezone.now().isoformat()
+        }))
         
-    def disconnect(self, close_code):
-        # 终端断开连接，更新状态为离线
-        self.update_terminal_status(False)
+        logger.info(f"终端 {self.terminal_id} WebSocket连接已建立")
+    
+    async def disconnect(self, close_code):
+        """处理WebSocket断开连接"""
+        # 将连接从组中移除
+        await self.channel_layer.group_discard(
+            self.group_name,
+            self.channel_name
+        )
         
-        # 从组中移除
-        if hasattr(self, 'channel_layer') and hasattr(self, 'group_name'):
-            try:
-                async_to_sync(self.channel_layer.group_discard)(
-                    self.group_name,
-                    self.channel_name
-                )
-            except Exception as e:
-                logger.error(f"从组移除通道时出错: {str(e)}")
+        # 更新终端的连接状态
+        await self.update_terminal_status(self.terminal_id, False)
         
-        logger.info(f"终端 {self.terminal_id} 已断开连接，代码: {close_code}")
-        
-    def receive(self, text_data):
+        logger.info(f"终端 {self.terminal_id} WebSocket连接已断开: {close_code}")
+    
+    async def receive(self, text_data):
+        """处理从客户端接收的消息"""
         try:
             data = json.loads(text_data)
             message_type = data.get('type')
             
-            # 处理心跳消息
-            if message_type == 'heartbeat':
-                self.handle_heartbeat()
-                return
-                
-            # 处理节点数据
-            if message_type == 'nodes_data' and 'nodes' in data:
-                self.process_nodes_data(data['nodes'])
-                return
-                
-            # 处理系统状态
-            if message_type == 'system_status' and 'status' in data:
-                self.process_system_status(data['status'])
-                return
-                
-            # 处理日志消息
-            if message_type == 'log':
-                self.process_log(data)
-                return
-                
-            # 处理认证消息
-            if message_type == 'authenticate':
-                # 已在connect中处理认证，这里无需额外处理
-                return
-                
-            # 其他未知消息类型
-            logger.warning(f"收到未知类型消息: {text_data}")
-                
+            # 处理不同类型的消息
+            if message_type == 'system_status':
+                await self.handle_system_status(data)
+            elif message_type == 'log':
+                await self.handle_log_message(data)
+            elif message_type == 'heartbeat':
+                await self.handle_heartbeat(data)
+            elif message_type == 'nodes_data':
+                await self.handle_nodes_data(data)
+            else:
+                # 转发未知类型消息到组
+                await self.channel_layer.group_send(
+                    self.group_name,
+                    {
+                        'type': 'broadcast_message',
+                        'message': data
+                    }
+                )
         except json.JSONDecodeError:
-            logger.error(f"收到无效JSON数据: {text_data}")
+            logger.error(f"收到无效的JSON数据: {text_data[:100]}...")
         except Exception as e:
-            logger.error(f"处理消息时出错: {str(e)}")
+            logger.error(f"处理WebSocket消息时出错: {str(e)}")
     
-    def handle_heartbeat(self):
+    async def handle_system_status(self, data):
+        """处理系统状态更新消息"""
+        status_data = data.get('status', {})
+        if not status_data:
+            return
+            
+        # 更新数据库中的终端状态
+        await self.update_terminal_system_status(self.terminal_id, status_data)
+        
+        # 更新Redis缓存
+        cache_key = f"terminal:{self.terminal_id}:status"
+        cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
+        
+        # 广播状态消息给所有连接的客户端
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'broadcast_message',
+                'message': {
+                    'type': 'status',
+                    'data': status_data,
+                    'timestamp': timezone.now().isoformat()
+                }
+            }
+        )
+    
+    async def handle_log_message(self, data):
+        """处理日志消息"""
+        # 添加到日志缓存
+        cache_key = f"terminal:{self.terminal_id}:logs"
+        
+        # 获取现有日志
+        logs = cache.get(cache_key) or []
+        
+        # 添加新日志
+        log_entry = {
+            'timestamp': data.get('timestamp', timezone.now().isoformat()),
+            'level': data.get('level', 'info'),
+            'message': data.get('message', ''),
+            'source': data.get('source', 'system')
+        }
+        
+        # 将新日志添加到列表开头
+        logs.insert(0, log_entry)
+        
+        # 限制日志数量
+        if len(logs) > 100:
+            logs = logs[:100]
+        
+        # 更新缓存
+        cache.set(cache_key, logs, timeout=300)  # 5分钟过期
+        
+        # 广播日志消息
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'broadcast_message',
+                'message': {
+                    'type': 'new_log',
+                    'data': log_entry,
+                    'timestamp': timezone.now().isoformat()
+                }
+            }
+        )
+    
+    async def handle_heartbeat(self, data):
         """处理心跳消息"""
-        # 发送心跳响应
-        self.send(text_data=json.dumps({
+        # 更新终端的最后活动时间
+        await self.update_terminal_last_active(self.terminal_id)
+        
+        # 回复心跳
+        await self.send(text_data=json.dumps({
             'type': 'heartbeat_response',
             'timestamp': timezone.now().isoformat()
         }))
-        
-        # 顺便更新终端状态
-        self.update_terminal_status(True)
     
-    def send_command(self, event):
-        """处理发送命令事件（由组消息触发）"""
+    async def handle_nodes_data(self, data):
+        """处理节点数据更新"""
+        nodes_data = data.get('nodes', [])
+        if not nodes_data:
+            return
+            
+        # 处理节点数据 - 可能需要更新数据库
+        # 这里仅转发消息
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'broadcast_message',
+                'message': {
+                    'type': 'nodes_data',
+                    'data': nodes_data,
+                    'timestamp': timezone.now().isoformat()
+                }
+            }
+        )
+    
+    async def send_command(self, event):
+        """发送命令到终端"""
         command = event.get('command')
         params = event.get('params', {})
         timestamp = event.get('timestamp', timezone.now().isoformat())
         
-        # 构建命令消息
-        command_data = {
+        # 发送命令消息
+        await self.send(text_data=json.dumps({
             'type': 'send_command',
             'command': command,
             'params': params,
             'timestamp': timestamp
-        }
+        }))
         
-        # 发送命令到终端
-        self.send(text_data=json.dumps(command_data))
-        logger.info(f"向终端 {self.terminal_id} 发送命令: {command}")
+        logger.info(f"命令 '{command}' 已发送到终端 {self.terminal_id}")
+    
+    async def broadcast_message(self, event):
+        """广播消息到WebSocket客户端"""
+        message = event.get('message', {})
+        
+        # 发送消息
+        await self.send(text_data=json.dumps(message))
     
     @database_sync_to_async
-    def get_terminal(self):
-        """获取终端对象"""
+    def check_terminal_exists(self, terminal_id):
+        """检查终端是否存在"""
         try:
-            return ProcessTerminal.objects.get(id=self.terminal_id)
-        except ProcessTerminal.DoesNotExist:
-            logger.warning(f"终端ID {self.terminal_id} 不存在")
-            return None
-    
-    @database_sync_to_async
-    def update_terminal_status(self, is_online):
-        """更新终端在线状态"""
-        try:
-            terminal = ProcessTerminal.objects.get(id=self.terminal_id)
-            terminal.status = is_online
-            terminal.save()
-            return True
-        except ProcessTerminal.DoesNotExist:
-            logger.warning(f"尝试更新不存在的终端状态: {self.terminal_id}")
+            return ProcessTerminal.objects.filter(id=terminal_id).exists()
+        except Exception:
             return False
     
     @database_sync_to_async
-    def process_nodes_data(self, nodes_data):
-        """处理节点数据，更新节点状态并保存历史记录"""
-        current_time = timezone.now()
-        
+    def update_terminal_status(self, terminal_id, connected):
+        """更新终端的连接状态"""
         try:
-            for node_data in nodes_data:
-                node_id = node_data.get('node_id')
-                detected_count = node_data.get('count', 0)
-                
-                if not node_id:
-                    logger.warning("节点数据缺少node_id字段")
-                    continue
-                
-                try:
-                    # 更新节点数据
-                    node = HardwareNode.objects.get(id=node_id)
-                    node.detected_count = detected_count
-                    node.status = True  # 节点在线
-                    node.updated_at = current_time
-                    node.save()
-                    
-                    # 保存历史数据
-                    try:
-                        area = Area.objects.get(bound_node=node)
-                        HistoricalData.objects.create(
-                            area=area,
-                            detected_count=detected_count,
-                            timestamp=current_time
-                        )
-                    except Area.DoesNotExist:
-                        logger.warning(f"节点 {node_id} 未绑定区域，无法保存历史数据")
-                        
-                except HardwareNode.DoesNotExist:
-                    logger.warning(f"节点ID {node_id} 不存在")
-                    
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+            terminal.status = connected
+            terminal.last_active = timezone.now()
+            terminal.save(update_fields=['status', 'last_active'])
             return True
+        except ProcessTerminal.DoesNotExist:
+            logger.error(f"终端 {terminal_id} 不存在")
+            return False
         except Exception as e:
-            logger.error(f"处理节点数据时出错: {str(e)}")
+            logger.error(f"更新终端 {terminal_id} 状态失败: {str(e)}")
             return False
     
     @database_sync_to_async
-    def process_system_status(self, status_data):
-        """处理系统状态更新"""
+    def update_terminal_system_status(self, terminal_id, status_data):
+        """更新终端的系统状态"""
         try:
-            terminal = ProcessTerminal.objects.get(id=self.terminal_id)
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
             
-            # 更新终端状态（可根据需要保存更多字段）
+            # 更新状态字段
             if 'cpu_usage' in status_data:
                 terminal.cpu_usage = status_data['cpu_usage']
             if 'memory_usage' in status_data:
                 terminal.memory_usage = status_data['memory_usage']
+            if 'push_running' in status_data:
+                terminal.push_running = status_data['push_running']
+            if 'pull_running' in status_data:
+                terminal.pull_running = status_data['pull_running']
+            if 'model_loaded' in status_data:
+                terminal.model_loaded = status_data['model_loaded']
+            if 'cameras' in status_data:
+                terminal.cameras = status_data['cameras']
                 
+            terminal.last_active = timezone.now()
             terminal.save()
             return True
         except ProcessTerminal.DoesNotExist:
-            logger.warning(f"尝试更新不存在的终端状态: {self.terminal_id}")
+            logger.error(f"终端 {terminal_id} 不存在")
             return False
         except Exception as e:
-            logger.error(f"处理系统状态时出错: {str(e)}")
+            logger.error(f"更新终端 {terminal_id} 系统状态失败: {str(e)}")
             return False
     
     @database_sync_to_async
-    def process_log(self, log_data):
-        """处理日志消息"""
+    def update_terminal_last_active(self, terminal_id):
+        """更新终端的最后活动时间"""
         try:
-            level = log_data.get('level', 'info')
-            message = log_data.get('message', '')
-            source = log_data.get('source', 'system')
-            
-            # 可以选择将日志保存到数据库或仅记录到服务器日志
-            logger.info(f"终端 {self.terminal_id} 日志 [{level}] {source}: {message}")
-            
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+            terminal.last_active = timezone.now()
+            terminal.save(update_fields=['last_active'])
             return True
         except Exception as e:
-            logger.error(f"处理日志消息时出错: {str(e)}")
+            logger.error(f"更新终端 {terminal_id} 最后活动时间失败: {str(e)}")
             return False
-        """处理日志消息"""
-        try:
-            level = log_data.get('level', 'info')
-            message = log_data.get('message', '')
-            source = log_data.get('source', 'system')
-            
-            # 可以选择将日志保存到数据库或仅记录到服务器日志
-            logger.info(f"终端 {self.terminal_id} 日志 [{level}] {source}: {message}")
-            
-            return True
+        except ProcessTerminal.DoesNotExist:
+            self.send_json({
+                'type': 'error',
+                'message': f'终端 {self.terminal_id} 不存在',
+                'timestamp': timezone.now().isoformat()
+            })
         except Exception as e:
-            logger.error(f"处理日志消息时出错: {str(e)}")
-            return False
+            self.send_json({
+                'type': 'error',
+                'message': f'处理状态更新失败: {str(e)}',
+                'timestamp': timezone.now().isoformat()
+            })

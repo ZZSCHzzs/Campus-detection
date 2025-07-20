@@ -6,12 +6,17 @@ from rest_framework.response import Response
 from rest_framework import status
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.core.cache import cache
 import json
+import logging
+from django.utils import timezone
 from .models import *
 from .serializers import *
 from .permissions import StaffEditSelected
 
 
+
+logger = logging.getLogger('django')
 
 def get_summary_people_count():
     # 获取所有区域
@@ -74,7 +79,148 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         nodes = HardwareNode.objects.filter(terminal=terminal)
         serializer = HardwareNodeSerializer(nodes, many=True)
         return Response(serializer.data)
-
+        
+    @action(detail=True, methods=['get'])
+    def status(self, request, pk=None):
+        """获取终端状态"""
+        terminal = self.get_object()
+        
+        # 首先尝试从Redis缓存获取状态
+        cache_key = f"terminal:{pk}:status"
+        cached_status = cache.get(cache_key)
+        
+        if cached_status:
+            logger.debug(f"从缓存获取终端{pk}状态")
+            return Response(cached_status)
+        
+        # 检查终端是否在线
+        if not terminal.status:
+            default_status = {
+                "model_loaded": False,
+                "push_running": False,
+                "pull_running": False,
+                "cpu_usage": 0,
+                "memory_usage": 0,
+                "cameras": {}
+            }
+            # 缓存默认状态，设置短暂过期时间
+            cache.set(cache_key, default_status, timeout=30)
+            return Response(default_status)
+        
+        # 从数据库获取基本状态
+        try:
+            status_data = {
+                "model_loaded": terminal.model_loaded,
+                "push_running": terminal.push_running,
+                "pull_running": terminal.pull_running,
+                "cpu_usage": terminal.cpu_usage or 0,
+                "memory_usage": terminal.memory_usage or 0,
+                "cameras": terminal.cameras or {}
+            }
+            
+            # 缓存状态数据，设置适当的过期时间
+            cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
+            
+            return Response(status_data)
+        except Exception as e:
+            logger.error(f"获取终端{pk}状态失败: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def logs(self, request, pk=None):
+        """获取终端日志"""
+        terminal = self.get_object()
+        
+        # 从Redis缓存获取日志
+        cache_key = f"terminal:{pk}:logs"
+        cached_logs = cache.get(cache_key)
+        
+        if cached_logs:
+            logger.debug(f"从缓存获取终端{pk}日志")
+            return Response(cached_logs)
+        
+        # 如果缓存中没有，返回空列表
+        # 在实际应用中，你可能需要从数据库或日志文件中获取
+        empty_logs = []
+        cache.set(cache_key, empty_logs, timeout=30)  # 缓存30秒
+        return Response(empty_logs)
+            
+    @action(detail=True, methods=['get', 'post'])
+    def config(self, request, pk=None):
+        """获取或更新终端配置"""
+        terminal = self.get_object()
+        
+        if request.method == 'GET':
+            # 首先尝试从Redis缓存获取配置
+            cache_key = f"terminal:{pk}:config"
+            cached_config = cache.get(cache_key)
+            
+            if cached_config:
+                logger.debug(f"从缓存获取终端{pk}配置")
+                return Response(cached_config)
+                
+            # 如果缓存中没有，从数据库构建
+            try:
+                config_data = {
+                    "mode": terminal.mode or "both",
+                    "interval": terminal.interval or 5,
+                    "cameras": terminal.camera_config or {},
+                    "save_image": terminal.save_image if hasattr(terminal, 'save_image') else True,
+                    "preload_model": terminal.preload_model if hasattr(terminal, 'preload_model') else True
+                }
+                
+                # 缓存配置数据，设置较长的过期时间
+                cache.set(cache_key, config_data, timeout=300)  # 5分钟过期
+                
+                return Response(config_data)
+            except Exception as e:
+                logger.error(f"获取终端{pk}配置失败: {str(e)}")
+                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            # 更新配置 - 通过命令接口发送
+            try:
+                channel_layer = get_channel_layer()
+                message = {
+                    'type': 'send_command',
+                    'command': 'update_config',
+                    'params': request.data,
+                    'timestamp': timezone.now().isoformat()
+                }
+                
+                async_to_sync(channel_layer.group_send)(
+                    f"terminal_{pk}",
+                    message
+                )
+                
+                # 保存到数据库
+                if 'mode' in request.data:
+                    terminal.mode = request.data['mode']
+                if 'interval' in request.data:
+                    terminal.interval = request.data['interval']
+                if 'cameras' in request.data:
+                    terminal.camera_config = request.data['cameras']
+                if 'save_image' in request.data:
+                    terminal.save_image = request.data['save_image']
+                if 'preload_model' in request.data:
+                    terminal.preload_model = request.data['preload_model']
+                    
+                terminal.save()
+                
+                # 更新Redis缓存
+                cache_key = f"terminal:{pk}:config"
+                config_data = {
+                    "mode": terminal.mode,
+                    "interval": terminal.interval,
+                    "cameras": terminal.camera_config,
+                    "save_image": terminal.save_image if hasattr(terminal, 'save_image') else True,
+                    "preload_model": terminal.preload_model if hasattr(terminal, 'preload_model') else True
+                }
+                cache.set(cache_key, config_data, timeout=300)  # 5分钟过期
+                
+                return Response({"status": "success", "message": "配置已更新"})
+            except Exception as e:
+                logger.error(f"更新终端{pk}配置失败: {str(e)}")
+                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class BuildingViewSet(viewsets.ModelViewSet):
     queryset = Building.objects.all()
@@ -330,6 +476,36 @@ class TerminalCommandView(APIView):
                 message
             )
             
+            # 更新终端的最后活动时间
+            terminal.last_active = timezone.now()
+            terminal.save(update_fields=['last_active'])
+            
+            # 处理特殊命令 - 实时更新缓存
+            command = command_data.get('command')
+            params = command_data.get('params', {})
+            
+            if command == "start":
+                mode = params.get('mode')
+                if mode == 'pull' or mode == 'both':
+                    terminal.pull_running = True
+                if mode == 'push' or mode == 'both':
+                    terminal.push_running = True
+                terminal.save(update_fields=['pull_running', 'push_running'])
+                
+                # 更新状态缓存
+                self._update_status_cache(pk, terminal)
+                
+            elif command == "stop":
+                mode = params.get('mode')
+                if mode == 'pull' or mode == 'both':
+                    terminal.pull_running = False
+                if mode == 'push' or mode == 'both':
+                    terminal.push_running = False
+                terminal.save(update_fields=['pull_running', 'push_running'])
+                
+                # 更新状态缓存
+                self._update_status_cache(pk, terminal)
+            
             return Response({
                 "status": "success",
                 "message": f"命令已发送到终端 {pk}",
@@ -342,10 +518,24 @@ class TerminalCommandView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            logger.error(f"发送命令到终端{pk}失败: {str(e)}")
             return Response(
                 {"error": f"发送命令失败: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+            
+    def _update_status_cache(self, terminal_id, terminal):
+        """更新终端状态缓存"""
+        cache_key = f"terminal:{terminal_id}:status"
+        status_data = {
+            "model_loaded": terminal.model_loaded,
+            "push_running": terminal.push_running,
+            "pull_running": terminal.pull_running,
+            "cpu_usage": terminal.cpu_usage or 0,
+            "memory_usage": terminal.memory_usage or 0,
+            "cameras": terminal.cameras or {}
+        }
+        cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
 
 
 # 添加环境信息API

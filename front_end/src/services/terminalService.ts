@@ -102,6 +102,8 @@ class TerminalService {
   private mode: 'local' | 'remote' = 'remote';
   private terminalId: number | null = null;
   private localEndpoint = 'http://localhost:5000';
+  private remoteWsHost: string = 'smarthit.top'; // 固定使用远程服务端地址
+  private remoteUseSSL: boolean = true; // 远程连接默认使用SSL
   
   // 连接状态
   private connected = false;
@@ -452,9 +454,9 @@ class TerminalService {
       return;
     }
     
-    // 构建WebSocket URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
+    // 构建WebSocket URL - 使用固定的远程地址
+    const protocol = this.remoteUseSSL ? 'wss:' : 'ws:';
+    const host = this.remoteWsHost; // 始终使用固定的远程主机
     const terminalId = this.terminalId || 1;
     const wsUrl = `${protocol}//${host}/ws/terminal/${terminalId}`;
     
@@ -667,8 +669,12 @@ class TerminalService {
     }
     
     try {
+      // 使用固定的远程服务器地址
+      const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
+      const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/command/`;
+      
       // 发送命令
-      const response = await axios.post(`/api/terminals/${this.terminalId}/command/`, commandData, {
+      const response = await axios.post(apiUrl, commandData, {
         timeout: 10000,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -690,7 +696,10 @@ class TerminalService {
         const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
         return this.normalizeStatusData(response.data);
       } else {
-        const response = await axios.get(`/api/terminals/${this.terminalId}/status/`, { timeout: 8000 });
+        // 使用固定的远程服务器地址
+        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
+        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/status/`;
+        const response = await axios.get(apiUrl, { timeout: 8000 });
         return this.normalizeStatusData(response.data);
       }
     } catch (error) {
@@ -787,7 +796,10 @@ class TerminalService {
         const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
         return this.normalizeLogData(response.data);
       } else {
-        const response = await axios.get(`/api/terminals/${this.terminalId}/logs/`, { timeout: 8000 });
+        // 使用固定的远程服务器地址
+        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
+        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/logs/`;
+        const response = await axios.get(apiUrl, { timeout: 8000 });
         return this.normalizeLogData(response.data);
       }
     } catch (error) {
@@ -833,8 +845,10 @@ class TerminalService {
           version: infoResponse.data.version || 'unknown'
         };
       } else {
-        // 远程模式获取终端详情
-        const response = await axios.get(`/api/terminals/${this.terminalId}/`);
+        // 远程模式获取终端详情 - 使用固定的远程服务器地址
+        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
+        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/`;
+        const response = await axios.get(apiUrl);
         
         return {
           id: response.data.id,
@@ -897,8 +911,11 @@ class TerminalService {
       
       // 本地环境不可用或获取信息失败，尝试获取远程环境信息
       try {
-        const response = await axios.get('/api/environment', { timeout: 5000 });
-        const envInfo: EnvironmentInfo = response.data;
+        // 使用固定的远程服务器地址
+        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
+        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/environment`;
+        const apiResponse = await axios.get(apiUrl, { timeout: 5000 });
+        const envInfo: EnvironmentInfo = apiResponse.data;
         
         // 设置为远程模式
         await this.setMode('remote', this.terminalId || envInfo.id);
@@ -967,6 +984,30 @@ class TerminalService {
    */
   getTerminalId(): number | null {
     return this.terminalId;
+  }
+  
+  /**
+   * 设置远程WebSocket服务器地址
+   * @param host WebSocket服务器地址（不包括协议和路径）
+   */
+  setRemoteWsHost(host: string): void {
+    if (host && host !== this.remoteWsHost) {
+      console.log(`设置远程WebSocket主机: ${host}`);
+      this.remoteWsHost = host;
+      // 如果当前是远程模式且已连接，重新连接以应用新主机
+      if (this.mode === 'remote' && this.connected) {
+        this.disconnect();
+        this.connectRemoteWebSocket();
+      }
+    }
+  }
+  
+  /**
+   * 获取当前使用的WebSocket主机
+   * @returns 当前WebSocket主机
+   */
+  getRemoteWsHost(): string {
+    return this.remoteWsHost || window.location.host;
   }
 }
 

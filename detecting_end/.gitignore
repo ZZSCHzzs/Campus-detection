@@ -3,5 +3,6 @@ venv
 temp
 logs
 old
+static
 __pycache__
 *.pyc
