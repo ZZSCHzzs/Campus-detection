@@ -63,7 +63,14 @@ class DetectionManager:
             'started_at': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         self.status_lock = Lock()
-    
+        
+        # 添加状态变化标志
+        self.status_changed = False
+        
+        # 添加帧统计
+        self.frames_processed = 0
+        self.frames_lock = Lock()
+
     def initialize(self):
         """初始化检测管理器"""
         # 如果配置为预加载模型，则启动模型加载线程
@@ -141,6 +148,7 @@ class DetectionManager:
             return False
         
         self.push_running = True
+        self.status_changed = True  # 标记状态已变化
         
         with self.status_lock:
             self.system_status["push_running"] = True
@@ -159,6 +167,7 @@ class DetectionManager:
             return False
         
         self.push_running = False
+        self.status_changed = True  # 标记状态已变化
         
         with self.status_lock:
             self.system_status["push_running"] = False
@@ -184,6 +193,7 @@ class DetectionManager:
         self.pull_thread.start()
         
         self.pull_running = True
+        self.status_changed = True  # 标记状态已变化
         
         with self.status_lock:
             self.system_status["pull_running"] = True
@@ -208,6 +218,7 @@ class DetectionManager:
             self.pull_thread.join(timeout=3.0)
         
         self.pull_running = False
+        self.status_changed = True  # 标记状态已变化
         
         with self.status_lock:
             self.system_status["pull_running"] = False
@@ -423,6 +434,10 @@ class DetectionManager:
         with self.model_lock:
             count = detect_module.detect(temp_path, model=self.model)
         
+        # 增加帧统计
+        with self.frames_lock:
+            self.frames_processed += 1
+        
         return count
     
     def analyze_images(self, images_data):
@@ -627,3 +642,56 @@ class DetectionManager:
             error_msg = f"处理接收帧失败: {str(e)}"
             self.log_manager.error(error_msg)
             return {'status': 'error', 'message': error_msg}
+    
+    def on_config_changed(self, old_config=None, new_config=None):
+        """处理配置变更"""
+        # 如果没有提供新旧配置，直接从配置管理器获取当前配置
+        if new_config is None:
+            new_config = self.config_manager.get_all()
+            old_config = {}  # 没有旧配置进行比较时假设所有配置都已更改
+        
+        # 标记状态已变化，触发状态同步
+        self.status_changed = True
+        
+        # 1. 处理模式变更
+        if 'mode' in new_config and new_config['mode'] != old_config.get('mode'):
+            new_mode = new_config['mode']
+            self.log_manager.info(f"配置变更: 检测模式 {old_config.get('mode', '未知')} -> {new_mode}")
+            
+            with self.status_lock:
+                self.system_status["mode"] = new_mode
+            
+            # 应用新模式
+            self.change_mode(new_mode)
+        
+        # 2. 处理拉取间隔变更
+        if 'interval' in new_config and new_config['interval'] != old_config.get('interval'):
+            new_interval = new_config['interval']
+            self.log_manager.info(f"配置变更: 拉取间隔 {old_config.get('interval', '未知')} -> {new_interval}秒")
+            
+            # 如果正在运行拉取模式，需要重启以应用新间隔
+            if self.pull_running:
+                self.log_manager.info("重启拉取服务以应用新间隔")
+                self.stop_pull()
+                self.start_pull()
+        
+        # 3. 处理预加载模型设置变更
+        if 'preload_model' in new_config and new_config['preload_model'] != old_config.get('preload_model'):
+            preload_model = new_config['preload_model']
+            self.log_manager.info(f"配置变更: 预加载模型 {old_config.get('preload_model', '未知')} -> {preload_model}")
+            
+            # 如果启用预加载且模型未加载，启动模型加载
+            if preload_model and not self.model_loaded and not self.model_loading:
+                self.log_manager.info("开始加载模型...")
+                self.load_model_async()
+        
+        # 4. 如果有其他重要配置变更，可以在这里添加处理逻辑
+        
+        # 更新前端界面
+        if self.socketio:
+            self.socketio.emit('system_update', {
+                'mode': new_config.get('mode', self.system_status["mode"]),
+                'push_running': self.push_running,
+                'pull_running': self.pull_running,
+                'config_updated': True
+            })

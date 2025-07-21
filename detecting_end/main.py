@@ -15,6 +15,8 @@ from logger_manager import LogManager
 from camera_manager import CameraManager
 from detection_manager import DetectionManager
 from utils import ensure_dirs_exist, fix_ws_url, get_system_info
+# 导入系统监控模块
+from system_monitor import SystemMonitor
 
 # 创建Flask应用
 app = Flask(__name__, static_folder='static')
@@ -27,11 +29,12 @@ log_manager = None
 camera_manager = None
 detection_manager = None
 ws_client = None
+system_monitor = None  # 添加系统监控实例
 
 # 初始化应用
 def initialize_app():
     """初始化应用程序"""
-    global config_manager, log_manager, camera_manager, detection_manager, ws_client
+    global config_manager, log_manager, camera_manager, detection_manager, ws_client, system_monitor
     
     # 创建必要的目录
     ensure_dirs_exist('logs', 'temp', 'captures', 'static')
@@ -64,8 +67,16 @@ def initialize_app():
     # 启动检测服务
     detection_manager.initialize()
     
-    # 启动系统状态监控
-    start_system_monitor()
+    # 初始化并启动系统监控模块
+    system_monitor = SystemMonitor(
+        config_manager=config_manager,
+        camera_manager=camera_manager,
+        detection_manager=detection_manager,
+        log_manager=log_manager,
+        socketio=socketio,
+        ws_client=ws_client
+    )
+    system_monitor.start()
     
     log_manager.info("应用程序初始化完成")
     return True
@@ -188,7 +199,17 @@ def get_info():
 @app.route('/api/status')
 def get_status():
     """获取系统状态"""
-    return jsonify(detection_manager.get_system_status())
+    # 使用系统监控模块的状态而不是检测管理器的状态
+    status = system_monitor.get_status()
+    # 合并检测管理器的一些额外信息
+    detection_status = detection_manager.get_system_status()
+    status.update({
+        'model_loaded': detection_status.get('model_loaded', False),
+        'push_running': detection_status.get('push_running', False),
+        'pull_running': detection_status.get('pull_running', False),
+        'mode': detection_status.get('mode', 'both')
+    })
+    return jsonify(status)
 
 # API路由 - 系统信息
 @app.route('/api/system')
@@ -370,8 +391,9 @@ def receive_frame(camera_id):
         # 读取图像数据
         image_data = image_file.read()
         
-        # 处理图像
-        result = detection_manager.process_received_frame(camera_id, image_data)
+        # 使用process_received_frame而不是从detection_manager直接处理
+        # 这确保帧率统计得到更新
+        result = process_received_frame(camera_id, image_data)
         
         return jsonify(result)
     except Exception as e:
@@ -394,231 +416,134 @@ def serve_static(path):
     # 对于所有其他请求，返回index.html以支持Vue路由
     return send_file(os.path.join(app.static_folder, 'index.html'))
 
-# 修改：系统状态监控线程
-def start_system_monitor():
-    """启动系统状态监控线程，定期广播系统状态"""
-    def monitor_system_status():
-        """系统状态监控线程函数"""
-        log_manager.info("系统状态监控线程已启动")
-        
-        # 创建用于异步操作的事件循环
-        monitor_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(monitor_loop)
-        
-        # 获取配置的监控间隔，默认3秒
-        monitor_interval = config_manager.get('monitor_interval', 3)
-        
-        last_error_time = 0
-        consecutive_errors = 0
-        
-        # 上次CPU测量的时间点，用于计算CPU使用率
-        last_cpu_times = psutil.cpu_times()
-        
-        while True:
-            try:
-                # 获取系统状态
-                status_data = detection_manager.get_system_status()
-                
-                # 更精确地获取CPU使用率 - 计算相对于上次测量的使用率
-                current_cpu_times = psutil.cpu_times()
-                
-                # 计算所有CPU时间差值
-                user_diff = current_cpu_times.user - last_cpu_times.user
-                system_diff = current_cpu_times.system - last_cpu_times.system
-                idle_diff = current_cpu_times.idle - last_cpu_times.idle
-                
-                # 计算总时间差
-                total_diff = user_diff + system_diff + idle_diff
-                
-                # 计算CPU使用率
-                if total_diff > 0:
-                    cpu_usage = 100.0 * (1.0 - (idle_diff / total_diff))
-                    status_data['cpu_usage'] = round(cpu_usage, 1)
-                else:
-                    # 如果差值为0（极少发生），则获取即时值
-                    status_data['cpu_usage'] = round(psutil.cpu_percent(interval=0.1), 1)
-                
-                # 更新CPU时间点用于下次计算
-                last_cpu_times = current_cpu_times
-                
-                # 获取内存使用情况
-                memory = psutil.virtual_memory()
-                status_data['memory_usage'] = round(memory.percent, 1)
-                
-                # 添加额外的系统信息
-                status_data['memory_used_mb'] = round(memory.used / (1024 * 1024), 1)
-                status_data['memory_total_mb'] = round(memory.total / (1024 * 1024), 1)
-                
-                # 获取主要进程的CPU使用率
-                process = psutil.Process()
-                status_data['process_cpu_percent'] = round(process.cpu_percent(interval=0.1) / psutil.cpu_count(), 1)
-                status_data['process_memory_percent'] = round(process.memory_percent(), 1)
-                
-                # 通过SocketIO广播系统状态
-                socketio.emit('system_status', status_data)
-                
-                # 如果WebSocket客户端已连接，也发送状态更新
-                if ws_client and ws_client.is_connected():
-                    terminal_id = config_manager.get('terminal_id')
-                    status_data['terminal_id'] = terminal_id
-                    
-                    # 使用事件循环运行异步任务
-                    async def send_status():
-                        await ws_client.send_status(status_data)
-                    
-                    try:
-                        monitor_loop.run_until_complete(send_status())
-                    except Exception as ws_error:
-                        log_manager.error(f"发送WebSocket状态更新失败: {str(ws_error)}")
-                
-                # 重置错误计数
-                consecutive_errors = 0
-                
-                # 使用配置的间隔时间
-                time.sleep(monitor_interval)
-            except Exception as e:
-                current_time = time.time()
-                consecutive_errors += 1
-                
-                # 计算错误频率和严重程度
-                error_interval = current_time - last_error_time
-                last_error_time = current_time
-                
-                # 记录错误
-                log_manager.error(f"系统状态监控错误 ({consecutive_errors}): {str(e)}")
-                
-                if consecutive_errors > 10:
-                    # 多次连续错误，可能需要重启监控线程
-                    log_manager.warning("系统监控连续出错过多，尝试重新初始化...")
-                    try:
-                        # 关闭旧的事件循环
-                        monitor_loop.close()
-                        # 创建新的事件循环
-                        monitor_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(monitor_loop)
-                        consecutive_errors = 0
-                    except Exception as loop_error:
-                        log_manager.error(f"重新初始化事件循环失败: {str(loop_error)}")
-                
-                # 错误后延长等待时间，但不超过30秒
-                backoff_time = min(30, monitor_interval * (2 ** min(5, consecutive_errors - 1)))
-                time.sleep(backoff_time)
+# 修改帧处理函数，更新帧率计数
+def process_received_frame(camera_id, image_data):
+    """处理接收到的图像帧（用于被动接收模式）"""
+    if not detection_manager.push_running:
+        return {'status': 'error', 'message': '被动接收模式未启动'}
     
-    # 启动监控线程
-    monitor_thread = Thread(target=monitor_system_status, daemon=True)
-    monitor_thread.start()
-    return monitor_thread
-
-# 添加API路由 - 更新监控设置
-@app.route('/api/monitor/settings', methods=['POST'])
-def update_monitor_settings():
-    """更新系统监控设置"""
     try:
-        data = request.json
-        interval = data.get('interval')
+        # 将图像数据转换为OpenCV格式
+        import numpy as np
+        import cv2
         
-        if interval is not None:
-            # 验证间隔值是否合理
-            if not isinstance(interval, (int, float)) or interval < 1 or interval > 60:
-                return jsonify({"status": "error", "message": "监控间隔必须在1-60秒之间"}), 400
-            
-            # 更新配置
-            config_manager.set('monitor_interval', interval)
-            config_manager.save_config()
-            
-            log_manager.info(f"系统监控间隔已更新为: {interval}秒")
-            socketio.emit('system_message', {'message': f'系统监控间隔已更新为: {interval}秒'})
-            
-            return jsonify({
-                "status": "success", 
-                "message": f"监控间隔已更新为: {interval}秒"
-            })
-        else:
-            return jsonify({"status": "error", "message": "未提供监控间隔值"}), 400
+        nparr = np.frombuffer(image_data, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            return {'status': 'error', 'message': '无效的图像数据'}
+        
+        # 如果配置为保存图像，则保存图像
+        if config_manager.get('save_image', True):
+            camera_manager.save_image(image, camera_id)
+        
+        # 分析图像
+        count = detection_manager.analyze_image(image, camera_id)
+        
+        # 上传结果
+        detection_manager.upload_result(camera_id, count)
+        
+        # 更新帧率统计
+        system_monitor.add_frame_processed()
+        
+        return {'status': 'success', 'detected_count': count}
     except Exception as e:
-        log_manager.error(f"更新监控设置失败: {str(e)}")
-        return jsonify({"status": "error", "message": f"更新监控设置失败: {str(e)}"}), 500
+        error_msg = f"处理接收帧失败: {str(e)}"
+        log_manager.error(error_msg)
+        return {'status': 'error', 'message': error_msg}
 
-# 添加版本信息和环境标识API
+# 修改API路由 - 系统环境信息
 @app.route('/api/environment')
 def get_environment():
     """返回环境信息，帮助前端识别当前运行环境"""
-    terminal_mode = config_manager.get('mode', 'local')
+    try:
+        terminal_id = config_manager.get('terminal_id')
+        terminal_mode = config_manager.get('mode', 'local')
+        server_url = config_manager.get('server_url', '')
+        
+        return jsonify({
+            "type": "detector",  # 标识这是检测端
+            "version": "2.0.0",
+            "name": f"检测终端 #{terminal_id}",
+            "id": terminal_id,
+            "features": {
+                "local_detection": True,
+                "websocket": True,
+                "push_mode": True,
+                "pull_mode": True
+            },
+            "terminal_mode": terminal_mode,
+            "server_url": server_url
+        })
+    except Exception as e:
+        log_manager.error(f"获取环境信息失败: {str(e)}")
+        return jsonify({
+            "type": "detector",
+            "version": "2.0.0",
+            "name": "检测终端",
+            "id": 0,
+            "features": {
+                "local_detection": True,
+                "websocket": True,
+                "push_mode": True,
+                "pull_mode": True
+            }
+        })
+
+# 新增：添加心跳检查端点
+@app.route('/api/heartbeat')
+def heartbeat():
+    """心跳检查端点，用于检测服务是否运行"""
     return jsonify({
-        "type": "detector",  # 标识这是检测端
-        "version": "2.0.0",
-        "name": f"终端 #{config_manager.get('terminal_id')}",
-        "id": config_manager.get('terminal_id'),
-        "features": {
-            "local_detection": True,
-            "websocket": True,
-            "push_mode": True,
-            "pull_mode": True
-        },
-        "terminal_mode": terminal_mode  # 添加终端模式信息
+        "status": "running",
+        "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        "terminal_id": config_manager.get('terminal_id'),
+        "uptime": int(time.time() - psutil.boot_time())
     })
 
-# 修改 Socket.IO 事件处理
-@socketio.on('connect')
-def handle_connect():
-    """处理客户端连接事件"""
-    log_manager.info(f"Socket.IO客户端已连接: {request.sid}")
-    # 发送初始系统状态
-    status_data = detection_manager.get_system_status()
-    socketio.emit('system_status', status_data, room=request.sid)
-    # 不要返回 true，否则表示异步响应
-    # return True
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """处理客户端断开连接事件"""
-    log_manager.info(f"Socket.IO客户端已断开连接: {request.sid}")
-
-@socketio.on('client_connected')
-def handle_client_connected(data):
-    """处理客户端发送的连接初始化消息"""
-    log_manager.info(f"收到客户端初始化消息: {data}")
-    # 发送确认消息
-    socketio.emit('system_message', {'message': '已连接到本地终端'}, room=request.sid)
-    # 发送系统状态
-    status_data = detection_manager.get_system_status()
-    socketio.emit('system_status', status_data, room=request.sid)
-
-# 辅助函数，供其他模块访问全局管理器实例
-def get_config_manager():
-    """获取配置管理器实例"""
-    return config_manager
-
-def get_log_manager():
-    """获取日志管理器实例"""
-    return log_manager
-
-def get_camera_manager():
-    """获取摄像头管理器实例"""
-    return camera_manager
-
-def get_detection_manager():
-    """获取检测管理器实例"""
-    return detection_manager
-
-def get_ws_client():
-    """获取WebSocket客户端实例"""
-    return ws_client
+# 清理函数，确保应用退出时释放资源
+def cleanup():
+    """清理资源，确保优雅退出"""
+    try:
+        # 确保先停止系统监控
+        if system_monitor:
+            system_monitor.stop()
+        
+        if detection_manager:
+            # 停止检测服务
+            if detection_manager.pull_running:
+                detection_manager.stop_pull()
+            if detection_manager.push_running:
+                detection_manager.stop_push()
+        
+        if ws_client:
+            # 关闭WebSocket连接
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(ws_client.stop())
+            
+        log_manager.info("应用程序已清理资源并退出")
+    except Exception as e:
+        print(f"清理资源时出错: {str(e)}")
 
 # 主程序入口点
 if __name__ == "__main__":
     # 初始化应用
     initialize_app()
     
-    # 使用socketio.run启动Flask应用
-    port = config_manager.get('port', 5000)
-    debug = config_manager.get('debug', False)
-    
-    log_manager.info(f"服务启动在端口 {port}")
-    socketio.run(
-        app, 
-        host='0.0.0.0', 
-        port=port, 
-        debug=debug, 
-        allow_unsafe_werkzeug=True
-    )
+    try:
+        # 使用socketio.run启动Flask应用
+        port = config_manager.get('port', 5000)
+        debug = config_manager.get('debug', False)
+        
+        log_manager.info(f"服务启动在端口 {port}")
+        socketio.run(
+            app, 
+            host='0.0.0.0', 
+            port=port, 
+            debug=debug, 
+            allow_unsafe_werkzeug=True
+        )
+    finally:
+        # 确保程序退出时清理资源
+        cleanup()

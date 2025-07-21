@@ -126,6 +126,9 @@ class TerminalService {
   // 环境信息缓存
   private environmentInfo: EnvironmentInfo | null = null;
   
+  // 最近的状态缓存
+  private lastStatus: TerminalStatus | null = null;
+  
   /**
    * 初始化终端服务
    */
@@ -458,7 +461,8 @@ class TerminalService {
     const protocol = this.remoteUseSSL ? 'wss:' : 'ws:';
     const host = this.remoteWsHost; // 始终使用固定的远程主机
     const terminalId = this.terminalId || 1;
-    const wsUrl = `${protocol}//${host}/ws/terminal/${terminalId}`;
+    // 确保URL格式正确 - 始终以斜杠结尾
+    const wsUrl = `${protocol}//${host}/ws/terminal/${terminalId}/`;
     
     console.log(`正在连接远程WebSocket: ${wsUrl}`);
     
@@ -478,6 +482,9 @@ class TerminalService {
           data: { connected: true, mode: 'remote' },
           timestamp: new Date().toISOString()
         });
+        
+        // 连接后立即请求状态更新
+        this.requestStatusUpdate();
       };
       
       // 接收消息
@@ -534,6 +541,83 @@ class TerminalService {
       
       // 尝试重连
       this.scheduleReconnect();
+    }
+  }
+  
+  /**
+   * 处理WebSocket状态更新
+   * @param data 状态数据
+   * @private
+   */
+  private handleStatusUpdate(data: any): void {
+    // 通知所有回调
+    this.broadcastMessage({
+      type: 'status',
+      ...data,
+      timestamp: data.timestamp || new Date().toISOString()
+    });
+    
+    // 缓存最新状态
+    this.lastStatus = {
+      ...this.lastStatus,
+      ...data.data || data,
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
+  /**
+   * 请求终端状态更新
+   */
+  requestStatusUpdate(): void {
+    if (this.mode === 'remote') {
+      this.requestRemoteStatusUpdate();
+    } else {
+      this.requestLocalStatusUpdate();
+    }
+  }
+
+  /**
+   * 请求远程终端状态更新
+   * @private
+   */
+  private requestRemoteStatusUpdate(): void {
+    if (!this.connected || !this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket未连接，无法请求状态更新');
+      return;
+    }
+    
+    try {
+      const message = JSON.stringify({
+        type: 'request',
+        request: 'get_status',
+        timestamp: new Date().toISOString()
+      });
+      
+      this.webSocket.send(message);
+      console.log('已发送远程状态更新请求');
+    } catch (error) {
+      console.error('发送状态更新请求失败:', error);
+    }
+  }
+
+  /**
+   * 请求本地终端状态更新
+   * @private
+   */
+  private requestLocalStatusUpdate(): void {
+    if (!this.socketIO) {
+      console.warn('Socket.IO未连接，无法请求本地状态更新');
+      return;
+    }
+    
+    try {
+      this.socketIO.emit('request_status', {
+        client_id: 'web_client',
+        timestamp: new Date().toISOString()
+      });
+      console.log('已发送本地状态更新请求');
+    } catch (error) {
+      console.error('发送本地状态更新请求失败:', error);
     }
   }
   

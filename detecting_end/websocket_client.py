@@ -3,7 +3,9 @@ import websockets
 import json
 import logging
 import time
+import re
 from threading import Thread
+from urllib.parse import urlparse, urljoin
 
 logger = logging.getLogger('websocket_client')
 
@@ -22,8 +24,6 @@ class TerminalWebSocketClient:
         self.reconnect_task = None
         self.heartbeat_task = None
         self.running = False
-        
-        # 修改：不再需要路径模板，直接使用完整URL
         
     def is_connected(self):
         """返回当前WebSocket连接状态"""
@@ -49,9 +49,83 @@ class TerminalWebSocketClient:
             
         await self.disconnect()
     
+    def normalize_ws_url(self, url, terminal_id=None):
+        """标准化WebSocket URL，确保格式正确"""
+        # 使用传入的terminal_id，如果没有则使用实例的terminal_id
+        if terminal_id is None:
+            terminal_id = self.terminal_id
+            
+        # 解析URL
+        parsed_url = urlparse(url)
+        
+        # 检查协议
+        if parsed_url.scheme not in ('ws', 'wss'):
+            # 如果URL没有websocket协议，尝试判断是否是HTTP(S) URL
+            if parsed_url.scheme in ('http', 'https'):
+                # 将http -> ws, https -> wss
+                new_scheme = 'ws' if parsed_url.scheme == 'http' else 'wss'
+            else:
+                # 默认使用ws协议
+                new_scheme = 'ws'
+                # 如果提供的是完整域名但没有协议，则解析可能不正确，需要重新构建
+                if not parsed_url.netloc and parsed_url.path:
+                    # 假设第一段是域名
+                    parts = parsed_url.path.split('/', 1)
+                    parsed_url = urlparse(f"{new_scheme}://{parts[0]}")
+                    if len(parts) > 1:
+                        path = f"/{parts[1]}"
+                    else:
+                        path = ""
+                else:
+                    path = parsed_url.path
+        else:
+            new_scheme = parsed_url.scheme
+            path = parsed_url.path
+            
+        # 确保路径包含terminal ID
+        if path.endswith('/'):
+            path = path[:-1]  # 去除尾部斜杠以便正确检查
+            
+        # 检查路径是否已包含终端ID
+        terminal_pattern = re.compile(r'\/ws\/terminal\/\d+\/?$')
+        if not terminal_pattern.search(path):
+            # 路径不包含终端ID格式，构建正确的路径
+            if '/ws/terminal/' in path:
+                # 有ws/terminal前缀但没有ID，直接添加ID
+                path = f"{path}/{terminal_id}/"
+            else:
+                # 完全没有ws/terminal路径，构建完整路径
+                if path and not path.endswith('/'):
+                    path += '/'
+                path = f"{path}ws/terminal/{terminal_id}/"
+        elif not path.endswith('/'):
+            # 包含终端ID但没有尾部斜杠，添加斜杠
+            path += '/'
+            
+        # 重新组合URL
+        netloc = parsed_url.netloc or parsed_url.path.split('/')[0]
+        
+        # 根据是否有netloc决定最终的URL格式
+        if netloc:
+            final_url = f"{new_scheme}://{netloc}{path}"
+        else:
+            # 如果没有提取到netloc，可能是没有协议的URL
+            final_url = f"{new_scheme}://{url}"
+            # 尝试再次提取正确的终端ID路径
+            final_url = self.normalize_ws_url(final_url, terminal_id)
+            
+        logger.info(f"标准化WebSocket URL: {url} -> {final_url}")
+        return final_url
+    
     def get_ws_url(self):
-        """获取WebSocket URL - 现在直接返回初始化时提供的URL"""
-        return self.server_url
+        """获取WebSocket URL"""
+        try:
+            # 标准化URL
+            return self.normalize_ws_url(self.server_url)
+        except Exception as e:
+            logger.error(f"构建WebSocket URL失败: {str(e)}")
+            # 返回一个保守的默认值
+            return f"ws://localhost/ws/terminal/{self.terminal_id}/"
     
     async def connect(self):
         """建立WebSocket连接"""
@@ -149,6 +223,11 @@ class TerminalWebSocketClient:
                     })
                 except Exception as e:
                     logger.error(f"执行命令回调时出错: {str(e)}")
+        
+        elif message_type == 'status' or message_type == 'new_log':
+            # 这些是服务端返回的状态更新和日志信息，只需记录日志，不需要特殊处理
+            # 避免处理这些消息时又向服务端发送数据，造成循环
+            logger.debug(f"收到服务端状态/日志反馈: {message_type}")
             
         else:
             # 其他消息类型
@@ -186,15 +265,24 @@ class TerminalWebSocketClient:
         
         return await self.send_message(message)
     
-    # 添加系统状态发送方法
+    # 修改系统状态发送方法，确保能在异步环境中使用
     async def send_system_status(self, status_data):
         """发送系统状态到服务器"""
+        # 确保有终端ID
+        if 'terminal_id' not in status_data and self.terminal_id:
+            status_data['terminal_id'] = self.terminal_id
+            
         message = {
             'type': 'system_status',
             'status': status_data,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         }
         
+        # 确保连接已建立
+        if not self.is_connected():
+            logger.warning("WebSocket未连接，无法发送系统状态")
+            return False
+            
         return await self.send_message(message)
 
     # 添加状态发送方法，用于初始状态上报和状态获取命令响应
@@ -262,3 +350,15 @@ class TerminalWebSocketClient:
             logger.error(f"重连过程中出错: {str(e)}")
         finally:
             self.reconnect_task = None
+    
+    async def send_command_response(self, command, result, success=True):
+        """发送命令执行结果响应"""
+        message = {
+            'type': 'command_response',
+            'command': command,
+            'result': result,
+            'success': success,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        }
+        
+        return await self.send_message(message)

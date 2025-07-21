@@ -10,16 +10,19 @@ application = None
 def get_application():
     from channels.routing import ProtocolTypeRouter, URLRouter
     from channels.auth import AuthMiddlewareStack
-    from django.urls import path
+    from django.urls import path, re_path
     from django.core.asgi import get_asgi_application
     
     # 导入消费者 - 在Django初始化后
-    from webapi.consumers import TerminalConsumer
+    from webapi.consumers import TerminalConsumer, SystemBroadcastConsumer
 
     websocket_urlpatterns = [
-        # 同时添加带斜杠和不带斜杠的路由，但只接受整数ID
+        # 使用更规范的路由格式，确保终端ID只接受整数
         path('ws/terminal/<int:terminal_id>/', TerminalConsumer.as_asgi()),
         path('ws/terminal/<int:terminal_id>', TerminalConsumer.as_asgi()),
+        
+        # 添加一个额外的通用WebSocket路径用于系统消息广播
+        path('ws/system/', SystemBroadcastConsumer.as_asgi()),
     ]
 
     return ProtocolTypeRouter({

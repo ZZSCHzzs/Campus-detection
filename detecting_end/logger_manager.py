@@ -118,6 +118,14 @@ class LogManager:
         """记录检测事件"""
         self.log('detection', message, source)
     
+    def debug(self, message, source=None):
+        """记录调试级别日志"""
+        self._log('debug', message, source)
+        
+        # 如果WebSocket客户端连接且不在安静模式，发送日志
+        if self.ws_client and self.ws_client.is_connected() and not self.quiet_mode:
+            self._send_log_to_server('debug', message, source)
+    
     def get_logs(self, count=None):
         """获取最近的日志"""
         with self.lock:

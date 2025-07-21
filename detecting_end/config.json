@@ -1,5 +1,5 @@
 {
-    "mode": "local",
+    "mode": "push",
     "interval": 3,
     "cameras": {
         "1": "192.168.1.100"

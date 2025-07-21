@@ -230,19 +230,32 @@ const processLogMessage = (data) => {
   }
 };
 
-// 使用防抖处理状态更新
+// 处理状态更新 - 使用防抖减少更新频率
 const debouncedProcessStatusUpdate = debounce((data) => {
+  // 从data.data获取数据（WebSocket格式）或直接使用data（直接格式）
+  const statusData = data.data || data;
+  
   // 更新CPU和内存
-  if (data.cpu_usage !== undefined) status.cpu_usage = data.cpu_usage;
-  if (data.memory_usage !== undefined) status.memory_usage = data.memory_usage;
+  if (statusData.cpu_usage !== undefined) status.cpu_usage = statusData.cpu_usage;
+  if (statusData.memory_usage !== undefined) status.memory_usage = statusData.memory_usage;
   
   // 更新运行状态
-  if (data.model_loaded !== undefined) status.model_loaded = data.model_loaded;
-  if (data.push_running !== undefined) status.push_running = data.push_running;
-  if (data.pull_running !== undefined) status.pull_running = data.pull_running;
+  if (statusData.model_loaded !== undefined) status.model_loaded = statusData.model_loaded;
+  if (statusData.push_running !== undefined) status.push_running = statusData.push_running;
+  if (statusData.pull_running !== undefined) status.pull_running = statusData.pull_running;
+  
+  // 更新摄像头状态（如果有）
+  if (statusData.cameras && typeof statusData.cameras === 'object') {
+    status.cameras = { ...statusData.cameras };
+  }
   
   // 更新终端状态
   terminal.status = status.model_loaded || status.push_running || status.pull_running;
+  
+  // 如果有帧率信息，也更新
+  if (statusData.frame_rate !== undefined) {
+    status.frame_rate = statusData.frame_rate;
+  }
 }, 300);
 
 // 处理相机状态
@@ -496,10 +509,14 @@ onMounted(async () => {
     // 5. 设置WebSocket连接
     setupWebSocket();
     
-    // 6. 设置定时刷新状态 (每15秒刷新一次)
+    // 6. 设置定时刷新状态 (每15秒刷新一次) - 无论检测模式如何，都要定期更新状态
     statusRefreshTimer.value = setInterval(async () => {
       try {
+        // 通过API刷新状态
         await loadTerminalStatus();
+        
+        // 同时请求WebSocket状态更新
+        terminalService.requestStatusUpdate();
       } catch (error) {
         console.error('自动刷新状态失败:', error);
       }
@@ -718,6 +735,22 @@ watch(connectionMode, handleModeChange);
                 <span class="metric-label">内存使用率</span>
                 <el-progress :percentage="status.memory_usage" :color="customColorMethod" :stroke-width="18" />
                 <span class="metric-value">{{ status.memory_usage.toFixed(1) }}%</span>
+              </div>
+              
+              <!-- 添加额外系统信息显示 -->
+              <div class="system-info" v-if="status.system_uptime || status.frame_rate">
+                <div class="info-row" v-if="status.system_uptime">
+                  <span class="info-label">系统运行时间</span>
+                  <span class="info-value">{{ formatUptime(status.system_uptime) }}</span>
+                </div>
+                <div class="info-row" v-if="status.frame_rate !== undefined">
+                  <span class="info-label">当前帧率</span>
+                  <span class="info-value">{{ status.frame_rate?.toFixed(1) || 0 }} fps</span>
+                </div>
+                <div class="info-row" v-if="status.total_frames !== undefined">
+                  <span class="info-label">总处理帧数</span>
+                  <span class="info-value">{{ status.total_frames }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1211,6 +1244,32 @@ h4 {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 系统信息样式 */
+.system-info {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+  border-left: 3px solid #409EFF;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
+}
+
+.info-label {
+  color: #606266;
+  font-weight: 500;
+}
+
+.info-value {
+  color: #303133;
+  font-weight: 600;
 }
 
 /* 响应式布局 */
