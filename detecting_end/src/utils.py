@@ -108,8 +108,8 @@ def get_terminal_id():
     """获取终端ID，优先从配置文件读取，否则使用MAC地址生成"""
     try:
         # 尝试从配置文件读取
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as f:
+        if os.path.exists('../config.json'):
+            with open('../config.json', 'r') as f:
                 config = json.load(f)
                 if 'terminal_id' in config:
                     return config['terminal_id']

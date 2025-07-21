@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'djoser',
     'channels',
+    'django_q',
 ]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -218,3 +219,30 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Django-Q 配置
+Q_CLUSTER = {
+    'name': 'campus_detection',
+    'workers': 4,
+    'recycle': 500,
+    'timeout': 60,
+    'compress': True,
+    'save_limit': 250,
+    'queue_limit': 500,
+    'cpu_affinity': 1,
+    'label': 'Django Q',
+    'redis': {
+        'host': '127.0.0.1',
+        'port': 6379,
+        'db': 0,
+    }
+}
+
+# 定时任务
+Q_SCHEDULES = [
+    {
+        'func': 'webapi.tasks.check_terminal_connections',
+        'schedule_type': 'I',  # 按间隔执行
+        'minutes': 1,          # 每1分钟执行一次
+    },
+]

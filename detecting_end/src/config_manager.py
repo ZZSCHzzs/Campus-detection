@@ -2,6 +2,9 @@ import os
 import json
 import logging
 
+# 获取项目根目录（src的父目录）
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 logger = logging.getLogger('config_manager')
 
 class ConfigManager:
@@ -30,7 +33,7 @@ class ConfigManager:
     
     def __init__(self, config_file='config.json'):
         """初始化配置管理器"""
-        self.config_file = config_file
+        self.config_file = os.path.join(ROOT_DIR, config_file)
         self.config = self.load_config()
         
     def load_config(self):
@@ -97,5 +100,14 @@ class ConfigManager:
         return changed
     
     def get_all(self):
-        """获取所有配置"""
-        return self.config.copy()
+        """获取所有配置，返回可安全序列化的副本"""
+        import copy
+        # 返回深度复制以避免意外修改
+        config_copy = copy.deepcopy(self.config)
+        
+        # 确保所有值都是可序列化的
+        for key, value in config_copy.items():
+            if not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                config_copy[key] = str(value)
+        
+        return config_copy

@@ -4,8 +4,10 @@ import json
 import logging
 import time
 import re
-from threading import Thread
+import traceback
+from threading import Thread, Lock
 from urllib.parse import urlparse, urljoin
+import ssl
 
 logger = logging.getLogger('websocket_client')
 
@@ -25,6 +27,18 @@ class TerminalWebSocketClient:
         self.heartbeat_task = None
         self.running = False
         
+        # 添加SSL上下文配置
+        self.ssl_context = None
+        if server_url and server_url.startswith('wss://'):
+            self.ssl_context = ssl.create_default_context()
+            self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # 添加任务跟踪
+        self.tasks = set()
+        self.tasks_lock = Lock()
+        self.loop = None
+    
     def is_connected(self):
         """返回当前WebSocket连接状态"""
         return self.connected and self.ws is not None
@@ -33,21 +47,59 @@ class TerminalWebSocketClient:
         """启动WebSocket客户端"""
         self.running = True
         self.reconnect_attempts = 0
+        
+        # 获取当前事件循环
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            
         await self.connect()
         return self.connected
     
     async def stop(self):
         """停止WebSocket客户端"""
+        logger.info("正在停止WebSocket客户端...")
         self.running = False
-        if self.heartbeat_task:
-            self.heartbeat_task.cancel()
-            self.heartbeat_task = None
+        
+        # 取消所有心跳和重连任务
+        with self.tasks_lock:
+            for task in self.tasks:
+                if not task.done():
+                    try:
+                        task.cancel()
+                    except Exception as e:
+                        logger.error(f"取消任务时出错: {str(e)}")
+            self.tasks.clear()
             
-        if self.reconnect_task:
-            self.reconnect_task.cancel()
-            self.reconnect_task = None
-            
+        # 关闭连接
         await self.disconnect()
+        logger.info("WebSocket客户端已停止")
+    
+    def _create_task(self, coro):
+        """安全地创建任务并跟踪它"""
+        if not self.loop or self.loop.is_closed():
+            try:
+                self.loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+                
+        task = self.loop.create_task(coro)
+        
+        with self.tasks_lock:
+            self.tasks.add(task)
+            
+        # 添加任务完成回调以移除跟踪
+        task.add_done_callback(self._remove_task)
+        return task
+    
+    def _remove_task(self, task):
+        """从任务集合中移除已完成的任务"""
+        with self.tasks_lock:
+            if task in self.tasks:
+                self.tasks.remove(task)
     
     def normalize_ws_url(self, url, terminal_id=None):
         """标准化WebSocket URL，确保格式正确"""
@@ -113,8 +165,7 @@ class TerminalWebSocketClient:
             final_url = f"{new_scheme}://{url}"
             # 尝试再次提取正确的终端ID路径
             final_url = self.normalize_ws_url(final_url, terminal_id)
-            
-        logger.info(f"标准化WebSocket URL: {url} -> {final_url}")
+
         return final_url
     
     def get_ws_url(self):
@@ -136,22 +187,41 @@ class TerminalWebSocketClient:
         logger.info(f"尝试连接到WebSocket服务器: {ws_url}")
         
         try:
-            self.ws = await websockets.connect(ws_url, ping_interval=30)
+            # 更新连接参数，添加SSL上下文和超时设置
+            self.ws = await asyncio.wait_for(
+                websockets.connect(
+                    ws_url, 
+                    ping_interval=30,
+                    ping_timeout=10,
+                    close_timeout=5,
+                    ssl=self.ssl_context if ws_url.startswith('wss://') else None,
+                    max_size=10_000_000,  # 增加最大消息大小
+                    max_queue=32          # 增加队列大小
+                ),
+                timeout=15  # 连接超时时间
+            )
             self.connected = True
             self.reconnect_attempts = 0
             logger.info(f"WebSocket连接已建立: {ws_url}")
             
-            # 开始心跳任务
-            if self.heartbeat_task:
-                self.heartbeat_task.cancel()
-            self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
+            # 使用新的任务跟踪方法创建心跳任务
+            self.heartbeat_task = self._create_task(self.heartbeat_loop())
             
             # 开始消息接收循环
             await self.message_loop()
             
             return True
+        except asyncio.TimeoutError:
+            logger.error(f"WebSocket连接超时")
+            self.connected = False
+            self.ws = None
+            
+            # 安排重连
+            await self.schedule_reconnect()
+            return False
         except Exception as e:
             logger.error(f"WebSocket连接失败: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
             self.connected = False
             self.ws = None
             
@@ -163,8 +233,11 @@ class TerminalWebSocketClient:
         """断开WebSocket连接"""
         if self.ws:
             try:
-                await self.ws.close()
+                # 使用超时确保不会无限等待
+                await asyncio.wait_for(self.ws.close(), timeout=5)
                 logger.info("WebSocket连接已关闭")
+            except asyncio.TimeoutError:
+                logger.warning("关闭WebSocket连接超时")
             except Exception as e:
                 logger.error(f"关闭WebSocket连接时出错: {str(e)}")
             finally:
@@ -178,6 +251,10 @@ class TerminalWebSocketClient:
             
         try:
             async for message in self.ws:
+                if not self.running:
+                    logger.info("客户端已停止，中断消息循环")
+                    break
+                    
                 try:
                     data = json.loads(message)
                     await self.handle_message(data)
@@ -185,6 +262,7 @@ class TerminalWebSocketClient:
                     logger.error(f"接收到无效的JSON数据: {message}")
                 except Exception as e:
                     logger.error(f"处理消息时出错: {str(e)}")
+                    logger.error(f"异常堆栈: {traceback.format_exc()}")
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"WebSocket连接已关闭: {str(e)}")
             self.connected = False
@@ -194,6 +272,7 @@ class TerminalWebSocketClient:
                 await self.schedule_reconnect()
         except Exception as e:
             logger.error(f"WebSocket消息循环异常: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
             self.connected = False
             
             # 安排重连
@@ -217,13 +296,18 @@ class TerminalWebSocketClient:
             # 调用命令处理回调
             if self.on_command:
                 try:
+                    # 增加详细日志，确保命令处理过程可追踪
+                    logger.info(f"正在处理命令: {command} 开始")
                     await self.on_command({
                         'command': command,
                         'params': params
                     })
+                    logger.info(f"命令处理完成: {command}")
                 except Exception as e:
                     logger.error(f"执行命令回调时出错: {str(e)}")
-        
+                    # 添加异常堆栈信息以便调试
+                    import traceback
+                    logger.error(f"异常堆栈: {traceback.format_exc()}")
         elif message_type == 'status' or message_type == 'new_log':
             # 这些是服务端返回的状态更新和日志信息，只需记录日志，不需要特殊处理
             # 避免处理这些消息时又向服务端发送数据，造成循环
@@ -238,20 +322,78 @@ class TerminalWebSocketClient:
         if not self.connected or not self.ws:
             logger.warning("尝试在未连接状态下发送消息")
             return False
-            
+        
         try:
-            message = json.dumps(data)
-            await self.ws.send(message)
+            # 确保数据可以序列化为JSON
+            safe_data = self._ensure_serializable(data)
+            message = json.dumps(safe_data)
+            
+            # 使用超时确保发送不会阻塞过长时间
+            await asyncio.wait_for(self.ws.send(message), timeout=5)
             return True
-        except Exception as e:
-            logger.error(f"发送消息失败: {str(e)}")
+        except asyncio.TimeoutError:
+            logger.error("发送消息超时")
             self.connected = False
             
             # 安排重连
             if self.running:
                 await self.schedule_reconnect()
             return False
-    
+        except websockets.exceptions.ConnectionClosed:
+            logger.error("发送消息时连接已关闭")
+            self.connected = False
+            
+            # 安排重连
+            if self.running:
+                await self.schedule_reconnect()
+            return False
+        except json.JSONDecodeError:
+            logger.error("消息无法序列化为JSON")
+            return False
+        except Exception as e:
+            logger.error(f"发送消息失败: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            self.connected = False
+            
+            # 安排重连
+            if self.running:
+                await self.schedule_reconnect()
+            return False
+
+    def _ensure_serializable(self, data):
+        """确保数据可序列化为JSON"""
+        if isinstance(data, dict):
+            return {k: self._ensure_serializable(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._ensure_serializable(item) for item in data]
+        elif isinstance(data, tuple):
+            return [self._ensure_serializable(item) for item in tuple]
+        elif isinstance(data, (int, float, str, bool)) or data is None:
+            return data
+        else:
+            # 对于其他类型，转换为字符串
+            return str(data)
+
+    async def send_command_response(self, command, result, success=True):
+        """发送命令执行结果响应"""
+        try:
+            # 确保结果对象是可序列化的
+            safe_result = self._ensure_serializable(result)
+            
+            message = {
+                'type': 'command_response',
+                'command': command,
+                'result': safe_result,
+                'success': success,
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            
+            return await self.send_message(message)
+        except Exception as e:
+            logger.error(f"发送命令响应失败: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            return False
+
     async def send_nodes_data(self, nodes_data):
         """发送节点数据到服务器"""
         if not nodes_data:
@@ -290,18 +432,66 @@ class TerminalWebSocketClient:
         """发送终端状态到服务器"""
         return await self.send_system_status(status_data)
         
+    # 添加一个安全的日志发送方法
+    def send_log_safe(self, level, message, source=None):
+        """
+        安全地发送日志消息，不抛出异常
+        在非异步上下文中使用此方法替代直接调用send_log
+        """
+        try:
+            # 检查连接状态
+            if not self.is_connected():
+                return False
+                
+            # 创建日志数据
+            log_data = {
+                'type': 'log',
+                'level': level,
+                'message': message,
+                'source': source or 'system',
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            
+            # 在新线程中提交发送任务
+            def run_async_send():
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(self.send_message(log_data))
+                except Exception as e:
+                    logger.error(f"异步发送日志失败: {str(e)}")
+                finally:
+                    try:
+                        loop.close()
+                    except Exception:
+                        pass
+            
+            # 使用线程执行异步发送
+            import threading
+            thread = threading.Thread(target=run_async_send, daemon=True)
+            thread.start()
+            return True
+            
+        except Exception as e:
+            logger.error(f"准备发送日志时出错: {str(e)}")
+            return False
+
     async def send_log(self, level, message, source=None):
         """发送日志消息到服务器"""
-        log_data = {
-            'type': 'log',
-            'level': level,
-            'message': message,
-            'source': source or 'system',
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        }
-        
-        return await self.send_message(log_data)
-    
+        try:
+            log_data = {
+                'type': 'log',
+                'level': level,
+                'message': message,
+                'source': source or 'system',
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            
+            return await self.send_message(log_data)
+        except Exception as e:
+            logger.error(f"发送日志消息失败: {str(e)}")
+            return False
+
     async def heartbeat_loop(self):
         """心跳循环，定期发送心跳消息"""
         while self.connected and self.running:
@@ -311,17 +501,34 @@ class TerminalWebSocketClient:
                     'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
                 }
                 
-                await self.send_message(heartbeat)
+                success = await self.send_message(heartbeat)
+                if not success and self.running:
+                    logger.warning("心跳发送失败，尝试重连")
+                    await self.schedule_reconnect()
+                    break
+                    
                 await asyncio.sleep(30)  # 30秒发送一次心跳
             except asyncio.CancelledError:
+                logger.info("心跳任务已取消")
                 break
             except Exception as e:
                 logger.error(f"心跳发送失败: {str(e)}")
+                logger.error(f"异常堆栈: {traceback.format_exc()}")
+                
+                # 只有在客户端仍在运行时才尝试重连
+                if self.running:
+                    await self.schedule_reconnect()
                 break
     
     async def schedule_reconnect(self):
         """安排重连任务"""
-        if not self.running or self.reconnect_task:
+        if not self.running:
+            logger.info("客户端已停止，不再尝试重连")
+            return
+            
+        # 检查是否已存在重连任务并且未完成
+        if self.reconnect_task and not self.reconnect_task.done():
+            logger.debug("重连任务已在进行中，跳过")
             return
             
         self.reconnect_attempts += 1
@@ -335,30 +542,43 @@ class TerminalWebSocketClient:
         logger.info(f"将在 {delay:.1f} 秒后尝试重连 (尝试 {self.reconnect_attempts}/{self.max_reconnect_attempts})")
         
         try:
-            self.reconnect_task = asyncio.create_task(self._reconnect_after_delay(delay))
+            # 使用新的任务跟踪方法创建重连任务
+            self.reconnect_task = self._create_task(self._reconnect_after_delay(delay))
         except Exception as e:
             logger.error(f"创建重连任务失败: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
     
     async def _reconnect_after_delay(self, delay):
         """在延迟后重连"""
         try:
             await asyncio.sleep(delay)
-            await self.connect()
+            if self.running:
+                await self.connect()
         except asyncio.CancelledError:
+            logger.info("重连任务已取消")
             pass
         except Exception as e:
             logger.error(f"重连过程中出错: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
         finally:
             self.reconnect_task = None
     
     async def send_command_response(self, command, result, success=True):
         """发送命令执行结果响应"""
-        message = {
-            'type': 'command_response',
-            'command': command,
-            'result': result,
-            'success': success,
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        }
-        
-        return await self.send_message(message)
+        try:
+            # 确保结果对象是可序列化的
+            safe_result = self._ensure_serializable(result)
+            
+            message = {
+                'type': 'command_response',
+                'command': command,
+                'result': safe_result,
+                'success': success,
+                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            
+            return await self.send_message(message)
+        except Exception as e:
+            logger.error(f"发送命令响应失败: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            return False

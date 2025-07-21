@@ -1,4 +1,3 @@
-
 export interface AreaItem {
     id: number
     name: string
@@ -33,7 +32,20 @@ export interface ProcessTerminal {
     id: number
     name: string
     status: boolean
-    nodes_count: number
+    nodes_count?: number
+    last_active?: string
+    cpu_usage?: number
+    memory_usage?: number
+    model_loaded?: boolean
+    push_running?: boolean
+    pull_running?: boolean
+    mode?: 'pull' | 'push' | 'both'
+    interval?: number
+    camera_config?: Record<string, any>
+    save_image?: boolean
+    preload_model?: boolean
+    cameras?: Record<string, string>
+    version?: string
 }
 
 export interface Building {
@@ -83,3 +95,77 @@ export interface SummaryData {
     notice_count: number
     alerts_count: number
 }
+
+/**
+ * 终端消息类型定义
+ */
+export interface TerminalMessage {
+  type: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+/**
+ * 终端命令接口
+ */
+export interface TerminalCommand {
+  command: string;
+  params?: Record<string, any>;
+  timestamp?: string;
+}
+
+/**
+ * 终端状态接口
+ */
+export interface TerminalStatus {
+  cameras: Record<string, string>;
+  cpu_usage: number;
+  memory_usage: number;
+  push_running: boolean;
+  pull_running: boolean;
+  model_loaded: boolean;
+  started_at?: string;
+  mode?: string;
+  [key: string]: any;
+}
+
+/**
+ * 终端配置接口
+ */
+export interface TerminalConfig {
+  mode: 'pull' | 'push' | 'both';
+  interval: number;
+  cameras: Record<string, string>;
+  save_image: boolean;
+  preload_model: boolean;
+  [key: string]: any;
+}
+
+/**
+ * 日志记录接口
+ */
+export interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warning' | 'error' | 'detection';
+  message: string;
+  source: string;
+}
+
+/**
+ * 环境信息接口
+ */
+export interface EnvironmentInfo {
+  type: 'detector' | 'server';  // 环境类型
+  version: string;              // 版本
+  name: string;                 // 环境名称
+  id: number;                   // 环境ID
+  features: {                   // 功能支持
+    local_detection: boolean;   // 本地检测
+    websocket: boolean;         // WebSocket支持
+    push_mode: boolean;         // 推送模式
+    pull_mode: boolean;         // 拉取模式
+  };
+  terminal_mode?: 'local' | 'remote'; // 终端模式
+}
+
+// 注意：ProcessTerminal接口保持不变，因为它已经足够完整

@@ -169,7 +169,7 @@ const setupWebSocket = () => {
   wsCallbackId.value = terminalService.connect(handleWebSocketMessage);
 };
 
-// 使用防抖处理 WebSocket 消息
+// 使用防抖处理 WebSocket 消消息
 const handleWebSocketMessage = (data) => {
   // 处理连接状态消息
   if (data.type === 'connection_status') {
@@ -637,6 +637,22 @@ const applyConfig = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// 添加这个函数定义，用于格式化运行时间显示
+const formatUptime = (seconds) => {
+  if (!seconds) return '未知';
+  
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  let result = '';
+  if (days > 0) result += `${days}天 `;
+  if (hours > 0 || days > 0) result += `${hours}小时 `;
+  result += `${minutes}分钟`;
+  
+  return result;
 };
 
 // 改进组件卸载时的清理

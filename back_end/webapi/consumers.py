@@ -1,9 +1,12 @@
 import json
 import logging
+import asyncio
+import traceback
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.core.cache import cache
 from django.utils import timezone
+from datetime import timedelta
 from .models import ProcessTerminal
 
 logger = logging.getLogger('django')
@@ -48,9 +51,29 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         }))
         
         logger.info(f"客户端已连接到终端 {self.terminal_id} 的WebSocket - {self.client_info[0]}:{self.client_info[1]}")
+        
+        # 添加: 启动连接心跳检查任务 
+        self.heartbeat_check_task = asyncio.create_task(self.heartbeat_check_loop())
+        
+        # 如果是新的检测端连接，主动请求状态更新
+        # 延迟2秒发送，确保检测端准备好接收命令
+        await asyncio.sleep(2)
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'send_command',
+                'command': 'get_status',
+                'params': {},
+                'timestamp': timezone.now().isoformat()
+            }
+        )
     
     async def disconnect(self, close_code):
         """处理WebSocket断开连接"""
+        # 取消心跳检查任务
+        if hasattr(self, 'heartbeat_check_task') and not self.heartbeat_check_task.done():
+            self.heartbeat_check_task.cancel()
+            
         # 将连接从组中移除
         await self.channel_layer.group_discard(
             self.group_name,
@@ -59,6 +82,10 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         
         # 如果是检测端断开，更新终端状态为离线
         if self.is_detector:
+            # 添加: 设置状态缓存，加快响应速度
+            cache_key = f"terminal:{self.terminal_id}:connected"
+            cache.set(cache_key, False, timeout=300)  # 5分钟过期
+            
             await self.update_terminal_status(self.terminal_id, False)
             logger.info(f"检测端 {self.terminal_id} 的WebSocket连接已断开: {close_code}")
         else:
@@ -74,13 +101,24 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             logger.debug(f"从终端 {self.terminal_id} 接收到消息类型: {message_type}")
             
             # 检查是否为检测端特有的消息类型
-            detector_message_types = ['system_status', 'heartbeat', 'nodes_data', 'log']
+            detector_message_types = ['system_status', 'heartbeat', 'nodes_data', 'log', 'command_response']
             if message_type in detector_message_types and not self.is_detector:
                 # 如果收到检测端特有消息类型，标记当前连接为检测端
                 self.is_detector = True
                 # 更新终端的在线状态
                 await self.update_terminal_status(self.terminal_id, True)
                 logger.info(f"检测到检测端 {self.terminal_id} 的WebSocket连接")
+                
+                # 检测到新的检测端连接，发送状态请求命令
+                await self.channel_layer.group_send(
+                    self.group_name,
+                    {
+                        'type': 'send_command',
+                        'command': 'get_status',
+                        'params': {},
+                        'timestamp': timezone.now().isoformat()
+                    }
+                )
             
             # 处理不同类型的消息
             if message_type == 'system_status':
@@ -101,6 +139,7 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             logger.error(f"收到无效的JSON数据: {text_data[:100]}...")
         except Exception as e:
             logger.error(f"处理WebSocket消息时出错: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
     
     # 改进系统状态处理
     async def handle_system_status(self, data):
@@ -185,6 +224,15 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         """处理心跳消息"""
         # 更新终端的最后活动时间
         await self.update_terminal_last_active(self.terminal_id)
+        
+        # 如果是从检测端发送的心跳，确保我们记录它是在线的
+        if self.is_detector:
+            # 设置连接状态缓存
+            cache_key = f"terminal:{self.terminal_id}:connected"
+            cache.set(cache_key, True, timeout=90)  # 90秒过期
+            
+            # 更新数据库状态
+            await self.update_terminal_status(self.terminal_id, True)
         
         # 回复心跳
         await self.send(text_data=json.dumps({
@@ -282,18 +330,27 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         """更新终端的连接状态"""
         try:
             terminal = ProcessTerminal.objects.get(id=terminal_id)
-            terminal.status = connected
-            terminal.last_active = timezone.now()
-            terminal.save(update_fields=['status', 'last_active'])
-            
+            # 只有状态变化时才更新和记录日志
+            if terminal.status != connected:
+                terminal.status = connected
+                terminal.last_active = timezone.now()
+                terminal.save(update_fields=['status', 'last_active'])
+                logger.info(f"终端 {terminal_id} 状态已更新为: {'在线' if connected else '离线'}")
+            else:
+                # 仅更新最后活动时间
+                terminal.last_active = timezone.now()
+                terminal.save(update_fields=['last_active'])
+                
             # 更新缓存中的状态
-            if not connected:
-                # 如果断开连接，更新状态缓存为离线
-                cache_key = f"terminal:{terminal_id}:status"
-                cached_status = cache.get(cache_key)
-                if cached_status:
-                    cached_status.update({"terminal_online": False})
-                    cache.set(cache_key, cached_status, timeout=60)
+            cache_key = f"terminal:{terminal_id}:status"
+            cached_status = cache.get(cache_key)
+            if cached_status:
+                cached_status.update({"terminal_online": connected})
+                cache.set(cache_key, cached_status, timeout=60)
+            
+            # 设置连接状态缓存
+            cache_key = f"terminal:{terminal_id}:connected"
+            cache.set(cache_key, connected, timeout=300)  # 5分钟过期
             
             return True
         except ProcessTerminal.DoesNotExist:
@@ -364,6 +421,43 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"更新终端 {terminal_id} 模式失败: {str(e)}")
             return False
+
+    async def heartbeat_check_loop(self):
+        """心跳检查循环 - 检查是否需要断开连接"""
+        try:
+            while True:
+                await asyncio.sleep(60)  # 每分钟检查一次
+                
+                if self.is_detector:
+                    # 获取终端最后活动时间
+                    last_active = await self.get_terminal_last_active(self.terminal_id)
+                    
+                    if last_active:
+                        # 检查最后活动时间是否超过2分钟
+                        time_diff = timezone.now() - last_active
+                        if time_diff > timedelta(minutes=2):
+                            logger.warning(f"终端 {self.terminal_id} 超过2分钟未活动，将断开连接")
+                            # 更新终端状态为离线
+                            await self.update_terminal_status(self.terminal_id, False)
+                            # 断开WebSocket连接
+                            await self.close(code=1000)
+                            break
+        except asyncio.CancelledError:
+            # 任务被取消，正常退出
+            pass
+        except Exception as e:
+            logger.error(f"心跳检查循环异常: {str(e)}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+    
+    @database_sync_to_async
+    def get_terminal_last_active(self, terminal_id):
+        """获取终端最后活动时间"""
+        try:
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+            return terminal.last_active
+        except Exception as e:
+            logger.error(f"获取终端 {terminal_id} 最后活动时间失败: {str(e)}")
+            return None
 
 # 添加一个系统广播消费者，用于向所有连接的客户端广播系统消息
 

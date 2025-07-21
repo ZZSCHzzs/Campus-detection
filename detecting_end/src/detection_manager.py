@@ -89,16 +89,37 @@ class DetectionManager:
     
     def load_model_async(self):
         """异步加载模型"""
-        if self.model_loading or self.model_loaded:
+        if self.model_loaded or self.model_loading:
+            self.log_manager.info("模型已经加载或正在加载中")
             return False
-        
+            
         self.model_loading = True
-        self.log_manager.info("开始异步加载YOLO模型")
         
-        # 创建模型加载线程
-        model_thread = Thread(target=self._load_model)
-        model_thread.daemon = True
-        model_thread.start()
+        # 使用线程进行模型加载
+        def load_model_thread():
+            try:
+                self._load_model()
+                # 使用Socket.IO发送状态更新
+                if self.socketio:
+                    self.socketio.emit('system_update', {'model_loaded': True})
+                    
+            except Exception as e:
+                error_msg = f"加载模型失败: {str(e)}"
+                # 使用同步日志记录方法，避免异步问题
+                if hasattr(self.log_manager, 'error_sync'):
+                    self.log_manager.error_sync(error_msg)
+                else:
+                    self.log_manager.error(error_msg)
+                    
+                if self.socketio:
+                    self.socketio.emit('system_error', {'message': error_msg})
+            finally:
+                self.model_loading = False
+        
+        # 启动模型加载线程
+        import threading
+        thread = threading.Thread(target=load_model_thread, daemon=True)
+        thread.start()
         
         return True
     
@@ -163,9 +184,13 @@ class DetectionManager:
     
     def stop_push(self):
         """停止被动接收模式"""
+        self.log_manager.info("尝试停止被动接收模式...")
+        
         if not self.push_running:
+            self.log_manager.info("被动接收模式未运行，无需停止")
             return False
         
+        # 确保状态标记更新
         self.push_running = False
         self.status_changed = True  # 标记状态已变化
         
@@ -208,28 +233,51 @@ class DetectionManager:
     
     def stop_pull(self):
         """停止主动拉取模式"""
+        self.log_manager.info("尝试停止主动拉取模式...")
+        
         if not self.pull_running:
+            self.log_manager.info("主动拉取模式未运行，无需停止")
             return False
         
-        self.log_manager.info("正在停止主动拉取模式...")
-        self.stop_pull_event.set()
-        
-        if self.pull_thread and self.pull_thread.is_alive():
-            self.pull_thread.join(timeout=3.0)
-        
-        self.pull_running = False
-        self.status_changed = True  # 标记状态已变化
-        
-        with self.status_lock:
-            self.system_status["pull_running"] = False
-        
-        self.log_manager.info("已停止主动拉取模式")
-        
-        if self.socketio:
-            self.socketio.emit('system_message', {'message': '已停止主动拉取模式'})
-            self.socketio.emit('system_update', {'pull_running': False})
-        
-        return True
+        try:
+            # 设置停止事件，通知线程结束
+            self.stop_pull_event.set()
+            self.log_manager.info("已设置停止信号，等待线程结束...")
+            
+            # 等待线程结束，适当增加超时时间
+            if self.pull_thread and self.pull_thread.is_alive():
+                self.pull_thread.join(timeout=5.0)
+                
+                # 检查线程是否真正结束
+                if self.pull_thread.is_alive():
+                    self.log_manager.warning("拉取线程在超时时间内未结束，将强制标记为停止")
+            
+            # 无论线程是否真正结束，都更新状态标记
+            self.pull_running = False
+            self.status_changed = True  # 标记状态已变化
+            
+            with self.status_lock:
+                self.system_status["pull_running"] = False
+            
+            self.log_manager.info("已停止主动拉取模式")
+            
+            if self.socketio:
+                self.socketio.emit('system_message', {'message': '已停止主动拉取模式'})
+                self.socketio.emit('system_update', {'pull_running': False})
+            
+            return True
+        except Exception as e:
+            self.log_manager.error(f"停止主动拉取模式时出错: {str(e)}")
+            # 确保即使出错，也更新状态
+            self.pull_running = False
+            with self.status_lock:
+                self.system_status["pull_running"] = False
+            
+            if self.socketio:
+                self.socketio.emit('system_error', {'message': f'停止主动拉取模式时出错: {str(e)}'})
+                self.socketio.emit('system_update', {'pull_running': False})
+            
+            return False
     
     def change_mode(self, new_mode):
         """根据模式启动或停止相应服务"""
@@ -298,6 +346,11 @@ class DetectionManager:
         try:
             while not self.stop_pull_event.is_set():
                 try:
+                    # 添加检查点，更频繁地检查停止信号
+                    if self.stop_pull_event.is_set():
+                        self.log_manager.info("检测到停止信号，中断拉取循环")
+                        break
+                    
                     images_to_process = []
                     
                     # 更新系统资源使用情况
@@ -378,10 +431,28 @@ class DetectionManager:
                     # 短暂延迟后继续尝试
                     time.sleep(2)
                 
-                # 使用事件对象的wait方法，允许提前中断
-                interval = self.config_manager.get('interval', 1)
-                if self.stop_pull_event.wait(interval):
+                # 检查停止事件，更频繁地响应停止信号
+                if self.stop_pull_event.is_set():
+                    self.log_manager.info("检测到停止信号，中断拉取循环")
                     break
+                
+                # 使用更短的等待间隔，提高响应性
+                interval = self.config_manager.get('interval', 1)
+                # 将长等待分解为多个短等待，以便更快响应停止信号
+                short_interval = min(1.0, interval)
+                remaining = interval
+                while remaining > 0 and not self.stop_pull_event.is_set():
+                    wait_time = min(short_interval, remaining)
+                    if self.stop_pull_event.wait(wait_time):
+                        self.log_manager.info("等待间隔期间检测到停止信号")
+                        break
+                    remaining -= wait_time
+                
+                # 再次检查停止信号
+                if self.stop_pull_event.is_set():
+                    break
+                
+            self.log_manager.info("主动拉取模式已停止")
         
         except Exception as e:
             error_msg = f"严重错误，拉取模式线程退出: {str(e)}"
@@ -399,8 +470,6 @@ class DetectionManager:
                 if self.socketio:
                     self.socketio.emit('system_update', {'pull_running': False})
                     self.socketio.emit('system_error', {'message': '拉取模式异常退出，请检查日志'})
-            
-            self.log_manager.info("主动拉取模式已停止")
     
     def analyze_image(self, image, camera_id):
         """分析单个图像"""
@@ -419,26 +488,31 @@ class DetectionManager:
             else:
                 raise Exception("模型正在加载中，请稍后再试")
         
-        # 保存图像到临时文件
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        temp_dir = os.path.join("temp", f"camera_{camera_id}")
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_path = os.path.join(temp_dir, f"{timestamp}.jpg")
-        
-        cv2.imwrite(temp_path, image)
-        
-        # 导入检测模块
-        detect_module = importlib.import_module('detect.run')
-        
-        # 使用模型进行检测
-        with self.model_lock:
-            count = detect_module.detect(temp_path, model=self.model)
-        
-        # 增加帧统计
-        with self.frames_lock:
-            self.frames_processed += 1
-        
-        return count
+        try:
+            # 保存图像到临时文件
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp", f"camera_{camera_id}")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_path = os.path.join(temp_dir, f"{timestamp}.jpg")
+            
+            cv2.imwrite(temp_path, image)
+            
+            # 导入检测模块
+            detect_module = importlib.import_module('detect.run')
+            
+            # 使用模型进行检测
+            with self.model_lock:
+                count = detect_module.detect(temp_path, model=self.model)
+            
+            # 增加帧统计
+            with self.frames_lock:
+                self.frames_processed += 1
+            
+            return count
+        except Exception as e:
+            self.log_manager.error(f"分析图像失败: {str(e)}")
+            # 返回默认值而不是抛出异常，以避免中断处理流程
+            return 0
     
     def analyze_images(self, images_data):
         """批量处理多个图像"""

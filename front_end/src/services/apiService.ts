@@ -68,6 +68,21 @@ const nodeCustomMethods = {
 const terminalCustomMethods = {
   getTerminalNodes: (id: number) => 
     apiResourceManager.customApiCall<HardwareNode[]>(`/api/terminals/${id}/nodes/`),
+    
+  getTerminalStatus: (id: number) => 
+    apiResourceManager.customApiCall(`/api/terminals/${id}/status/`, 'get', undefined, {}, false),
+    
+  getTerminalLogs: (id: number) => 
+    apiResourceManager.customApiCall<any[]>(`/api/terminals/${id}/logs/`, 'get', undefined, {}, false),
+    
+  getTerminalConfig: (id: number) => 
+    apiResourceManager.customApiCall(`/api/terminals/${id}/config/`, 'get', undefined, {}, false),
+    
+  sendTerminalCommand: (id: number, command: any) => 
+    apiResourceManager.customApiCall(`/api/terminals/${id}/command/`, 'post', command),
+    
+  updateTerminalConfig: (id: number, config: any) => 
+    apiResourceManager.customApiCall(`/api/terminals/${id}/config/`, 'put', config),
 };
 
 const alertCustomMethods = {  

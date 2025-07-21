@@ -1,8 +1,9 @@
 {
-    "mode": "push",
+    "mode": "local",
     "interval": 3,
     "cameras": {
-        "1": "192.168.1.100"
+        "1": "192.168.1.100",
+        "2": "192.168.1.101"
     },
     "save_image": true,
     "preload_model": true,

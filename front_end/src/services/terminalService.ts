@@ -1,59 +1,15 @@
 import axios from 'axios';
-
-/**
- * 终端消息类型定义
- */
-export interface TerminalMessage {
-  type: string;
-  timestamp: string;
-  [key: string]: any;
-}
-
-/**
- * 终端命令接口
- */
-export interface TerminalCommand {
-  command: string;
-  params?: Record<string, any>;
-  timestamp?: string;
-}
-
-/**
- * 终端状态接口
- */
-export interface TerminalStatus {
-  cameras: Record<string, string>;
-  cpu_usage: number;
-  memory_usage: number;
-  push_running: boolean;
-  pull_running: boolean;
-  model_loaded: boolean;
-  started_at?: string;
-  mode?: string;
-  [key: string]: any;
-}
-
-/**
- * 终端配置接口
- */
-export interface TerminalConfig {
-  mode: 'pull' | 'push' | 'both';
-  interval: number;
-  cameras: Record<string, string>;
-  save_image: boolean;
-  preload_model: boolean;
-  [key: string]: any;
-}
-
-/**
- * 日志记录接口
- */
-export interface LogEntry {
-  timestamp: string;
-  level: 'info' | 'warning' | 'error' | 'detection';
-  message: string;
-  source: string;
-}
+import api from './api';
+import apiService from './apiService';
+import type {
+  TerminalMessage,
+  TerminalCommand,
+  TerminalStatus,
+  TerminalConfig,
+  LogEntry,
+  ProcessTerminal,
+  EnvironmentInfo
+} from '../types';
 
 /**
  * WebSocket回调函数类型
@@ -61,33 +17,13 @@ export interface LogEntry {
 export type MessageCallback = (data: any) => void;
 
 /**
- * 终端模型接口
+ * Socket.IO请求响应接口
  */
-export interface Terminal {
-  id: number;
-  name: string;
-  status: boolean;
-  last_active?: string;
-  cpu_usage?: number;
-  memory_usage?: number;
-  [key: string]: any;
-}
-
-/**
- * 环境信息接口
- */
-export interface EnvironmentInfo {
-  type: 'detector' | 'server';  // 环境类型
-  version: string;              // 版本
-  name: string;                 // 环境名称
-  id: number;                   // 环境ID
-  features: {                   // 功能支持
-    local_detection: boolean;   // 本地检测
-    websocket: boolean;         // WebSocket支持
-    push_mode: boolean;         // 推送模式
-    pull_mode: boolean;         // 拉取模式
-  };
-  terminal_mode?: 'local' | 'remote'; // 终端模式
+interface SocketIOResponse {
+  id: string;
+  data: any;
+  error?: string;
+  timestamp: string;
 }
 
 /**
@@ -128,6 +64,16 @@ class TerminalService {
   
   // 最近的状态缓存
   private lastStatus: TerminalStatus | null = null;
+  
+  // Socket.IO请求响应处理
+  private socketIOPendingRequests: Map<string, { 
+    resolve: (value: any) => void, 
+    reject: (reason: any) => void,
+    timeout: NodeJS.Timeout 
+  }> = new Map();
+  
+  // Socket.IO请求超时时间
+  private socketIORequestTimeout: number = 5000;
   
   /**
    * 初始化终端服务
@@ -170,7 +116,52 @@ class TerminalService {
       console.warn('无法保存终端配置', e);
     }
   }
-  
+    /**
+   * 标准化状态数据格式
+   * @private
+   */
+  private normalizeStatusData(data: any): TerminalStatus {
+    return {
+      cameras: data.cameras || {},
+      cpu_usage: data.cpu_usage || 0,
+      memory_usage: data.memory_usage || 0,
+      push_running: data.push_running || false,
+      pull_running: data.pull_running || false,
+      model_loaded: data.model_loaded || false,
+      ...data
+    };
+  }
+    
+  /**
+   * 标准化配置数据格式
+   * @private
+   */
+  private normalizeConfigData(data: any): TerminalConfig {
+    return {
+      mode: data.mode || 'both',
+      interval: data.interval || 5,
+      cameras: data.cameras || {},
+      save_image: typeof data.save_image === 'boolean' ? data.save_image : true,
+      preload_model: typeof data.preload_model === 'boolean' ? data.preload_model : true,
+      ...data
+    };
+  }
+
+    /**
+   * 标准化日志数据格式
+   * @private
+   */
+  private normalizeLogData(data: any[]): LogEntry[] {
+    if (!Array.isArray(data)) return [];
+    
+    return data.map(log => ({
+      timestamp: log.timestamp || new Date().toISOString(),
+      level: log.level || 'info',
+      message: log.message || '未知消息',
+      source: log.source || '系统'
+    }));
+  }
+
   /**
    * 设置终端模式
    * @param mode 终端模式 - local或remote
@@ -412,6 +403,11 @@ class TerminalService {
           });
         });
         
+        // Socket.IO请求响应
+        this.socketIO.on('response', (response: SocketIOResponse) => {
+          this.handleSocketIOResponse(response);
+        });
+        
         // 断开连接
         this.socketIO.on('disconnect', (reason: string) => {
           console.log(`Socket.IO断开连接: ${reason}`);
@@ -438,6 +434,67 @@ class TerminalService {
         timestamp: new Date().toISOString()
       });
     }
+  }
+  
+  /**
+   * 处理Socket.IO响应
+   * @private
+   */
+  private handleSocketIOResponse(response: SocketIOResponse): void {
+    // 检查是否有等待此响应的请求
+    const pendingRequest = this.socketIOPendingRequests.get(response.id);
+    if (pendingRequest) {
+      // 清除超时计时器
+      clearTimeout(pendingRequest.timeout);
+      
+      // 移除挂起的请求
+      this.socketIOPendingRequests.delete(response.id);
+      
+      // 根据响应是否有错误调用resolve或reject
+      if (response.error) {
+        pendingRequest.reject(new Error(response.error));
+      } else {
+        pendingRequest.resolve(response.data);
+      }
+    } else {
+      console.warn('收到未知Socket.IO响应:', response);
+    }
+  }
+  
+  /**
+   * 发送Socket.IO请求并等待响应
+   * @private
+   */
+  private sendSocketIORequest<T>(event: string, data?: any, timeout = this.socketIORequestTimeout): Promise<T> {
+    if (!this.socketIO) {
+      return Promise.reject(new Error('Socket.IO未连接'));
+    }
+    
+    return new Promise<T>((resolve, reject) => {
+      // 生成唯一请求ID
+      const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+      
+      // 创建超时处理
+      const timeoutHandler = setTimeout(() => {
+        this.socketIOPendingRequests.delete(requestId);
+        reject(new Error(`Socket.IO请求超时: ${event}`));
+      }, timeout);
+      
+      // 存储请求处理
+      this.socketIOPendingRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout: timeoutHandler
+      });
+      
+      // 发送请求
+      this.socketIO.emit('request', {
+        id: requestId,
+        event,
+        data,
+        timestamp: new Date().toISOString()
+      });
+    });
   }
   
   /**
@@ -715,26 +772,35 @@ class TerminalService {
    */
   private async sendLocalCommand(commandData: TerminalCommand): Promise<any> {
     try {
-      // 根据命令类型选择API路径
-      let endpoint = `${this.localEndpoint}/api/control`;
-      let requestData: Record<string, any> = {
-        action: commandData.command,
-        ...commandData.params
-      };
-      
-      // 特殊命令处理
-      if (commandData.command === 'update_config') {
-        endpoint = `${this.localEndpoint}/api/config`;
-        requestData = commandData.params || {};
+      if (this.socketIO) {
+        // 使用Socket.IO发送命令
+        return await this.sendSocketIORequest('command', {
+          command: commandData.command,
+          params: commandData.params || {}
+        });
+      } else {
+        // 降级到HTTP请求
+        // 根据命令类型选择API路径
+        let endpoint = `${this.localEndpoint}/api/control`;
+        let requestData: Record<string, any> = {
+          action: commandData.command,
+          ...commandData.params
+        };
+        
+        // 特殊命令处理
+        if (commandData.command === 'update_config') {
+          endpoint = `${this.localEndpoint}/api/config`;
+          requestData = commandData.params || {};
+        }
+        
+        // 发送命令
+        const response = await axios.post(endpoint, requestData, {
+          timeout: 5000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        return response.data;
       }
-      
-      // 发送命令
-      const response = await axios.post(endpoint, requestData, {
-        timeout: 5000,
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      return response.data;
     } catch (error) {
       console.error('发送本地命令失败:', error);
       throw error;
@@ -753,17 +819,8 @@ class TerminalService {
     }
     
     try {
-      // 使用固定的远程服务器地址
-      const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
-      const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/command/`;
-      
-      // 发送命令
-      const response = await axios.post(apiUrl, commandData, {
-        timeout: 10000,
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      return response.data;
+      // 使用apiService发送命令
+      return await apiService.terminals.sendTerminalCommand(this.terminalId, commandData);
     } catch (error) {
       console.error('发送远程命令失败:', error);
       throw error;
@@ -777,35 +834,24 @@ class TerminalService {
   async getStatus(): Promise<TerminalStatus> {
     try {
       if (this.mode === 'local') {
-        const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
-        return this.normalizeStatusData(response.data);
+        if (this.socketIO && this.connected) {
+          // 使用Socket.IO获取状态
+          const data = await this.sendSocketIORequest<any>('get_status');
+          return this.normalizeStatusData(data);
+        } else {
+          // 降级到HTTP请求
+          const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
+          return this.normalizeStatusData(response.data);
+        }
       } else {
-        // 使用固定的远程服务器地址
-        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
-        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/status/`;
-        const response = await axios.get(apiUrl, { timeout: 8000 });
-        return this.normalizeStatusData(response.data);
+        // 使用apiService发送请求
+        const response = await apiService.terminals.getTerminalStatus(this.terminalId || 1);
+        return this.normalizeStatusData(response);
       }
     } catch (error) {
       console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端状态失败:`, error);
       throw error;
     }
-  }
-  
-  /**
-   * 标准化状态数据格式
-   * @private
-   */
-  private normalizeStatusData(data: any): TerminalStatus {
-    return {
-      cameras: data.cameras || {},
-      cpu_usage: data.cpu_usage || 0,
-      memory_usage: data.memory_usage || 0,
-      push_running: data.push_running || false,
-      pull_running: data.pull_running || false,
-      model_loaded: data.model_loaded || false,
-      ...data
-    };
   }
   
   /**
@@ -815,34 +861,24 @@ class TerminalService {
   async getConfig(): Promise<TerminalConfig> {
     try {
       if (this.mode === 'local') {
-        const response = await axios.get(`${this.localEndpoint}/api/config`, { timeout: 5000 });
-        return this.normalizeConfigData(response.data);
+        if (this.socketIO && this.connected) {
+          // 使用Socket.IO获取配置
+          const data = await this.sendSocketIORequest<any>('get_config');
+          return this.normalizeConfigData(data);
+        } else {
+          // 降级到HTTP请求
+          const response = await axios.get(`${this.localEndpoint}/api/config`, { timeout: 5000 });
+          return this.normalizeConfigData(response.data);
+        }
       } else {
-        const response = await this.sendRemoteCommand({
-          command: 'get_config',
-          params: {}
-        });
+        // 使用apiService获取配置
+        const response = await apiService.terminals.getTerminalConfig(this.terminalId || 1);
         return this.normalizeConfigData(response);
       }
     } catch (error) {
       console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端配置失败:`, error);
       throw error;
     }
-  }
-  
-  /**
-   * 标准化配置数据格式
-   * @private
-   */
-  private normalizeConfigData(data: any): TerminalConfig {
-    return {
-      mode: data.mode || 'both',
-      interval: data.interval || 5,
-      cameras: data.cameras || {},
-      save_image: typeof data.save_image === 'boolean' ? data.save_image : true,
-      preload_model: typeof data.preload_model === 'boolean' ? data.preload_model : true,
-      ...data
-    };
   }
   
   /**
@@ -853,16 +889,20 @@ class TerminalService {
   async saveConfig(config: Partial<TerminalConfig>): Promise<any> {
     try {
       if (this.mode === 'local') {
-        const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
-          timeout: 5000,
-          headers: { 'Content-Type': 'application/json' }
-        });
-        return response.data;
+        if (this.socketIO && this.connected) {
+          // 使用Socket.IO保存配置
+          return await this.sendSocketIORequest('update_config', config);
+        } else {
+          // 降级到HTTP请求
+          const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
+            timeout: 5000,
+            headers: { 'Content-Type': 'application/json' }
+          });
+          return response.data;
+        }
       } else {
-        return await this.sendRemoteCommand({
-          command: 'update_config',
-          params: config
-        });
+        // 使用apiService保存配置
+        return await apiService.terminals.updateTerminalConfig(this.terminalId || 1, config);
       }
     } catch (error) {
       console.error(`保存${this.mode === 'local' ? '本地' : '远程'}终端配置失败:`, error);
@@ -877,14 +917,19 @@ class TerminalService {
   async getLogs(): Promise<LogEntry[]> {
     try {
       if (this.mode === 'local') {
-        const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
-        return this.normalizeLogData(response.data);
+        if (this.socketIO && this.connected) {
+          // 使用Socket.IO获取日志
+          const data = await this.sendSocketIORequest<any[]>('get_logs');
+          return this.normalizeLogData(data);
+        } else {
+          // 降级到HTTP请求
+          const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
+          return this.normalizeLogData(response.data);
+        }
       } else {
-        // 使用固定的远程服务器地址
-        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
-        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/logs/`;
-        const response = await axios.get(apiUrl, { timeout: 8000 });
-        return this.normalizeLogData(response.data);
+        // 使用apiService获取日志
+        const response = await apiService.terminals.getTerminalLogs(this.terminalId || 1);
+        return this.normalizeLogData(response);
       }
     } catch (error) {
       console.error(`获取${this.mode === 'local' ? '本地' : '远程'}终端日志失败:`, error);
@@ -895,52 +940,59 @@ class TerminalService {
   }
   
   /**
-   * 标准化日志数据格式
-   * @private
-   */
-  private normalizeLogData(data: any[]): LogEntry[] {
-    if (!Array.isArray(data)) return [];
-    
-    return data.map(log => ({
-      timestamp: log.timestamp || new Date().toISOString(),
-      level: log.level || 'info',
-      message: log.message || '未知消息',
-      source: log.source || '系统'
-    }));
-  }
-  
-  /**
    * 获取终端详情
    * @returns 终端详情
    */
-  async getTerminalDetails(): Promise<Terminal> {
+  async getTerminalDetails(): Promise<ProcessTerminal> {
     try {
       if (this.mode === 'local') {
-        // 本地模式获取终端信息
-        const infoResponse = await axios.get(`${this.localEndpoint}/api/info`, { timeout: 3000 });
-        const statusResponse = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 3000 });
-        
-        return {
-          id: infoResponse.data.id || 0,
-          name: infoResponse.data.name || '本地终端',
-          status: true,
-          cpu_usage: statusResponse.data.cpu_usage || 0,
-          memory_usage: statusResponse.data.memory_usage || 0,
-          version: infoResponse.data.version || 'unknown'
-        };
+        if (this.socketIO && this.connected) {
+          // 使用Socket.IO获取终端信息
+          const infoData = await this.sendSocketIORequest<any>('get_info');
+          const statusData = await this.sendSocketIORequest<any>('get_status');
+          
+          return {
+            id: infoData.id || 0,
+            name: infoData.name || '本地终端',
+            status: true,
+            cpu_usage: statusData.cpu_usage || 0,
+            memory_usage: statusData.memory_usage || 0,
+            version: infoData.version || 'unknown',
+            push_running: statusData.push_running || false,
+            pull_running: statusData.pull_running || false,
+            model_loaded: statusData.model_loaded || false
+          };
+        } else {
+          // 降级到HTTP请求
+          const infoResponse = await axios.get(`${this.localEndpoint}/api/info`, { timeout: 3000 });
+          const statusResponse = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 3000 });
+          
+          return {
+            id: infoResponse.data.id || 0,
+            name: infoResponse.data.name || '本地终端',
+            status: true,
+            cpu_usage: statusResponse.data.cpu_usage || 0,
+            memory_usage: statusResponse.data.memory_usage || 0,
+            version: infoResponse.data.version || 'unknown',
+            push_running: statusResponse.data.push_running || false,
+            pull_running: statusResponse.data.pull_running || false,
+            model_loaded: statusResponse.data.model_loaded || false
+          };
+        }
       } else {
-        // 远程模式获取终端详情 - 使用固定的远程服务器地址
-        const baseUrl = this.remoteUseSSL ? 'https://' : 'http://';
-        const apiUrl = `${baseUrl}${this.remoteWsHost}/api/terminals/${this.terminalId}/`;
-        const response = await axios.get(apiUrl);
+        // 使用apiService获取终端详情
+        const response = await apiService.terminals.getById(this.terminalId || 1);
         
         return {
-          id: response.data.id,
-          name: response.data.name || `终端 #${response.data.id}`,
-          status: response.data.status || false,
-          cpu_usage: response.data.cpu_usage || 0,
-          memory_usage: response.data.memory_usage || 0,
-          last_active: response.data.last_active
+          id: response.id,
+          name: response.name || `终端 #${response.id}`,
+          status: response.status || false,
+          cpu_usage: response.cpu_usage || 0,
+          memory_usage: response.memory_usage || 0,
+          last_active: response.last_active,
+          push_running: response.push_running,
+          pull_running: response.pull_running,
+          model_loaded: response.model_loaded
         };
       }
     } catch (error) {

@@ -9,8 +9,45 @@ from threading import Lock
 
 logger = logging.getLogger('camera_manager')
 
+class Camera:
+    """摄像头类，负责摄像头的连接和图像获取"""
+    
+    def __init__(self, camera_id, url):
+        self.id = camera_id
+        self.url = url
+        self._cap = None
+        self._last_check = 0
+        self._available = False
+        self._check_interval = 10  # 每10秒检查一次可用性
+        
+    def is_available(self):
+        """检查摄像头是否可用"""
+        # 如果上次检查在10秒内，直接返回缓存的结果
+        current_time = time.time()
+        if current_time - self._last_check < self._check_interval:
+            return self._available
+            
+        # 重新检查可用性
+        try:
+            if self._cap is None:
+                # 尝试打开摄像头
+                self._cap = cv2.VideoCapture(self.url)
+                
+            # 尝试读取一帧
+            ret = self._cap.grab()
+            
+            self._available = ret
+            self._last_check = current_time
+            
+            return self._available
+        except Exception as e:
+            logger.error(f"检查摄像头 {self.id} 可用性失败: {e}")
+            self._available = False
+            self._last_check = current_time
+            return False
+
 class CameraManager:
-    """摄像头管理器，负责管理摄像头连接和图像捕获"""
+    """摄像头管理器，负责管理多个摄像头"""
     
     # 摄像头分辨率对照表
     FRAME_SIZES = {
