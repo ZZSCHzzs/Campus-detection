@@ -17,16 +17,6 @@ import type {
 export type MessageCallback = (data: any) => void;
 
 /**
- * Socket.IO请求响应接口
- */
-interface SocketIOResponse {
-  id: string;
-  data: any;
-  error?: string;
-  timestamp: string;
-}
-
-/**
  * 终端服务类 - 负责终端通信管理
  * 
  * 支持两种模式：
@@ -64,16 +54,6 @@ class TerminalService {
   
   // 最近的状态缓存
   private lastStatus: TerminalStatus | null = null;
-  
-  // Socket.IO请求响应处理
-  private socketIOPendingRequests: Map<string, { 
-    resolve: (value: any) => void, 
-    reject: (reason: any) => void,
-    timeout: NodeJS.Timeout 
-  }> = new Map();
-  
-  // Socket.IO请求超时时间
-  private socketIORequestTimeout: number = 5000;
   
   /**
    * 初始化终端服务
@@ -403,11 +383,6 @@ class TerminalService {
           });
         });
         
-        // Socket.IO请求响应
-        this.socketIO.on('response', (response: SocketIOResponse) => {
-          this.handleSocketIOResponse(response);
-        });
-        
         // 断开连接
         this.socketIO.on('disconnect', (reason: string) => {
           console.log(`Socket.IO断开连接: ${reason}`);
@@ -434,67 +409,6 @@ class TerminalService {
         timestamp: new Date().toISOString()
       });
     }
-  }
-  
-  /**
-   * 处理Socket.IO响应
-   * @private
-   */
-  private handleSocketIOResponse(response: SocketIOResponse): void {
-    // 检查是否有等待此响应的请求
-    const pendingRequest = this.socketIOPendingRequests.get(response.id);
-    if (pendingRequest) {
-      // 清除超时计时器
-      clearTimeout(pendingRequest.timeout);
-      
-      // 移除挂起的请求
-      this.socketIOPendingRequests.delete(response.id);
-      
-      // 根据响应是否有错误调用resolve或reject
-      if (response.error) {
-        pendingRequest.reject(new Error(response.error));
-      } else {
-        pendingRequest.resolve(response.data);
-      }
-    } else {
-      console.warn('收到未知Socket.IO响应:', response);
-    }
-  }
-  
-  /**
-   * 发送Socket.IO请求并等待响应
-   * @private
-   */
-  private sendSocketIORequest<T>(event: string, data?: any, timeout = this.socketIORequestTimeout): Promise<T> {
-    if (!this.socketIO) {
-      return Promise.reject(new Error('Socket.IO未连接'));
-    }
-    
-    return new Promise<T>((resolve, reject) => {
-      // 生成唯一请求ID
-      const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
-      
-      // 创建超时处理
-      const timeoutHandler = setTimeout(() => {
-        this.socketIOPendingRequests.delete(requestId);
-        reject(new Error(`Socket.IO请求超时: ${event}`));
-      }, timeout);
-      
-      // 存储请求处理
-      this.socketIOPendingRequests.set(requestId, {
-        resolve,
-        reject,
-        timeout: timeoutHandler
-      });
-      
-      // 发送请求
-      this.socketIO.emit('request', {
-        id: requestId,
-        event,
-        data,
-        timestamp: new Date().toISOString()
-      });
-    });
   }
   
   /**
@@ -772,35 +686,26 @@ class TerminalService {
    */
   private async sendLocalCommand(commandData: TerminalCommand): Promise<any> {
     try {
-      if (this.socketIO) {
-        // 使用Socket.IO发送命令
-        return await this.sendSocketIORequest('command', {
-          command: commandData.command,
-          params: commandData.params || {}
-        });
-      } else {
-        // 降级到HTTP请求
-        // 根据命令类型选择API路径
-        let endpoint = `${this.localEndpoint}/api/control`;
-        let requestData: Record<string, any> = {
-          action: commandData.command,
-          ...commandData.params
-        };
-        
-        // 特殊命令处理
-        if (commandData.command === 'update_config') {
-          endpoint = `${this.localEndpoint}/api/config`;
-          requestData = commandData.params || {};
-        }
-        
-        // 发送命令
-        const response = await axios.post(endpoint, requestData, {
-          timeout: 5000,
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        return response.data;
+      // 根据命令类型选择API路径
+      let endpoint = `${this.localEndpoint}/api/control`;
+      let requestData: Record<string, any> = {
+        action: commandData.command,
+        ...commandData.params
+      };
+      
+      // 特殊命令处理
+      if (commandData.command === 'update_config') {
+        endpoint = `${this.localEndpoint}/api/config`;
+        requestData = commandData.params || {};
       }
+      
+      // 发送命令
+      const response = await axios.post(endpoint, requestData, {
+        timeout: 5000,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      return response.data;
     } catch (error) {
       console.error('发送本地命令失败:', error);
       throw error;
@@ -834,15 +739,8 @@ class TerminalService {
   async getStatus(): Promise<TerminalStatus> {
     try {
       if (this.mode === 'local') {
-        if (this.socketIO && this.connected) {
-          // 使用Socket.IO获取状态
-          const data = await this.sendSocketIORequest<any>('get_status');
-          return this.normalizeStatusData(data);
-        } else {
-          // 降级到HTTP请求
-          const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
-          return this.normalizeStatusData(response.data);
-        }
+        const response = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 5000 });
+        return this.normalizeStatusData(response.data);
       } else {
         // 使用apiService发送请求
         const response = await apiService.terminals.getTerminalStatus(this.terminalId || 1);
@@ -861,15 +759,8 @@ class TerminalService {
   async getConfig(): Promise<TerminalConfig> {
     try {
       if (this.mode === 'local') {
-        if (this.socketIO && this.connected) {
-          // 使用Socket.IO获取配置
-          const data = await this.sendSocketIORequest<any>('get_config');
-          return this.normalizeConfigData(data);
-        } else {
-          // 降级到HTTP请求
-          const response = await axios.get(`${this.localEndpoint}/api/config`, { timeout: 5000 });
-          return this.normalizeConfigData(response.data);
-        }
+        const response = await axios.get(`${this.localEndpoint}/api/config`, { timeout: 5000 });
+        return this.normalizeConfigData(response.data);
       } else {
         // 使用apiService获取配置
         const response = await apiService.terminals.getTerminalConfig(this.terminalId || 1);
@@ -889,17 +780,11 @@ class TerminalService {
   async saveConfig(config: Partial<TerminalConfig>): Promise<any> {
     try {
       if (this.mode === 'local') {
-        if (this.socketIO && this.connected) {
-          // 使用Socket.IO保存配置
-          return await this.sendSocketIORequest('update_config', config);
-        } else {
-          // 降级到HTTP请求
-          const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
-            timeout: 5000,
-            headers: { 'Content-Type': 'application/json' }
-          });
-          return response.data;
-        }
+        const response = await axios.post(`${this.localEndpoint}/api/config`, config, {
+          timeout: 5000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        return response.data;
       } else {
         // 使用apiService保存配置
         return await apiService.terminals.updateTerminalConfig(this.terminalId || 1, config);
@@ -917,15 +802,8 @@ class TerminalService {
   async getLogs(): Promise<LogEntry[]> {
     try {
       if (this.mode === 'local') {
-        if (this.socketIO && this.connected) {
-          // 使用Socket.IO获取日志
-          const data = await this.sendSocketIORequest<any[]>('get_logs');
-          return this.normalizeLogData(data);
-        } else {
-          // 降级到HTTP请求
-          const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
-          return this.normalizeLogData(response.data);
-        }
+        const response = await axios.get(`${this.localEndpoint}/api/logs`, { timeout: 5000 });
+        return this.normalizeLogData(response.data);
       } else {
         // 使用apiService获取日志
         const response = await apiService.terminals.getTerminalLogs(this.terminalId || 1);
@@ -946,39 +824,18 @@ class TerminalService {
   async getTerminalDetails(): Promise<ProcessTerminal> {
     try {
       if (this.mode === 'local') {
-        if (this.socketIO && this.connected) {
-          // 使用Socket.IO获取终端信息
-          const infoData = await this.sendSocketIORequest<any>('get_info');
-          const statusData = await this.sendSocketIORequest<any>('get_status');
-          
-          return {
-            id: infoData.id || 0,
-            name: infoData.name || '本地终端',
-            status: true,
-            cpu_usage: statusData.cpu_usage || 0,
-            memory_usage: statusData.memory_usage || 0,
-            version: infoData.version || 'unknown',
-            push_running: statusData.push_running || false,
-            pull_running: statusData.pull_running || false,
-            model_loaded: statusData.model_loaded || false
-          };
-        } else {
-          // 降级到HTTP请求
-          const infoResponse = await axios.get(`${this.localEndpoint}/api/info`, { timeout: 3000 });
-          const statusResponse = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 3000 });
-          
-          return {
-            id: infoResponse.data.id || 0,
-            name: infoResponse.data.name || '本地终端',
-            status: true,
-            cpu_usage: statusResponse.data.cpu_usage || 0,
-            memory_usage: statusResponse.data.memory_usage || 0,
-            version: infoResponse.data.version || 'unknown',
-            push_running: statusResponse.data.push_running || false,
-            pull_running: statusResponse.data.pull_running || false,
-            model_loaded: statusResponse.data.model_loaded || false
-          };
-        }
+        // 本地模式获取终端信息
+        const infoResponse = await axios.get(`${this.localEndpoint}/api/info`, { timeout: 3000 });
+        const statusResponse = await axios.get(`${this.localEndpoint}/api/status`, { timeout: 3000 });
+        
+        return {
+          id: infoResponse.data.id || 0,
+          name: infoResponse.data.name || '本地终端',
+          status: true,
+          cpu_usage: statusResponse.data.cpu_usage || 0,
+          memory_usage: statusResponse.data.memory_usage || 0,
+          version: infoResponse.data.version || 'unknown'
+        };
       } else {
         // 使用apiService获取终端详情
         const response = await apiService.terminals.getById(this.terminalId || 1);
