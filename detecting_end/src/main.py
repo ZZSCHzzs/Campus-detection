@@ -618,6 +618,8 @@ def receive_frame(camera_id):
                 if humidity is not None:
                     node_data["humidity"] = humidity
                 
+                log_manager.info(f"接收到节点{camera_id}的环境数据: 温度={temperature}, 湿度={humidity}")
+                
                 # 通过WebSocket发送
                 if ws_client and ws_client.connected:
                     try:

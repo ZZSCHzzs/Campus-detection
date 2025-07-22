@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Lock, User, Message } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -89,10 +89,10 @@ const registerRules = reactive({
 })
 
 const loginFormRef = ref()
-
 const registerFormRef = ref()
-
 const loading = ref(false)
+// 添加用于取消异步操作的标志
+const isComponentMounted = ref(true)
 
 const encryptPassword = (password: string): string => {
     return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex)
@@ -100,8 +100,9 @@ const encryptPassword = (password: string): string => {
 
 
 const handleLogin = async () => {
-    if (!loginFormRef.value) return
+    if (!loginFormRef.value || !isComponentMounted.value) return
     await loginFormRef.value.validate(async (valid, fields) => {
+        if (!isComponentMounted.value) return
         if (valid) {
             try {
                 loading.value = true
@@ -113,6 +114,8 @@ const handleLogin = async () => {
                     loginForm.value.username, 
                     encryptedPassword
                 )
+                
+                if (!isComponentMounted.value) return
 
                 const { access, refresh } = response
                 
@@ -124,6 +127,8 @@ const handleLogin = async () => {
                 authStore.setAuth({ access, refresh })
 
                 await new Promise(resolve => setTimeout(resolve, 200))
+                
+                if (!isComponentMounted.value) return
 
                 const storedToken = localStorage.getItem('access')
                 if (storedToken !== access) {
@@ -136,6 +141,8 @@ const handleLogin = async () => {
                     
                     const userInfo = await AuthService.getUserInfo()
                     
+                    if (!isComponentMounted.value) return
+                    
                     if (userInfo) {
                         console.log('用户信息获取成功:', userInfo)
                         authStore.setUser(userInfo)
@@ -146,14 +153,20 @@ const handleLogin = async () => {
                             duration: 2000
                         })
                         
-                        setTimeout(() => {
-                            const redirectPath = route.query.redirect?.toString() || '/'
-                            router.push(redirectPath)
-                        }, 1000)
+                        if (isComponentMounted.value) {
+                            setTimeout(() => {
+                                if (isComponentMounted.value) {
+                                    const redirectPath = route.query.redirect?.toString() || '/'
+                                    router.push(redirectPath)
+                                }
+                            }, 1000)
+                        }
                     } else {
                         throw new Error('无法获取用户信息')
                     }
                 } catch (userError) {
+                    if (!isComponentMounted.value) return
+                    
                     console.error('获取用户信息失败:', userError)
                     ElMessage({
                         message: '登录成功，但无法获取用户信息',
@@ -161,12 +174,18 @@ const handleLogin = async () => {
                         duration: 2000
                     })
                     
-                    setTimeout(() => {
-                        const redirectPath = route.query.redirect?.toString() || '/'
-                        router.push(redirectPath)
-                    }, 1000)
+                    if (isComponentMounted.value) {
+                        setTimeout(() => {
+                            if (isComponentMounted.value) {
+                                const redirectPath = route.query.redirect?.toString() || '/'
+                                router.push(redirectPath)
+                            }
+                        }, 1000)
+                    }
                 }
             } catch (error) {
+                if (!isComponentMounted.value) return
+                
                 console.error('登录失败:', error)
                 let errorMessage = '登录失败，请检查用户名和密码'
                 
@@ -180,28 +199,35 @@ const handleLogin = async () => {
                     }
                 }
                 
-                ElMessage({
-                    message: errorMessage,
-                    type: 'error',
-                    duration: 2000
-                })
+                if (isComponentMounted.value) {
+                    ElMessage({
+                        message: errorMessage,
+                        type: 'error',
+                        duration: 2000
+                    })
+                }
             } finally {
-                loading.value = false
+                if (isComponentMounted.value) {
+                    loading.value = false
+                }
             }
         } else {
             console.log('验证失败', fields)
-            ElMessage({
-                message: '请正确填写表单',
-                type: 'error',
-                duration: 2000
-            })
+            if (isComponentMounted.value) {
+                ElMessage({
+                    message: '请正确填写表单',
+                    type: 'error',
+                    duration: 2000
+                })
+            }
         }
     })
 }
 
 const handleRegister = async () => {
-    if (!registerFormRef.value) return
+    if (!registerFormRef.value || !isComponentMounted.value) return
     await registerFormRef.value.validate(async (valid, fields) => {
+        if (!isComponentMounted.value) return
         if (valid) {
             try {
                 loading.value = true
@@ -213,6 +239,8 @@ const handleRegister = async () => {
                     password: encryptedPassword,
                     email: registerForm.value.email
                 })
+                
+                if (!isComponentMounted.value) return
 
                 ElMessage({
                     message: '注册成功，请登录',
@@ -229,11 +257,17 @@ const handleRegister = async () => {
                     email: ''
                 }
 
-                setTimeout(() => {
-                    isLogin.value = true
-                    router.replace({ path: '/login' })
-                }, 1000)
+                if (isComponentMounted.value) {
+                    setTimeout(() => {
+                        if (isComponentMounted.value) {
+                            isLogin.value = true
+                            router.replace({ path: '/login' })
+                        }
+                    }, 1000)
+                }
             } catch (error) {
+                if (!isComponentMounted.value) return
+                
                 console.error('注册失败:', error)
                 
                 let errorMessage = '注册失败，请稍后再试'
@@ -252,35 +286,54 @@ const handleRegister = async () => {
                     }
                 }
                 
-                ElMessage({
-                    message: errorMessage,
-                    type: 'error',
-                    duration: 2000
-                })
+                if (isComponentMounted.value) {
+                    ElMessage({
+                        message: errorMessage,
+                        type: 'error',
+                        duration: 2000
+                    })
+                }
             } finally {
-                loading.value = false
+                if (isComponentMounted.value) {
+                    loading.value = false
+                }
             }
         } else {
             console.log('验证失败', fields)
-            ElMessage({
-                message: '请正确填写表单',
-                type: 'error',
-                duration: 2000
-            })
+            if (isComponentMounted.value) {
+                ElMessage({
+                    message: '请正确填写表单',
+                    type: 'error',
+                    duration: 2000
+                })
+            }
         }
     })
 }
 
 onMounted(async () => {
+    isComponentMounted.value = true
     setViewMode()
 
-    const isValid = await authStore.verifyToken()
-    if (!isValid) {
-        const refreshSuccess = await authStore.refreshAccessToken()
-        if (!refreshSuccess) {
-            authStore.logout()
+    if (isComponentMounted.value) {
+        const isValid = await authStore.verifyToken()
+        if (!isComponentMounted.value) return
+        
+        if (!isValid) {
+            const refreshSuccess = await authStore.refreshAccessToken()
+            if (!isComponentMounted.value) return
+            
+            if (!refreshSuccess) {
+                authStore.logout()
+            }
         }
     }
+})
+
+onBeforeUnmount(() => {
+    // 设置标志，防止异步操作在组件卸载后继续执行
+    isComponentMounted.value = false
+    console.log('AuthView组件已卸载，清理异步操作')
 })
 </script>
 
