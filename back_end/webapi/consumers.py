@@ -7,7 +7,7 @@ from channels.db import database_sync_to_async
 from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
-from .models import ProcessTerminal
+from .models import ProcessTerminal, HardwareNode, Area, HistoricalData
 
 logger = logging.getLogger('django')
 
@@ -141,7 +141,28 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             logger.error(f"处理WebSocket消息时出错: {str(e)}")
             logger.error(f"异常堆栈: {traceback.format_exc()}")
     
-    # 改进系统状态处理
+    async def handle_nodes_data(self, data):
+        """处理节点数据更新"""
+        nodes_data = data.get('nodes', [])
+        if not nodes_data:
+            return
+            
+        # 更新节点数据到数据库
+        updated_nodes = await self.update_nodes_data(nodes_data)
+        
+        # 转发消息
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'broadcast_message',
+                'message': {
+                    'type': 'nodes_data',
+                    'data': nodes_data,
+                    'timestamp': timezone.now().isoformat()
+                }
+            }
+        )
+    
     async def handle_system_status(self, data):
         """处理系统状态更新消息"""
         status_data = data.get('status', {})
@@ -239,26 +260,6 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             'type': 'heartbeat_response',
             'timestamp': timezone.now().isoformat()
         }))
-    
-    async def handle_nodes_data(self, data):
-        """处理节点数据更新"""
-        nodes_data = data.get('nodes', [])
-        if not nodes_data:
-            return
-            
-        # 处理节点数据 - 可能需要更新数据库
-        # 这里仅转发消息
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                'type': 'broadcast_message',
-                'message': {
-                    'type': 'nodes_data',
-                    'data': nodes_data,
-                    'timestamp': timezone.now().isoformat()
-                }
-            }
-        )
     
     async def send_command(self, event):
         """发送命令到终端"""
@@ -379,6 +380,8 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.model_loaded = status_data['model_loaded']
             if 'cameras' in status_data:
                 terminal.cameras = status_data['cameras']
+            if 'co2_level' in status_data:  # 添加CO2数据处理
+                terminal.co2_level = status_data['co2_level']
                 
             terminal.last_active = timezone.now()
             terminal.save()
@@ -393,6 +396,53 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"更新终端 {terminal_id} 系统状态失败: {str(e)}")
             return False
+    
+    @database_sync_to_async
+    def update_nodes_data(self, nodes_data):
+        """更新节点数据"""
+        updated_nodes = []
+        try:
+            for node_data in nodes_data:
+                node_id = node_data.get('id')
+                if not node_id:
+                    continue
+                    
+                try:
+                    node = HardwareNode.objects.get(id=node_id)
+                    
+                    # 更新基本字段
+                    if 'detected_count' in node_data:
+                        node.detected_count = node_data['detected_count']
+                    
+                    # 更新环境数据字段
+                    if 'temperature' in node_data:
+                        node.temperature = node_data['temperature']
+                    if 'humidity' in node_data:
+                        node.humidity = node_data['humidity']
+                    
+                    node.updated_at = timezone.now()
+                    node.save()
+                    updated_nodes.append(node_id)
+                    
+                    # 如果有区域绑定，保存历史数据
+                    try:
+                        area = Area.objects.get(bound_node=node)
+                        if 'detected_count' in node_data:
+                            HistoricalData.objects.create(
+                                area=area,
+                                detected_count=node_data['detected_count'],
+                                timestamp=timezone.now()
+                            )
+                    except Area.DoesNotExist:
+                        pass
+                        
+                except HardwareNode.DoesNotExist:
+                    logger.warning(f"节点 {node_id} 不存在，无法更新数据")
+                    
+            return updated_nodes
+        except Exception as e:
+            logger.error(f"更新节点数据失败: {str(e)}")
+            return []
     
     @database_sync_to_async
     def update_terminal_last_active(self, terminal_id):

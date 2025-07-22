@@ -5,6 +5,7 @@ import logging
 import asyncio
 from threading import Thread
 from flask import Flask, request, jsonify, send_file, send_from_directory
+import traceback
 
 from flask_cors import CORS
 import psutil
@@ -552,27 +553,146 @@ def control_detection():
 # API路由 - 接收图像
 @app.route('/api/push_frame/<int:camera_id>', methods=['POST'])
 def receive_frame(camera_id):
-    """接收并处理上传的图像"""
+    """接收并处理上传的图像和环境数据"""
     if not detection_manager.push_running:
         return jsonify({"status": "error", "message": "被动接收模式未启动"}), 400
     
     try:
-        # 从请求中获取图像数据
+        # 获取环境数据（如果有）
+        temperature = request.form.get('temperature', type=float)
+        humidity = request.form.get('humidity', type=float)
+        
+        # 处理图像
         image_file = request.files.get('image')
-        if not image_file:
-            return jsonify({"status": "error", "message": "未接收到图像数据"}), 400
-        
-        # 读取图像数据
-        image_data = image_file.read()
-        
-        # 使用process_received_frame而不是从detection_manager直接处理
-        # 这确保帧率统计得到更新
-        result = process_received_frame(camera_id, image_data)
-        
-        return jsonify(result)
+        if image_file:
+            # 读取图像数据
+            image_data = image_file.read()
+            
+            # 处理接收到的帧
+            result = process_received_frame(camera_id, image_data)
+            
+            # 如果有环境数据，更新到结果中
+            if temperature is not None:
+                result['temperature'] = temperature
+            if humidity is not None:
+                result['humidity'] = humidity
+                
+            # 如果有环境数据，通过WebSocket发送
+            if (temperature is not None or humidity is not None) and ws_client and ws_client.connected:
+                try:
+                    node_data = {
+                        "id": camera_id,
+                        "temperature": temperature,
+                        "humidity": humidity
+                    }
+                    
+                    # 如果有检测结果，也包含在内
+                    if 'detected_count' in result and result['status'] == 'success':
+                        node_data["detected_count"] = result['detected_count']
+                    
+                    # 获取事件循环
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    # 发送节点数据
+                    asyncio.run_coroutine_threadsafe(
+                        ws_client.send_nodes_data([node_data]),
+                        loop
+                    )
+                except Exception as e:
+                    log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
+            
+            return jsonify(result)
+        else:
+            # 仅处理环境数据，没有图像
+            if temperature is not None or humidity is not None:
+                # 准备节点数据
+                node_data = {
+                    "id": camera_id
+                }
+                if temperature is not None:
+                    node_data["temperature"] = temperature
+                if humidity is not None:
+                    node_data["humidity"] = humidity
+                
+                # 通过WebSocket发送
+                if ws_client and ws_client.connected:
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    asyncio.run_coroutine_threadsafe(
+                        ws_client.send_nodes_data([node_data]),
+                        loop
+                    )
+                
+                return jsonify({"status": "success", "message": "环境数据已接收"})
+            else:
+                return jsonify({"status": "error", "message": "未接收到图像或环境数据"}), 400
     except Exception as e:
-        log_manager.error(f"处理接收帧失败: {str(e)}")
-        # 确保在错误情况下仍然返回有效的JSON响应
+        log_manager.error(f"处理接收帧或环境数据失败: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# 新增 - 专门用于环境数据的API
+@app.route('/api/environmental_data/<int:node_id>', methods=['POST'])
+def receive_environmental_data(node_id):
+    """接收环境数据"""
+    try:
+        data = request.json or {}
+        
+        # 提取环境数据
+        temperature = data.get('temperature')
+        humidity = data.get('humidity')
+        co2_level = data.get('co2_level')
+        
+        if temperature is None and humidity is None and co2_level is None:
+            return jsonify({"status": "error", "message": "未提供任何环境数据"}), 400
+        
+        # 记录接收到的数据
+        log_manager.info(f"接收到节点{node_id}的环境数据: 温度={temperature}, 湿度={humidity}, CO2={co2_level}")
+        
+        # 通过WebSocket发送环境数据
+        if ws_client and ws_client.connected:
+            try:
+                # 如果有CO2数据，更新系统状态
+                if co2_level is not None:
+                    status_data = system_monitor.get_status()
+                    status_data["co2_level"] = co2_level
+                    
+                    # 获取事件循环
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        ws_client.send_status(status_data),
+                        loop
+                    )
+                
+                # 如果有温度或湿度数据，发送节点数据
+                if temperature is not None or humidity is not None:
+                    node_data = {
+                        "id": node_id
+                    }
+                    if temperature is not None:
+                        node_data["temperature"] = temperature
+                    if humidity is not None:
+                        node_data["humidity"] = humidity
+                    
+                    # 获取事件循环
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        ws_client.send_nodes_data([node_data]),
+                        loop
+                    )
+            except Exception as e:
+                log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
+        
+        return jsonify({"status": "success", "message": "环境数据已接收"})
+    except Exception as e:
+        log_manager.error(f"处理环境数据失败: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # 静态文件路由 - 增强以更好地支持Vue前端
