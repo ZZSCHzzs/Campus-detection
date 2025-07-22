@@ -590,6 +590,7 @@ def receive_frame(camera_id):
                     if 'detected_count' in result and result['status'] == 'success':
                         node_data["detected_count"] = result['detected_count']
                     
+                    log_manager.info(f"接收到节点{camera_id}的数据: 温度={temperature}, 湿度={humidity}, 检测结果={node_data.get('detected_count', 'N/A')}")
                     # 获取事件循环
                     try:
                         loop = asyncio.get_event_loop()
