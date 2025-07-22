@@ -49,7 +49,7 @@ export function createResourceService<T>(
     /**
      * 刷新资源缓存
      */
-    refresh: (params = {}) => 
+    refreshAll: (params = {}) => 
       resourceManager.getList<T>(resourceType, params, true),
     
     /**
