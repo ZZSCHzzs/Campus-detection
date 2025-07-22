@@ -387,14 +387,15 @@ function formatTime(value: string) {
         </div>
 
         <div class="lower-content">
-          
-          <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
+          <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
+
+          <!-- <HeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container">
             <template #default="{ mapElement }">
               <div class="map-image-wrapper">
                 {{ mapElement }}
               </div>
             </template>
-          </HeatMap>
+          </HeatMap> -->
 
           <div class="right-column">
             

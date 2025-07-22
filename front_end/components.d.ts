@@ -69,6 +69,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TerminalManager: typeof import('./src/components/admin/TerminalManager.vue')['default']
+    ThreeDHeatMap: typeof import('./src/components/ThreeDHeatMap.vue')['default']
     UploadManager: typeof import('./src/components/admin/UploadManager.vue')['default']
     UserManager: typeof import('./src/components/admin/UserManager.vue')['default']
     View: typeof import('./src/components/admin/View.vue')['default']
