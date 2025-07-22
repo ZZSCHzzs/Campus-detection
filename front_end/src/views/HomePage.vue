@@ -4,8 +4,8 @@ import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import type { AreaItem, Alert, Notice, SummaryData } from '../types'
 import { useAuthStore } from '../stores/auth'
-import { areaService, noticeService, alertService, summaryService } from '../services/apiService'
-import apiService from '../services/apiService'
+import { areaService, noticeService, alertService, summaryService } from '../services'
+import apiService from '../services'
 import AreaList from '../components/AreaList.vue'
 
 import {

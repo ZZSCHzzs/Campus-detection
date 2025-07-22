@@ -17,12 +17,11 @@ class SystemMonitor:
     
     def __init__(self, config_manager=None, camera_manager=None, 
                  detection_manager=None, log_manager=None, 
-                 socketio=None, ws_client=None):
+                 ws_client=None):
         self.config_manager = config_manager
         self.camera_manager = camera_manager
         self.detection_manager = detection_manager
         self.log_manager = log_manager
-        self.socketio = socketio
         self.ws_client = ws_client
         
         # 状态数据
@@ -101,8 +100,6 @@ class SystemMonitor:
                 uptime = int(time.time() - psutil.boot_time())
                 self.status["system_uptime"] = uptime
                 
-                # 通过Socket.IO发送状态更新
-                self._emit_status_update()
                 
                 # 通过WebSocket定期发送状态更新到服务端
                 # 无论检测模式是否运行，都要发送状态
@@ -225,19 +222,6 @@ class SystemMonitor:
             # 如果连记录日志都失败了，至少在系统日志中记录这个错误
             logger.error(f"记录日志失败: {str(e)}, 原始消息: {message}")
     
-    def _emit_status_update(self):
-        """通过Socket.IO发送状态更新"""
-        if not self.socketio:
-            return
-            
-        try:
-            # 修复: 使用get_status()方法获取完整状态，而不是尝试访问不存在的属性
-            status_data = self.get_status()
-            
-            # 发送状态更新
-            self.socketio.emit('system_resources', status_data)
-        except Exception as e:
-            logger.error(f"通过Socket.IO发送状态更新失败: {str(e)}")
     
     def _send_ws_status_update(self):
         """通过WebSocket发送状态更新到服务端"""
@@ -353,18 +337,7 @@ class SystemMonitor:
         if 'save_image' in new_config and new_config['save_image'] != old_config.get('save_image', True):
             self._safe_log('info', f"保存图像设置已更改: {old_config.get('save_image', True)} -> {new_config['save_image']}")
         
-        # 8. 通知用户界面配置已更改
-        try:
-            if self.socketio:
-                self.socketio.emit('system_message', {'message': '配置已更新并应用'})
-                self.socketio.emit('system_update', {
-                    'config_updated': True,
-                    'config': new_config
-                })
-        except Exception as e:
-            logger.error(f"通知用户界面配置已更改失败: {str(e)}")
-            self._safe_log('error', f"通知用户界面配置已更改失败: {str(e)}")
-        
+       
         logger.info("配置更改已应用")
         self._safe_log('info', "配置更改已应用")
     
@@ -401,9 +374,6 @@ class SystemMonitor:
         """更新WebSocket客户端引用"""
         self.ws_client = ws_client
     
-    def update_socketio(self, socketio):
-        """更新SocketIO引用"""
-        self.socketio = socketio
     
     def _get_config_hash(self):
         """获取配置的哈希值，用于检测配置更改"""

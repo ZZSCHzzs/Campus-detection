@@ -5,7 +5,7 @@ import logging
 import asyncio
 from threading import Thread
 from flask import Flask, request, jsonify, send_file, send_from_directory
-from flask_socketio import SocketIO
+
 from flask_cors import CORS
 import psutil
 
@@ -24,7 +24,6 @@ from system_monitor import SystemMonitor
 # 创建Flask应用
 app = Flask(__name__, static_folder=os.path.join(ROOT_DIR, 'static'))
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-socketio = SocketIO(app, cors_allowed_origins="*")
 
 # 全局管理器实例
 config_manager = None
@@ -59,8 +58,6 @@ def initialize_app():
     # 初始化WebSocket客户端
     ws_client = init_websocket_client()
     
-    # 更新日志管理器的WebSocket客户端和SocketIO
-    log_manager.socketio = socketio
     log_manager.ws_client = ws_client
     
     # 初始化检测管理器
@@ -68,7 +65,6 @@ def initialize_app():
         config_manager=config_manager,
         camera_manager=camera_manager,
         log_manager=log_manager,
-        socketio=socketio,
         ws_client=ws_client
     )
     
@@ -81,7 +77,6 @@ def initialize_app():
         camera_manager=camera_manager,
         detection_manager=detection_manager,
         log_manager=log_manager,
-        socketio=socketio,
         ws_client=ws_client
     )
     system_monitor.start()
@@ -140,9 +135,7 @@ def init_websocket_client():
                     connected = await client.start()
                     if connected:
                         log_manager.info('WebSocket连接成功')
-                        socketio.emit('system_message', {'message': '已连接到远程服务器'})
-                        socketio.emit('system_update', {'ws_connected': True})
-                        
+
                         # 发送初始状态
                         try:
                             if detection_manager:
@@ -152,16 +145,13 @@ def init_websocket_client():
                         except Exception as e:
                             log_manager.error(f'发送初始状态失败: {str(e)}')
                     else:
-                        log_manager.error('WebSocket连接失败')
-                        socketio.emit('system_error', {'message': '无法连接到远程服务器'})
-                        socketio.emit('system_update', {'ws_connected': False})
+                        log_manager.error('WebSocket连接失败')                
                 except Exception as e:
                     import traceback
                     log_manager.error(f'WebSocket客户端错误: {str(e)}')
                     log_manager.error(f'异常详情: {traceback.format_exc()}')
-                    socketio.emit('system_error', {'message': f'WebSocket连接错误: {str(e)}'})
-                    socketio.emit('system_update', {'ws_connected': False})
-            
+
+
             # 运行客户端，并保持事件循环运行
             try:
                 loop.run_until_complete(run_client())
@@ -236,10 +226,7 @@ async def handle_ws_command(command_data):
                 
             if mode == "pull" or mode == "both":
                 success = detection_manager.start_pull()
-                
-            # 发送响应
-            socketio.emit('system_message', {'message': f'已开始 {mode} 模式'})
-            
+                           
             # 发送更新后的状态
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
@@ -264,16 +251,7 @@ async def handle_ws_command(command_data):
                 
             # 综合结果
             success = (mode == "push" and push_success) or (mode == "pull" and pull_success) or (mode == "both" and (push_success or pull_success))
-            
-            # 发送响应
-            socketio.emit('system_message', {'message': f'已停止 {mode} 模式'})
-            
-            # 强制更新前端状态，确保UI反映最新状态
-            socketio.emit('system_update', {
-                'push_running': detection_manager.push_running,
-                'pull_running': detection_manager.pull_running
-            })
-            
+                 
             # 添加验证，确保状态正确更新
             log_manager.info(f"停止后状态: push_running={detection_manager.push_running}, pull_running={detection_manager.pull_running}")
             
@@ -297,17 +275,15 @@ async def handle_ws_command(command_data):
             mode = params.get("mode")
             if mode in ["push", "pull", "both"]:
                 detection_manager.change_mode(mode)
-                socketio.emit('system_message', {'message': f'模式已切换为: {mode}'})
             else:
-                socketio.emit('system_error', {'message': '无效的模式'})
+                log_manager.warning(f"无效的模式: {mode}")
         
         elif command == "set_interval":
             interval = params.get("interval")
             if isinstance(interval, (int, float)) and interval > 0:
                 detection_manager.update_interval(interval)
-                socketio.emit('system_message', {'message': f'拉取间隔已更新为: {interval}秒'})
             else:
-                socketio.emit('system_error', {'message': '无效的间隔值'})
+                log_manager.warning(f"无效的间隔值: {interval}")        
         
         elif command == "update_cameras":
             cameras = params.get("cameras")
@@ -319,12 +295,11 @@ async def handle_ws_command(command_data):
                 # 重新加载摄像头
                 camera_manager._load_cameras()
                 
-                socketio.emit('system_message', {'message': '摄像头配置已更新'})
             else:
-                socketio.emit('system_error', {'message': '无效的摄像头配置'})
+                log_manager.warning(f"无效的摄像头配置: {cameras}")
         
         elif command == "restart":
-            socketio.emit('system_message', {'message': '正在重启服务...'})
+            log_manager.info("正在重启服务...")
             time.sleep(2)  # 模拟重启延迟
             os.execv(sys.executable, ['python'] + sys.argv)
         
@@ -350,13 +325,7 @@ async def handle_ws_command(command_data):
                 send_success = await ws_client.send_command_response(command, config_data, success=True)
                 if not send_success:
                     log_manager.warning("通过WebSocket发送配置失败")
-                
-                # 同时通过SocketIO更新前端
-                try:
-                    socketio.emit('system_update', {'config': config_data})
-                except Exception as e:
-                    log_manager.error(f"通过SocketIO发送配置失败: {str(e)}")
-                
+                                
             except Exception as e:
                 log_manager.error(f"处理get_config命令失败: {str(e)}")
                 log_manager.error(f"异常堆栈: {traceback.format_exc()}")
@@ -372,7 +341,6 @@ async def handle_ws_command(command_data):
             # 更新配置
             config_data = params
             if not config_data:
-                socketio.emit('system_error', {'message': '无效的配置数据'})
                 await ws_client.send_command_response(command, {"error": "无效的配置数据"}, success=False)
                 return
                 
@@ -399,10 +367,7 @@ async def handle_ws_command(command_data):
                 if 'interval' in config_data and config_data['interval'] != old_config.get('interval'):
                     detection_manager.update_interval(config_data['interval'])
                     log_manager.info(f"拉取间隔已更新为: {config_data['interval']}秒")
-                
-                socketio.emit('system_message', {'message': '配置已更新并应用'})
-                socketio.emit('system_update', {'config_updated': True, 'config': config_manager.get_all()})
-                
+                                
                 # 发送更新后的状态
                 status_data = detection_manager.get_system_status()
                 status_data['terminal_id'] = config_manager.get('terminal_id')
@@ -411,19 +376,18 @@ async def handle_ws_command(command_data):
                 # 发送命令执行结果
                 await ws_client.send_command_response(command, {"success": True, "changed": changed}, success=True)
             else:
-                socketio.emit('system_message', {'message': '配置未变更'})
                 await ws_client.send_command_response(command, {"success": True, "changed": False}, success=True)
         
         else:
             log_manager.warning(f"未知的WebSocket命令: {command}")
-            socketio.emit('system_error', {'message': f'未知的命令: {command}'})
+
             await ws_client.send_command_response(command, {"error": f"未知的命令: {command}"}, success=False)
             
     except Exception as e:
         error_msg = f"执行WebSocket命令 {command} 时出错: {str(e)}"
         log_manager.error(error_msg)
         log_manager.error(f"异常堆栈: {traceback.format_exc()}")
-        socketio.emit('system_error', {'message': error_msg})
+
         
         # 发送错误响应
         try:
@@ -455,7 +419,7 @@ def make_json_serializable(obj):
         return str(obj)
 
 # API路由 - 终端信息
-@app.route('/api/info')
+@app.route('/api/info/')
 def get_info():
     """返回终端基本信息"""
     return jsonify({
@@ -466,7 +430,7 @@ def get_info():
     })
 
 # API路由 - 系统状态
-@app.route('/api/status')
+@app.route('/api/status/')
 def get_status():
     """获取系统状态"""
     # 使用系统监控模块的状态而不是检测管理器的状态
@@ -482,26 +446,26 @@ def get_status():
     return jsonify(status)
 
 # API路由 - 系统信息
-@app.route('/api/system')
+@app.route('/api/system/')
 def get_system():
     """获取系统详细信息"""
     return jsonify(get_system_info())
 
 # API路由 - 日志
-@app.route('/api/logs')
+@app.route('/api/logs/')
 def get_logs():
     """获取日志"""
     count = request.args.get('count', default=None, type=int)
     return jsonify(log_manager.get_logs(count))
 
 # API路由 - 日志统计
-@app.route('/api/logs/stats')
+@app.route('/api/logs/stats/')
 def get_log_stats():
     """获取日志统计数据"""
     return jsonify(detection_manager.get_detection_stats())
 
 # API路由 - 配置
-@app.route('/api/config', methods=['GET', 'POST'])
+@app.route('/api/config/', methods=['GET', 'POST'])
 def config_endpoint():
     """获取或更新终端配置"""
     if request.method == 'GET':
@@ -538,16 +502,11 @@ def config_endpoint():
                 log_manager.info(f"拉取间隔已更新为: {data['interval']}秒")
             
             log_manager.info("配置已更新并应用")
-            
-            # 通知前端配置已应用
-            if socketio:
-                socketio.emit('system_message', {'message': '配置已更新并应用'})
-                socketio.emit('system_update', {'config_updated': True})
-        
+
         return jsonify({"status": "success", "changed": changed, "applied": changed})
 
 # API路由 - 控制
-@app.route('/api/control', methods=['POST'])
+@app.route('/api/control/', methods=['POST'])
 def control_detection():
     """控制检测服务的启动和停止"""
     action = request.json.get('action')
@@ -560,8 +519,6 @@ def control_detection():
             # 更新配置
             config_manager.set('mode', mode)
             config_manager.save_config()
-            # 广播状态更新
-            socketio.emit('system_update', {'mode': mode})
             return jsonify({"status": "success", "message": f"模式已切换为: {mode}"})
         else:
             return jsonify({"status": "error", "message": "无效的模式"}), 400
@@ -571,79 +528,26 @@ def control_detection():
     
     if action == "start_push":
         result = detection_manager.start_push()
-        socketio.emit('system_update', {'push_running': result})
         return jsonify({"status": "success" if result else "error", "message": "已启动被动接收模式" if result else "被动接收模式已在运行"})
     
     elif action == "stop_push":
         result = detection_manager.stop_push()
-        socketio.emit('system_update', {'push_running': not result})
+
         return jsonify({"status": "success" if result else "error", "message": "已停止被动接收模式" if result else "被动接收模式未在运行"})
     
     elif action == "start_pull":
         result = detection_manager.start_pull()
-        socketio.emit('system_update', {'pull_running': result})
+
         return jsonify({"status": "success" if result else "error", "message": "已启动主动拉取模式" if result else "主动拉取模式已在运行"})
     
     elif action == "stop_pull":
         result = detection_manager.stop_pull()
-        socketio.emit('system_update', {'pull_running': not result})
+
         return jsonify({"status": "success" if result else "error", "message": "已停止主动拉取模式" if result else "主动拉取模式未在运行"})
     
     else:
         return jsonify({"status": "error", "message": "无效的操作"}), 400
 
-# 新增：切换终端模式API路由
-@app.route('/api/switch_mode', methods=['POST'])
-def switch_terminal_mode():
-    """切换终端操作模式（本地/远程）"""
-    try:
-        data = request.json
-        mode = data.get('mode')
-        server_url = data.get('server_url')
-        terminal_id = data.get('terminal_id')
-        
-        if mode not in ['local', 'remote']:
-            return jsonify({"status": "error", "message": "无效的模式"}), 400
-        
-        if mode == 'remote' and not server_url:
-            return jsonify({"status": "error", "message": "远程模式需要提供服务器URL"}), 400
-            
-        # 更新配置
-        if mode == 'remote':
-            config_manager.set('mode', 'remote')
-            config_manager.set('server_url', server_url)
-            if terminal_id:
-                config_manager.set('terminal_id', terminal_id)
-        else:
-            config_manager.set('mode', 'local')
-            
-        config_manager.save_config()
-        
-        # 通知前端
-        socketio.emit('system_message', {'message': f'已切换到{mode}模式'})
-        socketio.emit('system_update', {'terminal_mode': mode})
-        
-        # 如果切换到远程模式，尝试重新连接WebSocket
-        if mode == 'remote':
-            global ws_client
-            # 断开现有连接
-            if ws_client:
-                asyncio.run(ws_client.close())
-            # 重新初始化WebSocket客户端
-            ws_client = init_websocket_client()
-            # 更新日志管理器的WebSocket客户端
-            log_manager.ws_client = ws_client
-            # 更新检测管理器的WebSocket客户端
-            detection_manager.ws_client = ws_client
-            
-        return jsonify({
-            "status": "success", 
-            "message": f"已切换到{mode}模式",
-            "terminal_mode": mode
-        })
-    except Exception as e:
-        log_manager.error(f"切换模式失败: {str(e)}")
-        return jsonify({"status": "error", "message": f"切换模式失败: {str(e)}"}), 500
 
 # API路由 - 接收图像
 @app.route('/api/push_frame/<int:camera_id>', methods=['POST'])
@@ -729,7 +633,7 @@ def process_received_frame(camera_id, image_data):
         return {'status': 'error', 'message': error_msg}
 
 # 修改API路由 - 系统环境信息
-@app.route('/api/environment')
+@app.route('/api/environment/')
 def get_environment():
     """返回环境信息，帮助前端识别当前运行环境"""
     try:
@@ -767,7 +671,7 @@ def get_environment():
         })
 
 # 新增：添加心跳检查端点
-@app.route('/api/heartbeat')
+@app.route('/api/heartbeat/')
 def heartbeat():
     """心跳检查端点，用于检测服务是否运行"""
     return jsonify({
@@ -830,17 +734,14 @@ if __name__ == "__main__":
     initialize_app()
     
     try:
-        # 使用socketio.run启动Flask应用
         port = config_manager.get('port', 5000)
         debug = config_manager.get('debug', False)
         
         log_manager.info(f"服务启动在端口 {port}")
-        socketio.run(
-            app, 
+        app.run(
             host='0.0.0.0', 
             port=port, 
             debug=debug, 
-            allow_unsafe_werkzeug=True
         )
     finally:
         # 确保程序退出时清理资源

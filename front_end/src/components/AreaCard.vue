@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {ref, onMounted, onBeforeUnmount, defineProps, computed, watch} from 'vue'
-import { nodeService,areaService } from '../services/apiService'
-import apiService from '../services/apiService'
+import { nodeService,areaService } from '../services'
+import apiService from '../services'
 import type {AreaItem, HardwareNode} from '../types'
 import {Star, Timer, Warning} from '@element-plus/icons-vue'
 

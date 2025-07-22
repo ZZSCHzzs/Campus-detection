@@ -19,12 +19,11 @@ class DetectionManager:
     支持两种模式：被动接收(push)和主动拉取(pull)
     """
     
-    def __init__(self, config_manager, camera_manager, log_manager, socketio=None, ws_client=None):
+    def __init__(self, config_manager, camera_manager, log_manager, ws_client=None):
         """初始化检测管理器"""
         self.config_manager = config_manager
         self.camera_manager = camera_manager
         self.log_manager = log_manager
-        self.socketio = socketio
         self.ws_client = ws_client
         
         # 线程控制
@@ -99,10 +98,7 @@ class DetectionManager:
         def load_model_thread():
             try:
                 self._load_model()
-                # 使用Socket.IO发送状态更新
-                if self.socketio:
-                    self.socketio.emit('system_update', {'model_loaded': True})
-                    
+                   
             except Exception as e:
                 error_msg = f"加载模型失败: {str(e)}"
                 # 使用同步日志记录方法，避免异步问题
@@ -111,8 +107,6 @@ class DetectionManager:
                 else:
                     self.log_manager.error(error_msg)
                     
-                if self.socketio:
-                    self.socketio.emit('system_error', {'message': error_msg})
             finally:
                 self.model_loading = False
         
@@ -140,11 +134,7 @@ class DetectionManager:
                 self.system_status['model_loaded'] = True
             
             self.log_manager.info("YOLO模型加载完成")
-            
-            # 通知前端模型已加载
-            if self.socketio:
-                self.socketio.emit('system_update', {'model_loaded': True})
-            
+                      
             return True
         except Exception as e:
             error_msg = f"加载模型失败: {str(e)}"
@@ -156,11 +146,7 @@ class DetectionManager:
             
             with self.status_lock:
                 self.system_status['model_loaded'] = False
-            
-            # 通知前端模型加载失败
-            if self.socketio:
-                self.socketio.emit('system_error', {'message': error_msg})
-            
+                    
             return False
     
     def start_push(self):
@@ -175,11 +161,7 @@ class DetectionManager:
             self.system_status["push_running"] = True
         
         self.log_manager.info("已启动被动接收模式")
-        
-        if self.socketio:
-            self.socketio.emit('system_message', {'message': '已启动被动接收模式'})
-            self.socketio.emit('system_update', {'push_running': True})
-        
+            
         return True
     
     def stop_push(self):
@@ -198,11 +180,7 @@ class DetectionManager:
             self.system_status["push_running"] = False
         
         self.log_manager.info("已停止被动接收模式")
-        
-        if self.socketio:
-            self.socketio.emit('system_message', {'message': '已停止被动接收模式'})
-            self.socketio.emit('system_update', {'push_running': False})
-        
+         
         return True
     
     def start_pull(self):
@@ -224,10 +202,6 @@ class DetectionManager:
             self.system_status["pull_running"] = True
         
         self.log_manager.info("已启动主动拉取模式")
-        
-        if self.socketio:
-            self.socketio.emit('system_message', {'message': '已启动主动拉取模式'})
-            self.socketio.emit('system_update', {'pull_running': True})
         
         return True
     
@@ -261,10 +235,6 @@ class DetectionManager:
             
             self.log_manager.info("已停止主动拉取模式")
             
-            if self.socketio:
-                self.socketio.emit('system_message', {'message': '已停止主动拉取模式'})
-                self.socketio.emit('system_update', {'pull_running': False})
-            
             return True
         except Exception as e:
             self.log_manager.error(f"停止主动拉取模式时出错: {str(e)}")
@@ -272,10 +242,6 @@ class DetectionManager:
             self.pull_running = False
             with self.status_lock:
                 self.system_status["pull_running"] = False
-            
-            if self.socketio:
-                self.socketio.emit('system_error', {'message': f'停止主动拉取模式时出错: {str(e)}'})
-                self.socketio.emit('system_update', {'pull_running': False})
             
             return False
     
@@ -307,14 +273,6 @@ class DetectionManager:
         with self.status_lock:
             self.system_status["mode"] = new_mode
         
-        # 如果有socketio，通知前端模式变更
-        if self.socketio:
-            self.socketio.emit('system_update', {
-                'mode': new_mode,
-                'push_running': self.push_running,
-                'pull_running': self.pull_running
-            })
-        
         return True
     
     def update_interval(self, new_interval):
@@ -333,9 +291,6 @@ class DetectionManager:
             self.stop_pull()
             self.start_pull()
             self.log_manager.info("已重启拉取服务以应用新间隔")
-        
-        if self.socketio:
-            self.socketio.emit('system_message', {'message': f'拉取间隔已更新为{new_interval}秒'})
         
         return True
     
@@ -361,11 +316,6 @@ class DetectionManager:
                         self.system_status["cpu_usage"] = cpu_usage
                         self.system_status["memory_usage"] = memory_usage
                     
-                    if self.socketio:
-                        self.socketio.emit('system_resources', {
-                            'cpu': cpu_usage, 
-                            'memory': memory_usage
-                        })
                     
                     # 收集多个摄像头的图像
                     cameras = self.camera_manager.get_cameras()
@@ -377,9 +327,6 @@ class DetectionManager:
                             if image is not None:
                                 self.camera_manager.update_camera_status(camera_id, '在线')
                                 
-                                if self.socketio:
-                                    self.socketio.emit('camera_status', {'id': camera_id, 'status': '在线'})
-                                
                                 # 如果配置为保存图像，则保存图像
                                 if self.config_manager.get('save_image', True):
                                     self.camera_manager.save_image(image, camera_id)
@@ -388,17 +335,12 @@ class DetectionManager:
                             else:
                                 self.camera_manager.update_camera_status(camera_id, '离线', "捕获图像失败")
                                 
-                                if self.socketio:
-                                    self.socketio.emit('camera_status', {'id': camera_id, 'status': '离线', 'error': "捕获图像失败"})
                         except Exception as e:
                             error_msg = f"摄像头 {camera_id} 捕获失败: {str(e)}"
                             self.log_manager.error(error_msg)
                             
                             self.camera_manager.update_camera_status(camera_id, '离线', str(e))
-                            
-                            if self.socketio:
-                                self.socketio.emit('camera_status', {'id': camera_id, 'status': '离线', 'error': str(e)})
-                    
+                                                
                     if images_to_process:
                         try:
                             # 批量分析图像
@@ -411,18 +353,13 @@ class DetectionManager:
                         except Exception as e:
                             error_msg = f"批量处理失败: {str(e)}"
                             self.log_manager.error(error_msg)
-                            
-                            if self.socketio:
-                                self.socketio.emit('system_error', {'message': error_msg})
-                
+                                            
                 except Exception as e:
                     self.error_count += 1
                     error_msg = f"拉取模式循环异常 ({self.error_count}/{self.max_errors}): {str(e)}"
                     self.log_manager.error(error_msg)
                     
-                    if self.socketio:
-                        self.socketio.emit('system_error', {'message': f'拉取模式异常: {str(e)}'})
-                    
+                   
                     # 如果错误次数过多，退出循环
                     if self.error_count >= self.max_errors:
                         self.log_manager.error("错误次数过多，停止检测线程")
@@ -467,10 +404,7 @@ class DetectionManager:
                 with self.status_lock:
                     self.system_status["pull_running"] = False
                 
-                if self.socketio:
-                    self.socketio.emit('system_update', {'pull_running': False})
-                    self.socketio.emit('system_error', {'message': '拉取模式异常退出，请检查日志'})
-    
+  
     def analyze_image(self, image, camera_id):
         """分析单个图像"""
         # 确保模型已加载
@@ -599,8 +533,6 @@ class DetectionManager:
                 
                 self.camera_manager.update_camera_status(camera_id, '错误', response.text)
                 
-                if self.socketio:
-                    self.socketio.emit('camera_status', {'id': camera_id, 'status': '错误', 'error': response.text})
             else:
                 self.camera_manager.update_camera_status(camera_id, '在线')
                 self.camera_manager.update_detection_count(camera_id, detected_count)
@@ -620,16 +552,6 @@ class DetectionManager:
                             "count": detected_count,
                             "time": camera_status[camera_id]['last_capture']
                         }
-                
-                if self.socketio:
-                    camera_status = self.camera_manager.get_camera_status()
-                    last_update = camera_status[camera_id]['last_capture'] if camera_id in camera_status else "未知"
-                    
-                    self.socketio.emit('detection_result', {
-                        'camera_id': camera_id, 
-                        'count': detected_count,
-                        'time': last_update
-                    })
             
             return True
         except Exception as e:
@@ -637,10 +559,7 @@ class DetectionManager:
             self.log_manager.error(error_msg, f"摄像头 {camera_id}")
             
             self.camera_manager.update_camera_status(camera_id, '离线', str(e))
-            
-            if self.socketio:
-                self.socketio.emit('camera_status', {'id': camera_id, 'status': '离线', 'error': str(e)})
-            
+              
             return False
     
     def reset_daily_stats(self):
@@ -670,10 +589,7 @@ class DetectionManager:
             else:
                 self.detection_stats['avg_count'] = 0
         
-        # 发送统计更新
-        if self.socketio:
-            self.socketio.emit('stats_update', self.detection_stats)
-    
+
     def get_detection_stats(self):
         """获取检测统计数据"""
         self.reset_daily_stats()
@@ -759,13 +675,3 @@ class DetectionManager:
                 self.log_manager.info("开始加载模型...")
                 self.load_model_async()
         
-        # 4. 如果有其他重要配置变更，可以在这里添加处理逻辑
-        
-        # 更新前端界面
-        if self.socketio:
-            self.socketio.emit('system_update', {
-                'mode': new_config.get('mode', self.system_status["mode"]),
-                'push_running': self.push_running,
-                'pull_running': self.pull_running,
-                'config_updated': True
-            })

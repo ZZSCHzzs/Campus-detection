@@ -61,7 +61,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { buildingService, areaService, nodeService } from '../../services/apiService'
+import { buildingService, areaService, nodeService } from '../../services'
 import Jump from "./Jump.vue";
 
 const columns = [

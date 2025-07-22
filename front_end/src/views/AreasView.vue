@@ -3,8 +3,8 @@ import {ref, onMounted, onBeforeUnmount, computed, watch} from 'vue'
 import {ElMessage} from 'element-plus'
 import {Search, HomeFilled, OfficeBuilding, Grid, List} from '@element-plus/icons-vue'
 import type {AreaItem, Building} from '../types'
-import {buildingService} from '../services/apiService'
-import apiService from '../services/apiService'
+import {buildingService} from '../services'
+import apiService from '../services'
 import AreaCard from '../components/AreaCard.vue'
 
 const buildings = ref<Building[]>([])

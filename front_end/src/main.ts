@@ -4,7 +4,7 @@ import App from './App.vue'
 import router from './router'
 import ElementPlusPlugin from './plugins/element-plus'
 import { useAuthStore } from './stores/auth'
-import { initializeApiService } from './services/apiService'
+import { initializeApi } from './services'
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
@@ -19,7 +19,7 @@ if (authStore.isAuthenticated) {
   })
 }
 
-initializeApiService().then(success => {
+initializeApi().then(success => {
   console.log('API服务初始化:', success ? '成功' : '失败')
 })
 

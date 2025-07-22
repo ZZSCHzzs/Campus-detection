@@ -155,7 +155,7 @@ export interface LogEntry {
  * 环境信息接口
  */
 export interface EnvironmentInfo {
-  type: 'detector' | 'server';  // 环境类型
+  type: 'detector' | 'server' | 'unknown';  // 环境类型
   version: string;              // 版本
   name: string;                 // 环境名称
   id: number;                   // 环境ID

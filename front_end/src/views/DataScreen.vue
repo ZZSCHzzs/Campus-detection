@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch } from 'vue'
 import * as echarts from 'echarts'
-import { areaService, alertService, noticeService, summaryService, nodeService } from '../services/apiService'
+import { areaService, alertService, noticeService, summaryService, nodeService } from '../services'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
 import AreaHistoryChart from '../components/AreaHistoryChart.vue'

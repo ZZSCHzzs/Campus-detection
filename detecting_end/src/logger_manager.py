@@ -51,12 +51,11 @@ class ColoredFormatter(logging.Formatter):
 class LogManager:
     """日志管理器，负责记录和管理系统日志"""
     
-    def __init__(self, log_dir='logs', max_memory_logs=1000, socketio=None, ws_client=None):
+    def __init__(self, log_dir='logs', max_memory_logs=1000, ws_client=None):
         """初始化日志管理器"""
         self.log_dir = log_dir
         self.max_memory_logs = max_memory_logs
         self.memory_logs = []
-        self.socketio = socketio
         self.ws_client = ws_client
         self.lock = threading.Lock()
         
@@ -129,9 +128,6 @@ class LogManager:
         elif level == 'detection':
             logger.info(f"[Detection] {message}")
         
-        # 通过SocketIO发送日志
-        if self.socketio:
-            self.socketio.emit('new_log', log_entry)
         
         # 如果WebSocket客户端可用且已连接，通过WebSocket发送日志
         if self.ws_client and hasattr(self.ws_client, 'is_connected') and self.ws_client.is_connected():
@@ -262,15 +258,6 @@ class LogManager:
                 self.logger.warning(f"[{source or 'system'}] {message}")
             elif level == 'debug':
                 self.logger.debug(f"[{source or 'system'}] {message}")
-            
-            # 如果Socket.IO可用，发送日志消息
-            try:
-                if self.socketio:
-                    self.socketio.emit('new_log', log_entry)
-            except Exception as e:
-                self.logger.error(f"通过Socket.IO发送日志失败: {str(e)}")
-            
-            # 注意：我们不尝试通过WebSocket发送日志，因为那需要异步操作
             
         except Exception as e:
             # 如果记录日志失败，至少尝试使用系统日志记录这个错误

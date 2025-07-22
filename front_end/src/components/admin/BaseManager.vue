@@ -165,7 +165,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Search, Refresh } from '@element-plus/icons-vue'
-import apiService from '../../services/apiService'
+import apiService from '../../services'
 
 const props = defineProps({
   title: {
@@ -273,10 +273,10 @@ const handleSearchClear = () => {
 }
 
 onMounted(() => {
-
   if (props.resourceName) {
-    apiService.setResourceCacheOptions(props.resourceName, { duration: props.cacheDuration })
-    console.log(`已为资源 ${props.resourceName} 设置缓存时间: ${props.cacheDuration}ms`)
+    // 使用新的资源类型特定缓存时间设置方法
+    apiService.setResourceCacheDuration(props.resourceName, props.cacheDuration);
+    console.log(`已为资源 ${props.resourceName} 设置缓存时间: ${props.cacheDuration}ms`);
   }
   
   fetchData()

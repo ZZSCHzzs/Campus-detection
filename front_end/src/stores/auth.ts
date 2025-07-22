@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import authApi from '../services/authApi'
+import AuthService from '../services/AuthService'
 import { ref, computed, watch } from 'vue'
 import type { User } from '../types'
 
@@ -84,7 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
       isLoading.value = true
       console.log('[AUTH-STORE] 刷新token...')
       
-      const response = await authApi.refreshToken(refreshToken.value)
+      const response = await AuthService.refreshToken(refreshToken.value)
       if (response.data?.access) {
         const newToken = response.data.access
         accessToken.value = newToken
@@ -114,7 +114,7 @@ export const useAuthStore = defineStore('auth', () => {
       isLoading.value = true
       console.log('[AUTH-STORE] 验证token...')
       
-      await authApi.verifyToken(accessToken.value)
+      await AuthService.verifyToken(accessToken.value)
       console.log('[AUTH-STORE] Token有效')
       return true
     } catch (error) {
@@ -145,10 +145,10 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem('access', accessToken.value)
       }
       
-      const response = await authApi.getUserInfo()
-      if (response.data) {
-        setUser(response.data)
-        return response.data
+      const data = await AuthService.getUserInfo()
+      if (data) {
+        setUser(data)
+        return data
       }
       
       return null

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
-import { nodeService } from '../services/apiService'
+import { nodeService } from '../services'
 import type { HardwareNode } from '../types'
 
 const props = defineProps<{

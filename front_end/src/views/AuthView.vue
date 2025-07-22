@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Lock, User, Message } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
-import authApi from '../services/authApi'
+import AuthService from '../services/AuthService'
 import CryptoJS from 'crypto-js' 
 import { useAuthStore } from '../stores/auth'
 
@@ -98,38 +98,6 @@ const encryptPassword = (password: string): string => {
     return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex)
 }
 
-const refreshToken = async () => {
-    try {
-        const refresh = localStorage.getItem('refresh')
-        if (!refresh) return null
-
-        const response = await authApi.refreshToken({
-            refresh
-        })
-
-        const { access } = response.data
-        localStorage.setItem('access', access)
-        return access
-    } catch (error) {
-        console.error('刷新Token失败:', error)
-        return null
-    }
-}
-
-const verifyToken = async () => {
-    try {
-        const token = localStorage.getItem('access')
-        if (!token) return false
-
-        await authApi.verifyToken({
-            token
-        })
-        return true
-    } catch (error) {
-        console.error('Token验证失败:', error)
-        return false
-    }
-}
 
 const handleLogin = async () => {
     if (!loginFormRef.value) return
@@ -141,12 +109,12 @@ const handleLogin = async () => {
                 const encryptedPassword = encryptPassword(loginForm.value.password)
 
                 console.log('尝试登录...')
-                const response = await authApi.login(
+                const response = await AuthService.login(
                     loginForm.value.username, 
                     encryptedPassword
                 )
 
-                const { access, refresh } = response.data
+                const { access, refresh } = response
                 
                 console.log('登录成功，设置token')
                 
@@ -166,7 +134,7 @@ const handleLogin = async () => {
                 try {
                     console.log('获取用户信息中...')
                     
-                    const userInfo = await authApi.getUserInfo()
+                    const userInfo = await AuthService.getUserInfo()
                     
                     if (userInfo) {
                         console.log('用户信息获取成功:', userInfo)
@@ -240,7 +208,7 @@ const handleRegister = async () => {
                 
                 const encryptedPassword = encryptPassword(registerForm.value.password)
 
-                await authApi.register({
+                await AuthService.register({
                     username: registerForm.value.username,
                     password: encryptedPassword,
                     email: registerForm.value.email

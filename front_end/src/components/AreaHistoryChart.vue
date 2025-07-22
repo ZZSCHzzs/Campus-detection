@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, reactive } from 'vue'
 import * as echarts from 'echarts'
-import { historicalService, areaService } from '../services/apiService'
+import { historicalService, areaService } from '../services'
 import type { HistoricalData, AreaItem } from '../types'
 
 const props = defineProps({

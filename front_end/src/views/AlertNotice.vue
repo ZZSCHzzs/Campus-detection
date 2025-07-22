@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, onBeforeMount } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { areaService, alertService, noticeService } from '../services/apiService'
-import apiService from '../services/apiService'
+import { areaService, alertService, noticeService } from '../services'
+import apiService from '../services'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Warning, Document, Plus, Check, Search, Refresh, View, Clock, Grid, List } from '@element-plus/icons-vue'
+import { Bell, Warning, Document, Plus, Check, Search, Refresh, View, Clock, Grid, List, Location, User } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Alert, Notice, AreaItem } from '../types'
 
@@ -260,8 +260,8 @@ const handleTabChange = (tab: string) => {
 
 onMounted(async () => {
   const tabParam = route.query.tab as string
-  apiService.setResourceCacheOptions('alerts', { duration: 30000 });
-  apiService.setResourceCacheOptions('notice', { duration: 30000 });
+  apiService.setCacheDuration('alerts', 30000);
+  apiService.setCacheDuration('notice', 30000);
   if (tabParam && ['alerts', 'notices'].includes(tabParam)) {
     activeTab.value = tabParam
   }
@@ -419,7 +419,6 @@ const drawerSize = ref('70%')
 
 <template>
   <div class="alert-notice-container">
-
     <div class="page-header">
       <div class="title-section">
         <h2 class="page-title">
@@ -444,7 +443,7 @@ const drawerSize = ref('70%')
 
     <div class="main-content">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="custom-tabs">
-
+        <!-- 告警信息标签页 -->
         <el-tab-pane name="alerts" lazy>
           <template #label>
             <div class="tab-label">
@@ -483,6 +482,7 @@ const drawerSize = ref('70%')
             </div>
           </div>
 
+          <!-- 表格视图 -->
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedAlerts"
@@ -493,6 +493,7 @@ const drawerSize = ref('70%')
               :row-class-name="() => 'hover-effect-row'"
               :header-cell-class-name="'custom-table-header'"
               highlight-current-row
+              @row-click="showAlertDetail"
             >
               <el-table-column prop="id" label="ID" width="80" align="center" />
               <el-table-column label="级别" width="100" align="center">
@@ -531,7 +532,7 @@ const drawerSize = ref('70%')
               <el-table-column label="时间" width="180">
                 <template #default="scope">
                   <div class="time-cell">
-                    <el-icon><clock /></el-icon>
+                    <el-icon><Clock /></el-icon>
                     <span class="timestamp">{{ formatDate(scope.row.timestamp) }}</span>
                   </div>
                 </template>
@@ -555,7 +556,7 @@ const drawerSize = ref('70%')
                       :icon="View" 
                       circle 
                       size="small"
-                      @click="showAlertDetail(scope.row)"
+                      @click.stop="showAlertDetail(scope.row)"
                       title="查看详情"
                       class="action-button view-button"
                     />
@@ -565,7 +566,7 @@ const drawerSize = ref('70%')
                       :icon="Check" 
                       circle 
                       size="small"
-                      @click="solveAlert(scope.row.id)"
+                      @click.stop="solveAlert(scope.row.id)"
                       title="标记为已解决"
                       class="action-button solve-button"
                     />
@@ -579,6 +580,7 @@ const drawerSize = ref('70%')
             </div>
           </div>
 
+          <!-- 卡片视图 -->
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="alertsLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -624,7 +626,7 @@ const drawerSize = ref('70%')
                 <div class="card-footer">
                   <div class="card-footer-left">
                     <div class="card-area">
-                      <i class="el-icon-location"></i>
+                      <el-icon><Location /></el-icon>
                       {{ alert.area_name || '未指定区域' }}
                     </div>
                     <div class="card-time">
@@ -640,7 +642,7 @@ const drawerSize = ref('70%')
                       @click.stop="solveAlert(alert.id)"
                       class="solve-button-compact"
                     >
-                      解决
+                      <el-icon><Check /></el-icon>解决
                     </el-button>
                   </div>
                 </div>
@@ -660,6 +662,7 @@ const drawerSize = ref('70%')
           </div>
         </el-tab-pane>
         
+        <!-- 通知公告标签页 -->
         <el-tab-pane name="notices" lazy>
           <template #label>
             <div class="tab-label">
@@ -673,10 +676,10 @@ const drawerSize = ref('70%')
               <el-button 
                 v-if="isStaffOrAdmin"
                 type="primary" 
-                :icon="Plus"
+                class="action-button publish-button"
                 @click="noticeDialogVisible = true"
-                class="action-button"
               >
+                <el-icon><Plus /></el-icon>
                 发布通知
               </el-button>
             </div>
@@ -694,6 +697,7 @@ const drawerSize = ref('70%')
             </div>
           </div>
 
+          <!-- 表格视图 -->
           <div v-if="actualViewMode === 'table'" class="table-container">
             <el-table
               :data="paginatedNotices"
@@ -704,6 +708,7 @@ const drawerSize = ref('70%')
               :row-class-name="() => 'hover-effect-row'"
               :header-cell-class-name="'custom-table-header'"
               highlight-current-row
+              @row-click="showNoticeDetail"
             >
               <el-table-column prop="id" label="ID" width="80" align="center" />
               <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip>
@@ -720,13 +725,16 @@ const drawerSize = ref('70%')
                 <template #default="scope">
                   <div v-if="scope.row.related_areas && scope.row.related_areas.length" class="area-tags">
                     <el-tag 
-                      v-for="areaId in scope.row.related_areas" 
+                      v-for="areaId in scope.row.related_areas.slice(0, 2)" 
                       :key="areaId"
                       size="small" 
                       effect="plain"
                       class="card-tag area-tag"
                     >
                       {{ getAreaName(areaId) }}
+                    </el-tag>
+                    <el-tag v-if="scope.row.related_areas.length > 2" size="small" type="info" effect="plain">
+                      +{{ scope.row.related_areas.length - 2 }}
                     </el-tag>
                   </div>
                   <span v-else class="no-area">全校范围</span>
@@ -748,7 +756,7 @@ const drawerSize = ref('70%')
                     :icon="View" 
                     circle 
                     size="small"
-                    @click="showNoticeDetail(scope.row)"
+                    @click.stop="showNoticeDetail(scope.row)"
                     title="查看详情"
                     class="action-button view-button"
                   />
@@ -761,6 +769,7 @@ const drawerSize = ref('70%')
             </div>
           </div>
 
+          <!-- 卡片视图 -->
           <div v-if="actualViewMode === 'card'" class="cards-container">
             <div v-if="noticesLoading" class="cards-loading">
               <el-skeleton :rows="3" animated />
@@ -778,7 +787,6 @@ const drawerSize = ref('70%')
               >
                 <div class="card-header">
                   <h3 class="notice-card-title">{{ notice.title }}</h3>
-                
                 </div>
                 
                 <div class="card-content notice-content">
@@ -788,6 +796,7 @@ const drawerSize = ref('70%')
                 <div class="card-footer">
                   <div class="card-footer-left">
                     <div class="card-area">
+                      <el-icon><Location /></el-icon>
                       <template v-if="notice.related_areas && notice.related_areas.length">
                         <el-tag 
                           v-for="areaId in notice.related_areas.slice(0, 1)" 
@@ -809,6 +818,10 @@ const drawerSize = ref('70%')
                       {{ formatDate(notice.timestamp).split(' ').join(' ') }}
                     </div>
                   </div>
+                  <div class="publisher" v-if="notice.publisher_name">
+                    <el-icon><User /></el-icon>
+                    {{ notice.publisher_name }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -828,6 +841,7 @@ const drawerSize = ref('70%')
       </el-tabs>
     </div>
 
+    <!-- 发布通知对话框 -->
     <el-dialog
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -852,6 +866,8 @@ const drawerSize = ref('70%')
           <el-select
             v-model="noticeForm.related_areas"
             multiple
+            collapse-tags
+            collapse-tags-tooltip
             placeholder="选择关联区域（可多选，不选则为全校通知）"
             style="width: 100%"
           >
@@ -874,6 +890,7 @@ const drawerSize = ref('70%')
       </template>
     </el-dialog>
 
+    <!-- 移动端抽屉 -->
     <el-drawer
       v-model="noticeDialogVisible"
       title="发布新通知"
@@ -900,6 +917,7 @@ const drawerSize = ref('70%')
             <el-select
               v-model="noticeForm.related_areas"
               multiple
+              collapse-tags
               placeholder="选择关联区域（可多选，不选则为全校通知）"
               style="width: 100%"
             >
@@ -921,6 +939,7 @@ const drawerSize = ref('70%')
       </div>
     </el-drawer>
 
+    <!-- 告警详情对话框 -->
     <el-dialog
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1009,6 +1028,7 @@ const drawerSize = ref('70%')
       </div>
     </el-dialog>
 
+    <!-- 移动端告警详情抽屉 -->
     <el-drawer
       v-model="alertDetailVisible"
       title="告警详情"
@@ -1097,6 +1117,7 @@ const drawerSize = ref('70%')
       </div>
     </el-drawer>
 
+    <!-- 通知详情对话框 -->
     <el-dialog
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1121,6 +1142,11 @@ const drawerSize = ref('70%')
           <div class="info-item">
             <div class="info-label">发布时间</div>
             <div class="info-value timestamp-value">{{ formatDate(currentNoticeDetail.timestamp) }}</div>
+          </div>
+          
+          <div class="info-item">
+            <div class="info-label">发布者</div>
+            <div class="info-value">{{ currentNoticeDetail.publisher_name || '系统' }}</div>
           </div>
           
           <div class="info-item">
@@ -1150,6 +1176,7 @@ const drawerSize = ref('70%')
       </div>
     </el-dialog>
 
+    <!-- 移动端通知详情抽屉 -->
     <el-drawer
       v-model="noticeDetailVisible"
       title="通知详情"
@@ -1173,6 +1200,11 @@ const drawerSize = ref('70%')
           <div class="compact-info-item">
             <span class="compact-info-label">时间:</span>
             <span class="compact-info-value timestamp-value">{{ formatDate(currentNoticeDetail.timestamp) }}</span>
+          </div>
+          
+          <div class="compact-info-item">
+            <span class="compact-info-label">发布者:</span>
+            <span class="compact-info-value">{{ currentNoticeDetail.publisher_name || '系统' }}</span>
           </div>
           
           <div class="compact-info-item">
@@ -1205,108 +1237,167 @@ const drawerSize = ref('70%')
 </template>
 
 <style scoped>
-
 .alert-notice-container {
   max-width: 1400px;
   margin: 20px auto;
   padding: 0 20px;
+  background: #f8f9fb;
+  min-height: calc(100vh - 40px);
+  border-radius: 16px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px 24px;
-  background-color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
+  margin-bottom: 24px;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(26, 58, 145, 0.15);
+  border: none;
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.page-header::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 60%);
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 .title-section {
   display: flex;
   align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .page-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #333;
+  gap: 14px;
+  color: white;
   font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header-icon {
-  font-size: 24px;
-  color: #409EFF;
+  font-size: 28px;
+  color: #ffd54f;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .header-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .view-mode-button {
-  background-color: #f4f6fa;
-  border-color: #ebeef5;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: transparent;
+  color: white;
+  transition: all 0.3s;
+}
+
+.view-mode-button:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
 }
 
 .main-content {
   background-color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
-  padding: 24px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  padding: 24px 28px;
   min-height: 600px;
+  border: 1px solid #e6e9ed;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-content::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  z-index: 1;
 }
 
 .custom-tabs :deep(.el-tabs__header) {
-  margin-bottom: 20px;
+  margin-bottom: 25px;
   border-bottom: 1px solid #e8eaec;
+  position: relative;
 }
 
 .custom-tabs :deep(.el-tabs__nav-wrap::after) {
   background-color: transparent;
 }
 
+.custom-tabs :deep(.el-tabs__active-bar) {
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  height: 3px;
+  border-radius: 3px;
+}
+
 .custom-tabs :deep(.el-tabs__nav) {
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .custom-tabs :deep(.el-tabs__item) {
   font-size: 16px;
-  height: 50px;
-  line-height: 50px;
+  height: 54px;
+  line-height: 54px;
   transition: all 0.3s;
-  padding: 0 20px;
+  padding: 0 25px;
+  color: #606266;
 }
 
 .custom-tabs :deep(.el-tabs__item.is-active) {
   font-weight: 600;
-  color: #409EFF;
+  color: #4facfe;
+}
+
+.custom-tabs :deep(.el-tabs__item:hover) {
+  color: #4facfe;
 }
 
 .tab-label {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 16px;
 }
 
 .filter-bar {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   align-items: center;
-  background-color: #f8f9fa;
-  padding: 15px 20px;
-  border-radius: 8px;
+  background: linear-gradient(to right, #f0f5ff, #eef7fe);
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 1px solid #e1eaff;
+  box-shadow: 0 4px 12px rgba(100, 150, 255, 0.05);
 }
 
 .left-section, .right-section {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1314,31 +1405,67 @@ const drawerSize = ref('70%')
   width: 160px;
 }
 
+.filter-select :deep(.el-input__inner) {
+  border-radius: 8px;
+  border: 1px solid #c0d8ff;
+}
+
 .search-input {
-  width: 280px;
+  width: 300px;
+}
+
+.search-input :deep(.el-input__inner) {
+  border-radius: 8px;
+  border: 1px solid #c0d8ff;
+  padding-left: 40px;
+  background-color: rgba(255, 255, 255, 0.8);
+  transition: all 0.3s;
+}
+
+.search-input :deep(.el-input__inner:focus) {
+  border-color: #4facfe;
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
+  background-color: white;
+}
+
+.search-input :deep(.el-input__prefix) {
+  left: 12px;
+  color: #4facfe;
 }
 
 .table-container {
   background-color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   min-height: 350px;
+  border: 1px solid #ebeef5;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.table-container:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .data-table {
   width: 100%;
 }
 
-.custom-table-header {
-  background-color: #f4f6fa !important;
-  color: #606266;
+.data-table :deep(th.el-table__cell) {
+  background: linear-gradient(to right, #f4f7fc, #e9f0fd) !important;
+  color: #334466;
   font-weight: 600;
+  padding: 14px 0;
+  border-bottom: 2px solid #e0e9ff;
+}
+
+.data-table :deep(.el-table__row) {
+  transition: all 0.2s ease;
 }
 
 .hover-effect-row {
-  transition: all 0.2s ease;
   cursor: pointer;
 }
 
@@ -1352,39 +1479,42 @@ const drawerSize = ref('70%')
   font-size: 14px;
   color: #303133;
   line-height: 1.6;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .notice-title-cell {
   font-weight: 600;
+  color: #4168b4;
 }
 
 .time-cell {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: #909399;
+  gap: 6px;
+  color: #7a8baa;
 }
 
 .timestamp {
-  color: #909399;
+  color: #7a8baa;
   font-size: 13px;
 }
 
 .alert-type {
-  padding: 4px 8px;
-  background-color: #f0f9ff;
-  color: #409EFF;
-  border-radius: 15px;
+  padding: 5px 10px;
+  background: linear-gradient(135deg, #e0f2ff, #d4eeff);
+  color: #0077cc;
+  border-radius: 20px;
   font-weight: 600;
   display: inline-block;
+  box-shadow: 0 2px 4px rgba(0, 119, 204, 0.1);
 }
 
 .card-tag {
   margin: 2px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 12px;
   font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .level-tag {
@@ -1393,17 +1523,17 @@ const drawerSize = ref('70%')
 }
 
 .status-tag {
-  padding: 4px 10px;
+  padding: 4px 12px;
 }
 
 .area-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
 }
 
 .area-tag {
-  background-color: #f0f7ff;
+  background: linear-gradient(135deg, #f0f7ff, #e6f2ff);
   color: #4b83d2;
   border-color: #d3e5fc;
 }
@@ -1412,109 +1542,184 @@ const drawerSize = ref('70%')
   color: #909399;
   font-style: italic;
   font-size: 13px;
+  opacity: 0.8;
 }
 
 .loading-area {
-  color: #909399;
+  color: #7a8baa;
   font-style: italic;
   font-size: 13px;
   display: inline-block;
   padding: 2px 0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }
 
 .action-buttons {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .action-button {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
 }
 
 .action-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-3px) rotate(5deg);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
 }
 
 .view-button {
-  background-color: #ecf5ff;
-  border-color: #d9ecff;
-  color: #409EFF;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  border-color: transparent;
+  color: white;
 }
 
 .solve-button {
-  background-color: #f0f9eb;
-  border-color: #e1f3d8;
-  color: #67C23A;
+  background: linear-gradient(135deg, #67ce8e, #13c276);
+  border-color: transparent;
+  color: white;
+}
+
+.publish-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 10px rgba(79, 172, 254, 0.3);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.publish-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 15px rgba(79, 172, 254, 0.4);
 }
 
 .cards-container {
-  padding: 5px 0;
+  padding: 8px 0;
   min-height: 350px;
 }
 
 .alert-cards, .notice-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+  padding: 6px;
 }
 
 .alert-card, .notice-card {
   background: white;
-  border-radius: 6px;
-  padding: 12px;
-  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  border-left: 3px solid #e0e0e0;
+  border-left: 5px solid #e0e0e0;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
+.alert-card::before, .notice-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  z-index: 1;
+}
+
 .alert-card:hover, .notice-card:hover {
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+  transform: translateY(-8px);
 }
 
 .alert-card[data-grade="3"] {
   border-left-color: #F56C6C;
+  background: linear-gradient(to bottom right, #fff, #fff5f5);
+}
+
+.alert-card[data-grade="3"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 40px 40px 0;
+  border-color: transparent #ff9999 transparent transparent;
+  z-index: 1;
 }
 
 .alert-card[data-grade="2"] {
   border-left-color: #E6A23C;
+  background: linear-gradient(to bottom right, #fff, #fffbf5);
 }
 
 .alert-card[data-grade="1"] {
   border-left-color: #67C23A;
+  background: linear-gradient(to bottom right, #fff, #f7fcf5);
 }
 
 .alert-card[data-grade="0"] {
   border-left-color: #909399;
+  background: linear-gradient(to bottom right, #fff, #f9fafc);
+}
+
+.notice-card {
+  border-left-color: #4facfe;
+  background: linear-gradient(to bottom right, #fff, #f5faff);
+}
+
+.notice-card::after {
+  content: "";
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(79, 172, 254, 0.1) 0%, rgba(79, 172, 254, 0) 70%);
+  border-radius: 50%;
+  z-index: 0;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
 }
 
 .card-header-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .card-id {
-  font-weight: 600;
-  color: #606266;
-  font-size: 13px;
+  font-weight: 700;
+  color: #5a6a8a;
+  font-size: 14px;
+  background: rgba(90, 106, 138, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .card-publisher {
@@ -1523,59 +1728,57 @@ const drawerSize = ref('70%')
   font-weight: 500;
 }
 
-.card-tag {
-  margin: 0;
-  padding: 0 6px;
-  height: 20px;
-  line-height: 20px;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 11px;
-}
-
-.level-tag {
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.status-tag {
-  padding: 0 8px;
-}
-
 .alert-type-badge {
   font-size: 12px;
   font-weight: 600;
-  color: #409EFF;
-  background-color: #ecf5ff;
-  padding: 0 6px;
-  height: 20px;
-  line-height: 20px;
-  border-radius: 10px;
+  color: white;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  padding: 3px 10px;
+  height: 22px;
+  line-height: 16px;
+  border-radius: 11px;
   display: inline-block;
+  box-shadow: 0 2px 5px rgba(79, 172, 254, 0.3);
 }
 
 .card-content {
-  color: #303133;
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 12px;
+  color: #334466;
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 16px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .notice-card-title {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   margin: 0;
-  color: #303133;
+  color: #2c3e50;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #d8e2ff;
+  position: relative;
+}
+
+.notice-card-title::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, #4facfe, #00f2fe);
+  border-radius: 3px;
 }
 
 .card-footer {
@@ -1583,30 +1786,44 @@ const drawerSize = ref('70%')
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: #909399;
-  border-top: 1px dashed #ebeef5;
-  padding-top: 8px;
+  color: #7a8baa;
+  border-top: 1px dashed #d8e2ff;
+  padding-top: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .card-footer-left {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .card-area {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .card-time {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 11px;
-  color: #909399;
+  color: #7a8baa;
+}
+
+.publisher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #5a6a8a;
+  background: linear-gradient(135deg, #f0f5ff, #e9f2ff);
+  padding: 4px 10px;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(90, 106, 138, 0.1);
 }
 
 .card-actions {
@@ -1615,168 +1832,258 @@ const drawerSize = ref('70%')
 }
 
 .solve-button-compact {
-  height: 24px;
-  padding: 0 10px;
-  font-size: 12px;
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #67ce8e, #13c276);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 8px rgba(19, 194, 118, 0.2);
+  transition: all 0.3s;
+}
+
+.solve-button-compact:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(19, 194, 118, 0.3);
 }
 
 .more-areas {
   font-size: 11px;
-  color: #909399;
-  background: #f5f7fa;
-  padding: 0 4px;
+  color: #7a8baa;
+  background: linear-gradient(135deg, #f0f5ff, #e9f2ff);
+  padding: 1px 6px;
   border-radius: 10px;
-}
-
-.area-tag {
-  background-color: #f0f7ff;
-  color: #4b83d2;
-  border-color: #d3e5fc;
 }
 
 .pagination-container {
   display: flex;
   justify-content: center;
-  margin: 20px 0 10px;
+  margin: 28px 0 16px;
+}
+
+.pagination-container :deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 8px rgba(79, 172, 254, 0.3);
+}
+
+.pagination-container :deep(.el-pagination.is-background .el-pager li:not(.is-disabled):hover) {
+  color: #4facfe;
+}
+
+.pagination-container :deep(.btn-prev),
+.pagination-container :deep(.btn-next) {
+  background: white;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+.pagination-container :deep(.btn-prev:hover),
+.pagination-container :deep(.btn-next:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
 }
 
 .empty-placeholder {
-  padding: 40px 0;
+  padding: 60px 0;
   display: flex;
   justify-content: center;
-  background-color: #fafafa;
-  border-radius: 8px;
-  margin: 20px 0;
-  min-height: 200px;
+  background: linear-gradient(to bottom, #fff, #f5faff);
+  border-radius: 14px;
+  margin: 24px 0;
+  min-height: 250px;
+  border: 1px dashed #c0d8ff;
+}
+
+.empty-placeholder :deep(.el-empty__image) {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+}
+
+.empty-placeholder :deep(.el-empty__description) {
+  color: #7a8baa;
 }
 
 .detail-dialog :deep(.el-dialog__header) {
-  background-color: #f4f7fc;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 15px 20px;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  border-bottom: none;
+  padding: 20px 24px;
   margin-right: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .detail-dialog :deep(.el-dialog__title) {
   font-weight: 600;
   font-size: 18px;
-  color: #303133;
+  color: white;
+}
+
+.detail-dialog :deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.detail-dialog :deep(.el-dialog__headerbtn .el-dialog__close:hover) {
+  color: white;
 }
 
 .detail-dialog :deep(.el-dialog__body) {
-  padding: 20px 30px;
+  padding: 24px 30px;
+  position: relative;
+}
+
+.detail-dialog :deep(.el-dialog__body::before) {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(to bottom, rgba(30, 60, 114, 0.05), transparent);
+  pointer-events: none;
 }
 
 .detail-content {
   padding: 0;
+  position: relative;
 }
 
 .detail-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  background: linear-gradient(to right, #f0f5ff, #f5faff);
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .detail-tag {
   font-size: 16px;
-  padding: 6px 12px;
-  border-radius: 15px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .status-detail-tag {
   font-size: 14px;
-  padding: 6px 12px;
-  border-radius: 15px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
 }
 
 .detail-type {
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: #2c3e50;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
-  margin: 20px 0;
+  margin: 24px 0;
 }
 
 .info-item {
-  background-color: #f9fafc;
-  border-radius: 8px;
-  padding: 12px 15px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(to bottom right, #f9fafc, #f5faff);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
   transition: all 0.3s;
+  border: 1px solid #e9f2ff;
 }
 
 .info-item:hover {
-  background-color: #f5f7fa;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  background: linear-gradient(to bottom right, #f5faff, #f0f7ff);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
 }
 
 .info-label {
-  color: #606266;
+  color: #5a6a8a;
   font-size: 14px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
 .info-value {
-  color: #303133;
-  font-size: 15px;
+  color: #334466;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .timestamp-value {
-  color: #606266;
+  color: #5a6a8a;
 }
 
 .area-detail-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 
 .area-detail-tag {
-  background-color: #f0f7ff;
+  background: linear-gradient(135deg, #f0f7ff, #e6f2ff);
   border-color: #d3e5fc;
   color: #4b83d2;
+  box-shadow: 0 2px 5px rgba(75, 131, 210, 0.1);
 }
 
 .message-container {
-  background-color: #f9fafc;
-  border-radius: 8px;
-  padding: 20px;
-  margin: 20px 0;
-  border-left: 4px solid #409EFF;
-  min-height: 100px;
+  background: linear-gradient(to bottom right, #f9fafc, #f5faff);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 24px 0;
+  border-left: 4px solid #4facfe;
+  min-height: 120px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.message-container::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  right: -10px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(79, 172, 254, 0.05) 0%, transparent 70%);
+  border-radius: 50%;
 }
 
 .message-content {
   font-size: 15px;
   line-height: 1.8;
-  color: #303133;
+  color: #334466;
   white-space: pre-wrap;
+  position: relative;
+  z-index: 1;
 }
 
 .notice-detail-header {
   text-align: center;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .notice-detail-title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #2c3e50;
   margin: 0;
-  padding: 10px 0;
+  padding: 14px 0;
   position: relative;
   display: inline-block;
 }
@@ -1788,7 +2095,7 @@ const drawerSize = ref('70%')
   left: 10%;
   right: 10%;
   height: 3px;
-  background-color: #409EFF;
+  background: linear-gradient(90deg, #4facfe, #00f2fe);
   border-radius: 3px;
 }
 
@@ -1799,47 +2106,51 @@ const drawerSize = ref('70%')
 }
 
 .detail-action-button {
-  padding: 10px 20px;
-  font-size: 15px;
-  border-radius: 20px;
+  padding: 12px 28px;
+  font-size: 16px;
+  border-radius: 30px;
   font-weight: 600;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #67ce8e, #13c276);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 6px 15px rgba(19, 194, 118, 0.2);
   transition: all 0.3s;
 }
 
 .detail-action-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(19, 194, 118, 0.3);
 }
 
+/* 移动端样式增强 */
 @media (max-width: 768px) {
   .alert-notice-container {
-    padding: 0 10px;
+    padding: 0 12px;
     margin: 10px auto;
   }
   
   .page-header {
-    padding: 12px 15px;
-    margin-bottom: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
   }
   
   .page-title {
-    font-size: 18px;
-  }
-  
-  .header-icon {
     font-size: 20px;
   }
   
+  .header-icon {
+    font-size: 22px;
+  }
+  
   .main-content {
-    padding: 15px;
-    border-radius: 8px;
+    padding: 16px;
+    border-radius: 10px;
   }
   
   .filter-bar {
     flex-direction: column;
-    gap: 15px;
-    padding: 12px;
+    gap: 16px;
+    padding: 14px;
   }
   
   .left-section, .right-section {
@@ -1852,14 +2163,14 @@ const drawerSize = ref('70%')
   
   .custom-tabs :deep(.el-tabs__item) {
     font-size: 14px;
-    height: 40px;
-    line-height: 40px;
-    padding: 0 10px;
+    height: 44px;
+    line-height: 44px;
+    padding: 0 12px;
   }
   
   .tab-label {
     font-size: 14px;
-    gap: 5px;
+    gap: 6px;
   }
   
   .detail-dialog :deep(.el-dialog) {
@@ -1868,18 +2179,18 @@ const drawerSize = ref('70%')
   }
   
   .detail-dialog :deep(.el-dialog__body) {
-    padding: 15px;
+    padding: 16px;
   }
   
   .info-grid {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 12px;
   }
   
   .detail-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 12px;
   }
   
   .header-right {
@@ -1888,7 +2199,7 @@ const drawerSize = ref('70%')
   
   .detail-tag, .status-detail-tag {
     font-size: 12px;
-    padding: 4px 8px;
+    padding: 4px 10px;
   }
   
   .detail-type {
@@ -1896,11 +2207,11 @@ const drawerSize = ref('70%')
   }
   
   .notice-detail-title {
-    font-size: 18px;
+    font-size: 20px;
   }
   
   .message-container {
-    padding: 15px;
+    padding: 16px;
   }
   
   .message-content {
@@ -1909,9 +2220,13 @@ const drawerSize = ref('70%')
   }
   
   .pagination-container :deep(.el-pagination) {
-    padding: 5px 0;
+    padding: 8px 0;
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .alert-cards, .notice-cards {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1932,47 +2247,49 @@ const drawerSize = ref('70%')
 }
 
 .alert-card, .notice-card {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
 }
 
 .cards-container, .table-container {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.4s ease;
 }
 
 .mobile-drawer :deep(.el-drawer__header) {
   margin-bottom: 0;
-  padding: 10px 15px;
-  background-color: #f4f7fc;
-  border-bottom: 1px solid #e4e7ed;
-  font-size: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  border-bottom: none;
+  font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: white;
 }
 
 .drawer-content {
-  padding: 0 15px 15px;
+  padding: 0 16px 16px;
   height: 100%;
   overflow-y: auto;
 }
 
 .compact-drawer {
-  padding: 0 12px 12px;
+  padding: 0 16px 16px;
 }
 
 .compact-form :deep(.el-form-item) {
-  margin-bottom: 12px;
-}
+  margin-bottom: 16px;
+ }
 
 .compact-header {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .compact-header-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  padding: 10px;
+  padding: 12px;
+  background: linear-gradient(to right, #f0f5ff, #f5faff);
+  border-radius: 10px;
 }
 
 .compact-type {
@@ -1982,94 +2299,99 @@ const drawerSize = ref('70%')
 
 .status-compact-tag {
   font-size: 12px;
-  padding: 0 8px;
+  padding: 2px 10px;
   margin-left: auto;
 }
 
 .compact-divider {
-  margin: 10px 0;
-  padding: 0 10px;
+  margin: 16px 0;
+  padding: 0 12px;
 }
 
 .compact-divider :deep(.el-divider__text) {
-  font-size: 14px;
-  padding: 0 10px;
+  font-size: 15px;
+  padding: 0 12px;
   background-color: #fff;
+  font-weight: 600;
+  color: #4168b4;
 }
 
 .compact-info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 6px;
 }
 
 .compact-info-item {
-  background-color: #f9fafc;
-  border-radius: 6px;
-  padding: 8px 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  background: linear-gradient(to bottom right, #f9fafc, #f5faff);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  border: 1px solid #e9f2ff;
 }
 
 .compact-info-label {
-  color: #606266;
+  color: #5a6a8a;
   font-size: 12px;
   font-weight: 500;
 }
 
 .compact-info-value {
-  color: #303133;
+  color: #334466;
   font-size: 14px;
 }
 
 .compact-message-container {
-  background-color: #f9fafc;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin: 10px;
-  border-left: 3px solid #409EFF;
+  background: linear-gradient(to bottom right, #f9fafc, #f5faff);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 12px 6px;
+  border-left: 3px solid #4facfe;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .compact-notice-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: #303133;
-  margin: 8px 0;
-  padding-bottom: 6px;
-  border-bottom: 2px solid #409EFF;
+  color: #2c3e50;
+  margin: 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #4facfe;
   display: inline-block;
 }
 
 .mobile-detail-header, .mobile-notice-header {
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mobile-detail-header .header-right {
-  margin-top: 10px;
+  margin-top: 12px;
   align-self: flex-start;
 }
 
 .mobile-action-button {
   width: 100%;
-  margin-top: 15px;
-  height: 40px;
+  margin-top: 16px;
+  height: 44px;
+  border-radius: 22px;
 }
 
 .drawer-footer {
   display: flex;
   justify-content: space-between;
-  margin-top: 15px;
-  padding-top: 12px;
-  border-top: 1px solid #ebeef5;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e1eaff;
 }
 
 .drawer-btn {
   flex: 1;
-  margin: 0 5px;
+  margin: 0 6px;
 }
 
 @media (max-width: 768px) {  
@@ -2086,5 +2408,48 @@ const drawerSize = ref('70%')
   .compact-info-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 添加一些动画效果 */
+.alert-card, .notice-card {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.alert-card[data-grade="3"] {
+  animation: fadeIn 0.3s ease-out, pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 8px 16px rgba(245, 108, 108, 0.1); }
+  50% { box-shadow: 0 8px 20px rgba(245, 108, 108, 0.2); }
+  100% { box-shadow: 0 8px 16px rgba(245, 108, 108, 0.1); }
+}
+
+.detail-tag, .status-detail-tag {
+  animation: slideIn 0.3s ease-out;
+}
+
+.card-area, .card-time, .card-footer-left {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.message-container {
+  animation: fadeIn 0.6s ease-out;
 }
 </style>

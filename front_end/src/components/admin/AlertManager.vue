@@ -108,7 +108,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { areaService } from '../../services/apiService'
+import { areaService } from '../../services'
 import Jump from './Jump.vue'
 import { defineProps } from 'vue'
 

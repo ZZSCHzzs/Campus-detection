@@ -16,8 +16,8 @@ front_end/
 │   ├── stores/             # Pinia状态管理
 │   ├── services/           # API服务
 │   │   ├── api.ts                # 基础API实例
-│   │   ├── apiService.ts         # API资源服务接口
-│   │   ├── apiResourceManager.ts # API资源服务管理器
+│   │   ├── ResourceServiceCreator.ts         # API资源服务接口
+│   │   ├── ResourceManager.ts # API资源服务管理器
 │   │   └── authApi.ts            # 认证相关API
 │   ├── types.ts            # TypeScript类型定义
 │   ├── assets/             # 静态资源
@@ -236,11 +236,11 @@ export interface Notice {
    - 自动添加JWT认证头
    - 处理401错误和token刷新
 
-2. **apiResourceManager.ts**: 资源管理器
+2. **ResourceManager.ts**: 资源管理器
    - 提供资源缓存机制
    - 封装CRUD基础操作
 
-3. **apiService.ts**: 业务API服务
+3. **ResourceServiceCreator.ts**: 业务API服务
    - 针对各资源类型提供专用服务
    - 封装自定义API调用
 
@@ -443,7 +443,7 @@ const favoriteAreas = await userService.getFavoriteAreas(favoriteIds);
 3. 根据需要添加权限控制
 
 ### 添加新API服务
-1. 在`apiService.ts`中添加自定义方法
+1. 在`ResourceServiceCreator.ts`中添加自定义方法
 2. 注册到对应的服务中
 
 ### 添加新管理模块

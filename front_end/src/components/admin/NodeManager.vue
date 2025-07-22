@@ -70,7 +70,7 @@
 <script setup>
 import { ref } from 'vue'
 import BaseManager from './BaseManager.vue'
-import { terminalService } from '../../services/apiService'
+import { terminalService } from '../../services'
 import Jump from './Jump.vue'
 import {defineProps}  from 'vue'
 

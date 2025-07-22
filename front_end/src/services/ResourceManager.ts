@@ -47,6 +47,22 @@ export class ResourceManager {
   }
   
   /**
+   * 设置特定资源类型的缓存时间
+   * @param resourceType 资源类型
+   * @param duration 缓存时间（毫秒）
+   */
+  setResourceCacheDuration(resourceType: string, duration: number): void {
+    const config = this.resourceConfigs.get(resourceType);
+    
+    if (config) {
+      config.cacheDuration = duration;
+      console.log(`已设置资源 ${resourceType} 的缓存时间为 ${duration}ms`);
+    } else {
+      console.warn(`未找到资源类型 ${resourceType} 的配置，无法设置缓存时间`);
+    }
+  }
+  
+  /**
    * 获取资源列表
    */
   async getList<T>(resourceType: string, params: Record<string, any> = {}, forceRefresh = false): Promise<T[]> {

@@ -158,7 +158,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import apiService, { nodeService } from '../../services/apiService'
+import apiService, { nodeService } from '../../services'
 
 const props = defineProps({
   title: String,
