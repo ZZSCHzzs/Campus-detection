@@ -41,7 +41,7 @@ class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const response = await authApi.post('/auth/jwt/refresh/', { refresh: refreshToken });
-      return response.data;
+      return response.data; // 直接返回data，无需嵌套在data属性中
     } catch (error) {
       console.error('刷新令牌失败:', error);
       throw error;
@@ -123,6 +123,28 @@ class AuthService {
   logout() {
     localStorage.removeItem('access');
     localStorage.removeItem('refresh');
+    localStorage.removeItem('user');
+    localStorage.removeItem('token_expiration');
+  }
+  
+  /**
+   * 获取token有效期剩余时间（毫秒）
+   */
+  getTokenTimeRemaining(): number {
+    const expirationTime = localStorage.getItem('token_expiration');
+    if (!expirationTime) return 0;
+    
+    const expiration = parseInt(expirationTime);
+    return Math.max(0, expiration - Date.now());
+  }
+  
+  /**
+   * 检查token是否即将过期（12小时内）
+   */
+  isTokenExpiringSoon(): boolean {
+    const remainingTime = this.getTokenTimeRemaining();
+    const twelveHours = 12 * 60 * 60 * 1000;
+    return remainingTime > 0 && remainingTime < twelveHours;
   }
 }
 
