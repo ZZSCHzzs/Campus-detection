@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,6 +61,11 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('JWT',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),        # 访问令牌过期时间：1小时
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=3),        # 刷新令牌过期时间：3天
+    'ROTATE_REFRESH_TOKENS': True,                     # 刷新访问令牌时也刷新刷新令牌
+    'BLACKLIST_AFTER_ROTATION': False,                 # 不在轮换后将旧的刷新令牌列入黑名单
+    'UPDATE_LAST_LOGIN': True,                         # 更新最后登录时间
 }
 
 DJOSER = {

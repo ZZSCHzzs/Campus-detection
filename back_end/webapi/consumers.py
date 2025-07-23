@@ -234,11 +234,15 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         logs.insert(0, log_entry)
         
         # 限制日志数量
-        if len(logs) > 500:  # 增加日志保留数量
+        if len(logs) > 500:
             logs = logs[:500]
         
         # 更新缓存，延长过期时间
-        cache.set(cache_key, logs, timeout=1800)  # 30分钟过期
+        try:
+            cache.set(cache_key, logs, timeout=1800)  # 30分钟过期
+            logger.debug(f"更新终端 {self.terminal_id} 日志缓存，当前日志数量: {len(logs)}")
+        except Exception as e:
+            logger.error(f"缓存日志时出错: {str(e)}")
         
         # 广播日志消息
         await self.channel_layer.group_send(

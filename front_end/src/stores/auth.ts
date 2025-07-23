@@ -4,9 +4,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { User } from '../types'
 
 // 配置参数
-const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000; // 25分钟刷新一次token
+const TOKEN_REFRESH_INTERVAL = 50 * 60 * 1000; // 50分钟刷新一次token (比后端1小时少10分钟)
 const TOKEN_CHECK_INTERVAL = 5 * 60 * 1000;    // 5分钟检查一次token状态
-const TOKEN_PERSIST_DAYS = 3;                  // token持久化保存天数
+const TOKEN_PERSIST_DAYS = 3;                  // token持久化保存天数 (与后端一致)
 
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('access') || '')

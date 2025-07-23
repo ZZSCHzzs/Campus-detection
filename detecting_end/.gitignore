@@ -4,5 +4,6 @@ temp
 logs
 old
 static
+static/index.html
 __pycache__
 *.pyc

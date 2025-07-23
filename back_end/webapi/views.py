@@ -91,6 +91,9 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         
         if cached_status:
             logger.debug(f"从缓存获取终端{pk}状态")
+            # 确保摄像头数据存在且格式正确
+            if 'cameras' not in cached_status or cached_status['cameras'] is None:
+                cached_status['cameras'] = {}
             return Response(cached_status)
         
         # 检查终端是否在线
@@ -101,8 +104,8 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
                 "pull_running": False,
                 "cpu_usage": 0,
                 "memory_usage": 0,
-                "co2_level": None,  # 添加CO2字段
-                "cameras": {}
+                "co2_level": None,
+                "cameras": {}  # 确保提供空的摄像头字典
             }
             # 缓存默认状态，设置短暂过期时间
             cache.set(cache_key, default_status, timeout=30)
@@ -110,18 +113,22 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         
         # 从数据库获取基本状态
         try:
+            # 确保cameras字段正确
+            cameras_data = terminal.cameras or {}
+            
             status_data = {
-                "model_loaded": terminal.model_loaded,
+                "model_loaded": terminal.model_loaded if hasattr(terminal, 'model_loaded') else False,
                 "push_running": terminal.push_running,
                 "pull_running": terminal.pull_running,
                 "cpu_usage": terminal.cpu_usage or 0,
                 "memory_usage": terminal.memory_usage or 0,
-                "co2_level": terminal.co2_level,  # 添加CO2字段
-                "cameras": terminal.cameras or {}
+                "co2_level": terminal.co2_level,
+                "cameras": cameras_data
             }
             
-            # 缓存状态数据，设置适当的过期时间
-            cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
+            # 缓存状态数据
+            cache.set(cache_key, status_data, timeout=60)
+            logger.debug(f"更新终端{pk}状态缓存，摄像头: {cameras_data}")
             
             return Response(status_data)
         except Exception as e:
@@ -149,7 +156,9 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         
         # 如果缓存中没有，返回空列表
         empty_logs = []
+        # 修复: 添加缓存键参数
         cache.set(cache_key, empty_logs, timeout=120)  # 缓存2分钟
+        logger.debug(f"设置空日志缓存: {cache_key}")
         return Response(empty_logs)
             
     @action(detail=True, methods=['get', 'post'])
