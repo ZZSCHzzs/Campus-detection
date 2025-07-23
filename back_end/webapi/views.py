@@ -101,6 +101,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
                 "pull_running": False,
                 "cpu_usage": 0,
                 "memory_usage": 0,
+                "co2_level": None,  # 添加CO2字段
                 "cameras": {}
             }
             # 缓存默认状态，设置短暂过期时间
@@ -115,6 +116,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
                 "pull_running": terminal.pull_running,
                 "cpu_usage": terminal.cpu_usage or 0,
                 "memory_usage": terminal.memory_usage or 0,
+                "co2_level": terminal.co2_level,  # 添加CO2字段
                 "cameras": terminal.cameras or {}
             }
             
@@ -384,6 +386,10 @@ class DataUploadView(APIView):
             hardware_node_id = serializer.validated_data['id']
             detected_count = serializer.validated_data['detected_count']
             timestamp = serializer.validated_data['timestamp']
+            # 新增获取环境数据
+            temperature = serializer.validated_data.get('temperature')
+            humidity = serializer.validated_data.get('humidity')
+            co2_level = serializer.validated_data.get('co2_level')
         except KeyError as e:
             return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -392,7 +398,20 @@ class DataUploadView(APIView):
             hardware_node = HardwareNode.objects.get(id=hardware_node_id)
             hardware_node.detected_count = detected_count
             hardware_node.updated_at = timestamp
+            
+            # 保存环境数据
+            if temperature is not None:
+                hardware_node.temperature = temperature
+            if humidity is not None:
+                hardware_node.humidity = humidity
+                
             hardware_node.save()
+            
+            # 如果有CO2数据，更新终端
+            if co2_level is not None and hardware_node.terminal:
+                terminal = hardware_node.terminal
+                terminal.co2_level = co2_level
+                terminal.save(update_fields=['co2_level'])
         except HardwareNode.DoesNotExist:
             return Response({"error": "硬件节点不存在"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -533,6 +552,7 @@ class TerminalCommandView(APIView):
             "pull_running": terminal.pull_running,
             "cpu_usage": terminal.cpu_usage or 0,
             "memory_usage": terminal.memory_usage or 0,
+            "co2_level": terminal.co2_level,  # 添加CO2字段
             "cameras": terminal.cameras or {}
         }
         cache.set(cache_key, status_data, timeout=60)  # 1分钟过期

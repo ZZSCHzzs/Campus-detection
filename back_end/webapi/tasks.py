@@ -3,9 +3,11 @@ from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
 from .models import ProcessTerminal
+from celery import shared_task
 
 logger = logging.getLogger('django')
 
+@shared_task
 def check_terminal_connections():
     """
     定期检查所有终端的连接状态，

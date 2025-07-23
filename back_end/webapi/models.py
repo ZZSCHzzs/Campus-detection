@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
-
+from django.utils import timezone
 
 class HardwareNode(models.Model):
     name = models.CharField(max_length=100, verbose_name="节点名称")
@@ -9,6 +9,8 @@ class HardwareNode(models.Model):
     status = models.BooleanField(default=False, verbose_name="状态")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
     description = models.TextField(blank=True, verbose_name="描述")
+    temperature = models.FloatField(null=True, blank=True, verbose_name="温度")
+    humidity = models.FloatField(null=True, blank=True, verbose_name="湿度")
 
     def __str__(self):
         return self.name
@@ -26,6 +28,7 @@ class ProcessTerminal(models.Model):
     # 终端性能状态
     cpu_usage = models.FloatField(default=0)
     memory_usage = models.FloatField(default=0)
+    co2_level = models.FloatField(null=True, blank=True, verbose_name="CO2浓度")
     
     # 检测服务状态
     model_loaded = models.BooleanField(default=False)

@@ -307,6 +307,7 @@ class DetectionManager:
                         break
                     
                     images_to_process = []
+                    env_data_to_process = []  # 存储环境数据
                     
                     # 更新系统资源使用情况
                     cpu_usage = psutil.cpu_percent()
@@ -316,8 +317,28 @@ class DetectionManager:
                         self.system_status["cpu_usage"] = cpu_usage
                         self.system_status["memory_usage"] = memory_usage
                     
+                    # 收集CO2数据（假设本地有传感器）
+                    try:
+                        co2_level = self.read_co2_sensor()  
+                        if co2_level is not None:
+                            with self.status_lock:
+                                self.system_status["co2_level"] = co2_level
+                            
+                            # 通过WebSocket发送系统状态
+                            if self.ws_client and self.ws_client.connected:
+                                try:
+                                    status_data = self.get_system_status()
+                                    loop = asyncio.get_event_loop()
+                                    asyncio.run_coroutine_threadsafe(
+                                        self.ws_client.send_status(status_data),
+                                        loop
+                                    )
+                                except Exception as e:
+                                    self.log_manager.error(f"发送CO2数据失败: {str(e)}")
+                    except Exception as e:
+                        self.log_manager.error(f"读取CO2传感器失败: {str(e)}")
                     
-                    # 收集多个摄像头的图像
+                    # 收集多个摄像头的图像和环境数据
                     cameras = self.camera_manager.get_cameras()
                     for camera_id in cameras:
                         try:
@@ -334,13 +355,46 @@ class DetectionManager:
                                 images_to_process.append((image, camera_id))
                             else:
                                 self.camera_manager.update_camera_status(camera_id, '离线', "捕获图像失败")
+                            
+                            # 尝试获取环境数据 - 假设与摄像头URL相关的路由
+                            try:
+                                env_data = self.get_environmental_data(camera_id)
+                                if env_data:
+                                    env_data_to_process.append((camera_id, env_data))
+                            except Exception as e:
+                                self.log_manager.error(f"获取节点 {camera_id} 环境数据失败: {str(e)}")
                                 
                         except Exception as e:
                             error_msg = f"摄像头 {camera_id} 捕获失败: {str(e)}"
                             self.log_manager.error(error_msg)
                             
                             self.camera_manager.update_camera_status(camera_id, '离线', str(e))
-                                                
+                
+                    # 处理环境数据
+                    if env_data_to_process:
+                        nodes_data = []
+                        for camera_id, env_data in env_data_to_process:
+                            node_data = {"id": camera_id}
+                            
+                            if 'temperature' in env_data:
+                                node_data["temperature"] = env_data['temperature']
+                            if 'humidity' in env_data:
+                                node_data["humidity"] = env_data['humidity']
+                            
+                            nodes_data.append(node_data)
+                        
+                        # 通过WebSocket发送环境数据
+                        if nodes_data and self.ws_client and self.ws_client.connected:
+                            try:
+                                loop = asyncio.get_event_loop()
+                                asyncio.run_coroutine_threadsafe(
+                                    self.ws_client.send_nodes_data(nodes_data),
+                                    loop
+                                )
+                            except Exception as e:
+                                self.log_manager.error(f"发送环境数据失败: {str(e)}")
+                    
+                    # 处理图像
                     if images_to_process:
                         try:
                             # 批量分析图像
@@ -349,11 +403,20 @@ class DetectionManager:
                             # 上传结果
                             for camera_id, detected_count in results.items():
                                 self.log_manager.detection(f"检测到人数: {detected_count}", f"摄像头 {camera_id}")
-                                self.upload_result(camera_id, detected_count)
+                                
+                                # 获取节点的环境数据（如果有）
+                                env_data = {}
+                                for cid, data in env_data_to_process:
+                                    if cid == camera_id:
+                                        env_data = data
+                                        break
+                                
+                                # 上传包含环境数据的结果
+                                self.upload_result(camera_id, detected_count, env_data)
                         except Exception as e:
                             error_msg = f"批量处理失败: {str(e)}"
                             self.log_manager.error(error_msg)
-                                            
+                
                 except Exception as e:
                     self.error_count += 1
                     error_msg = f"拉取模式循环异常 ({self.error_count}/{self.max_errors}): {str(e)}"
@@ -515,8 +578,8 @@ class DetectionManager:
         
         return camera_results
     
-    def upload_result(self, camera_id, detected_count):
-        """上传检测结果到服务器"""
+    def upload_result(self, camera_id, detected_count, env_data=None):
+        """上传检测结果和环境数据到服务器"""
         api_url = self.config_manager.get('api_url')
         
         data = {
@@ -524,6 +587,18 @@ class DetectionManager:
             "detected_count": detected_count,
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
+        
+        # 添加环境数据（如果有）
+        if env_data:
+            if 'temperature' in env_data and env_data['temperature'] is not None:
+                data['temperature'] = env_data['temperature']
+            if 'humidity' in env_data and env_data['humidity'] is not None:
+                data['humidity'] = env_data['humidity']
+        
+        # 添加CO2数据（如果有）
+        with self.status_lock:
+            if 'co2_level' in self.system_status and self.system_status['co2_level'] is not None:
+                data['co2_level'] = self.system_status['co2_level']
         
         try:
             response = requests.post(api_url, json=data, timeout=5)
@@ -674,4 +749,25 @@ class DetectionManager:
             if preload_model and not self.model_loaded and not self.model_loading:
                 self.log_manager.info("开始加载模型...")
                 self.load_model_async()
+
+    def read_co2_sensor(self):
+        """读取CO2传感器数据"""
+        pass
+
+    def get_environmental_data(self, camera_id):
+        """获取摄像头相关的环境数据"""
+        camera_info = self.camera_manager.get_camera_info(camera_id)
+        if not camera_info or 'url' not in camera_info:
+            raise ValueError(f"摄像头 {camera_id} 信息不完整，无法获取环境数据")
         
+        url = camera_info['url'] + '/environment'
+        
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise ValueError(f"获取环境数据失败: 状态码 {response.status_code}")
+        except Exception as e:
+            raise ValueError(f"获取环境数据异常: {str(e)}")
+

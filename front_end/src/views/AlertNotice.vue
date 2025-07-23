@@ -748,7 +748,6 @@ const drawerSize = ref('70%')
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column prop="publisher_name" label="发布者" width="120" />
               <el-table-column label="操作" width="120" align="center">
                 <template #default="scope">
                   <el-button 
@@ -817,10 +816,6 @@ const drawerSize = ref('70%')
                       <el-icon><Clock /></el-icon>
                       {{ formatDate(notice.timestamp).split(' ').join(' ') }}
                     </div>
-                  </div>
-                  <div class="publisher" v-if="notice.publisher_name">
-                    <el-icon><User /></el-icon>
-                    {{ notice.publisher_name }}
                   </div>
                 </div>
               </div>
@@ -1145,11 +1140,6 @@ const drawerSize = ref('70%')
           </div>
           
           <div class="info-item">
-            <div class="info-label">发布者</div>
-            <div class="info-value">{{ currentNoticeDetail.publisher_name || '系统' }}</div>
-          </div>
-          
-          <div class="info-item">
             <div class="info-label">关联区域</div>
             <div class="info-value">
               <div v-if="currentNoticeDetail.related_areas && currentNoticeDetail.related_areas.length" class="area-detail-tags">
@@ -1200,11 +1190,6 @@ const drawerSize = ref('70%')
           <div class="compact-info-item">
             <span class="compact-info-label">时间:</span>
             <span class="compact-info-value timestamp-value">{{ formatDate(currentNoticeDetail.timestamp) }}</span>
-          </div>
-          
-          <div class="compact-info-item">
-            <span class="compact-info-label">发布者:</span>
-            <span class="compact-info-value">{{ currentNoticeDetail.publisher_name || '系统' }}</span>
           </div>
           
           <div class="compact-info-item">
@@ -1722,12 +1707,6 @@ const drawerSize = ref('70%')
   border-radius: 10px;
 }
 
-.card-publisher {
-  font-size: 12px;
-  color: #909399;
-  font-weight: 500;
-}
-
 .alert-type-badge {
   font-size: 12px;
   font-weight: 600;
@@ -1814,17 +1793,7 @@ const drawerSize = ref('70%')
   color: #7a8baa;
 }
 
-.publisher {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #5a6a8a;
-  background: linear-gradient(135deg, #f0f5ff, #e9f2ff);
-  padding: 4px 10px;
-  border-radius: 12px;
-  box-shadow: 0 2px 5px rgba(90, 106, 138, 0.1);
-}
+
 
 .card-actions {
   display: flex;

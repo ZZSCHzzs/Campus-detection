@@ -28,7 +28,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
 class HardwareNodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = HardwareNode
-        fields = ['id', 'name', 'detected_count', 'terminal', 'status', 'updated_at', 'description']
+        fields = ['id', 'name', 'detected_count', 'terminal', 'status', 'updated_at', 'description', 'temperature', 'humidity']
 
 
 class ProcessTerminalSerializer(serializers.ModelSerializer):
@@ -36,7 +36,7 @@ class ProcessTerminalSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProcessTerminal
-        fields = ['id', 'name', 'status', 'nodes_count']
+        fields = ['id', 'name', 'status', 'nodes_count', 'co2_level']
 
     def get_nodes_count(self, obj):
         return HardwareNode.objects.filter(terminal=obj).count()
@@ -75,6 +75,9 @@ class DataUploadSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     detected_count = serializers.IntegerField()
     timestamp = serializers.DateTimeField()
+    temperature = serializers.FloatField(required=False, allow_null=True)
+    humidity = serializers.FloatField(required=False, allow_null=True)
+    co2_level = serializers.FloatField(required=False, allow_null=True)
 
 
 class AlertSerializer(serializers.ModelSerializer):

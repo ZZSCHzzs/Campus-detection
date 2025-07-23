@@ -50,7 +50,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'djoser',
     'channels',
-    'django_q',
+    'django_celery_beat',  # 使用 Celery Beat 进行定时任务
 ]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -220,29 +220,18 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Django-Q 配置
-Q_CLUSTER = {
-    'name': 'campus_detection',
-    'workers': 4,
-    'recycle': 500,
-    'timeout': 60,
-    'compress': True,
-    'save_limit': 250,
-    'queue_limit': 500,
-    'cpu_affinity': 1,
-    'label': 'Django Q',
-    'redis': {
-        'host': '127.0.0.1',
-        'port': 6379,
-        'db': 0,
-    }
-}
+# Celery 配置
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
 
-# 定时任务
-Q_SCHEDULES = [
-    {
-        'func': 'webapi.tasks.check_terminal_connections',
-        'schedule_type': 'I',  # 按间隔执行
-        'minutes': 1,          # 每1分钟执行一次
+# Celery Beat 配置
+CELERY_BEAT_SCHEDULE = {
+    'check_terminal_connections': {
+        'task': 'webapi.tasks.check_terminal_connections',
+        'schedule': 60.0,  # 每分钟执行一次
     },
-]
+}

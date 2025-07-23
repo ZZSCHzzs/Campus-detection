@@ -4,9 +4,9 @@ import type { ResourceType } from './ResourceManager.ts';
 /**
  * 创建标准化API服务
  */
-export function createResourceService<T>(
+export function createResourceService<T, C extends Record<string, Function> = Record<string, Function>>(
   resourceType: string, 
-  customMethods: Record<string, Function> = {}
+  customMethods: C = {} as C
 ) {
   // 创建基础服务
   const baseService = {
@@ -67,8 +67,6 @@ export function createResourceService<T>(
     }
   };
   
-  // 合并自定义方法
-  const service = { ...baseService, ...customMethods };
-  
-  return service;
+  // 合并自定义方法并返回正确类型的服务
+  return { ...baseService, ...customMethods } as typeof baseService & C;
 }
