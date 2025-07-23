@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
   module: string
-  name:[String, undefined]
+  name: String | undefined
   no_padding?: boolean
 }>()
 

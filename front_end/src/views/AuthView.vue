@@ -425,14 +425,13 @@ onBeforeUnmount(() => {
 .user-container {
     display: flex;
     justify-content: center;
-    
-    height: 100%;
+    min-height: calc(100vh - 160px); /* 减去footer高度和上下间距 */
     overflow: hidden;
-    padding: 0 40px;
-    position: fixed;
+    padding: 0 40px 60px; /* 增加底部间距给footer留空间 */
     box-sizing: border-box;
-    background-color: #f5f7fa;
     width: 100%;
+    /* 移除 position: fixed，改为相对定位 */
+    position: relative;
 }
 
 .auth-card {
@@ -573,7 +572,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
     .user-container {
-        padding: 20px;
+        padding: 20px 20px 80px; /* 调整底部间距 */
+        min-height: calc(100vh - 180px);
     }
     
     .auth-card {

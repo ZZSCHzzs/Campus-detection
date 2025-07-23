@@ -19,15 +19,24 @@ const displayBuilding = ref(props.displayBuilding || false)
 const favoriteLoading = ref(false)
 const isFavorite = ref(props.area.is_favorite)
 let intervalId: number | null = null
+const isComponentMounted = ref(true)
 
 const fetchNodeData = async () => {
+  if (!isComponentMounted.value) return
+  
   try {
-
-    nodeData.value = await nodeService.getDatabyAreaId(props.area.id)
+    const data = await nodeService.getDatabyAreaId(props.area.id)
+    if (isComponentMounted.value) {
+      nodeData.value = data
+    }
   } catch (error) {
-    console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
+    if (isComponentMounted.value) {
+      console.error(`节点数据获取失败：区域 ${props.area.id}`, error)
+    }
   } finally {
-    loading.value = false
+    if (isComponentMounted.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -48,19 +57,26 @@ watch(isVisible, (newVal) => {
 }, {immediate: true})
 
 const toggleFavorite = async () => {
+  if (!isComponentMounted.value) return
+  
   favoriteLoading.value = true
   try {
-
     await areaService.toggleFavoriteArea(props.area.id)
-    isFavorite.value = !isFavorite.value
-    emit('favorite-change', {
-      areaId: props.area.id,
-      isFavorite: isFavorite.value
-    })
+    if (isComponentMounted.value) {
+      isFavorite.value = !isFavorite.value
+      emit('favorite-change', {
+        areaId: props.area.id,
+        isFavorite: isFavorite.value
+      })
+    }
   } catch (error) {
-    console.error('收藏操作失败:', error)
+    if (isComponentMounted.value) {
+      console.error('收藏操作失败:', error)
+    }
   } finally {
-    favoriteLoading.value = false
+    if (isComponentMounted.value) {
+      favoriteLoading.value = false
+    }
   }
 }
 
@@ -94,11 +110,13 @@ const loadPercentage = computed(() => {
 })
 
 onMounted(() => {
+  isComponentMounted.value = true
   fetchNodeData()
   intervalId = setInterval(fetchNodeData, 5000)
 })
 
 onBeforeUnmount(() => {
+  isComponentMounted.value = false
   if (intervalId !== null) {
     clearInterval(intervalId)
     intervalId = null
@@ -127,6 +145,15 @@ onBeforeUnmount(() => {
             {{ area.building }}
           </el-tag>
           <div class="floor-chip">{{ area.floor }}F</div>
+          <div class="env-chip">
+            <el-tooltip content="温度" placement="top">
+              <span><i class="el-icon-temperature"></i>{{ nodeData?.temperature || '--' }}</span>
+            </el-tooltip>
+            <span class="env-divider">|</span>
+            <el-tooltip content="湿度" placement="top">
+              <span><i class="el-icon-water-drop"></i>{{ nodeData?.humidity || '--' }}</span>
+            </el-tooltip>
+          </div>
         </div>
         <el-button
           :icon="Star"
@@ -181,7 +208,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <el-skeleton v-loading="loading" :loading="loading" animated>
+    <el-skeleton :loading="loading" animated>
       <template #default>
         <div class="metrics">
           <div class="count-display">
@@ -192,6 +219,21 @@ onBeforeUnmount(() => {
             />
             <div v-if="area.capacity" class="capacity-badge">
               <span>/{{ area.capacity }}</span>
+            </div>
+            
+            <div class="env-stats">
+              <el-statistic
+                :value="nodeData?.temperature"
+                title="温度"
+                :value-style="{ color: '#409EFF' }"
+                :suffix="nodeData?.temperature ? '°C' : '-'"
+              />
+              <el-statistic
+                :value="nodeData?.humidity"
+                title="湿度"
+                :value-style="{ color: '#409EFF' }"
+                :suffix="nodeData?.humidity ? '%' : '-'"
+              />
             </div>
           </div>
 
@@ -239,7 +281,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .area-card {
-  margin-bottom: 15px;
   height: 100%;
   border-radius: 8px;
   overflow: hidden;
@@ -310,7 +351,7 @@ onBeforeUnmount(() => {
 }
 
 .info-item {
-  margin: 10px 0;
+  margin: 5px 0;
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -533,5 +574,63 @@ onBeforeUnmount(() => {
   .card-footer-compact {
     padding: 6px 12px;
   }
+}
+
+/* 温湿度显示样式 */
+.env-stats {
+  display: flex;
+  margin-left: auto;
+  gap: 15px;
+  align-items: center;
+}
+
+.env-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #606266;
+  font-size: 14px;
+}
+
+.env-label {
+  color: #909399;
+}
+
+.env-value {
+  font-weight: 500;
+}
+
+.el-icon-temperature::before {
+  content: "🌡️";
+  font-size: 12px;
+}
+
+.el-icon-water-drop::before {
+  content: "💧";
+  font-size: 12px;
+}
+
+/* 紧凑模式下的温湿度样式 */
+.env-chip {
+  display: flex;
+  align-items: center;
+  background-color: #f2f6fc;
+  padding: 0 6px;
+  border-radius: 10px;
+  color: #606266;
+  height: 18px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.env-divider {
+  margin: 0 3px;
+  color: #c0c4cc;
+}
+
+/* 调整紧凑模式下的标签容器，让它更好地适应多个标签 */
+.meta-tags {
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 </style>

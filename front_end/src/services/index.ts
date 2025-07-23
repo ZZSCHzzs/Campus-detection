@@ -116,7 +116,7 @@ const apiService = {
   nodes: nodeService,
   terminals: terminalService,
   alerts: alertService,
-  notices: noticeService,
+  notice: noticeService,
   users: userService,
   historical: historicalService,
   summary: summaryService,

@@ -204,7 +204,7 @@ export const localTerminalCustomMethods = {
     try {
       return await http.local.get<EnvironmentInfo>('/api/environment');
     } catch (error) {
-      console.error('获取环境信息失败:', error);
+      ElMessage.warning('未检测到本地终端服务');
       return {
         type: 'unknown',
         version: 'unknown',

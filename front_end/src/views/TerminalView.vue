@@ -495,7 +495,7 @@ onMounted(async () => {
       // 如果本地和远程都不可用，显示提示
       ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
     }
-    
+    ElMessage.warning("未检测到本地终端服务，使用远程模式");
     // 根据选定的模式加载相应数据
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
@@ -745,10 +745,10 @@ watch(connectionMode, handleModeChange);
             size="small"
             class="mode-switcher"
           >
-            <el-radio-button label="remote" :disabled="!remoteAvailable && localAvailable">
+            <el-radio-button value="remote" :disabled="!remoteAvailable && localAvailable">
               <el-icon><Connection /></el-icon> 远程
             </el-radio-button>
-            <el-radio-button label="local" :disabled="!localAvailable">
+            <el-radio-button value="local" :disabled="!localAvailable">
               <el-icon><Monitor /></el-icon> 本地
             </el-radio-button>
           </el-radio-group>
@@ -787,7 +787,7 @@ watch(connectionMode, handleModeChange);
           <div class="panel-section resource-panel">
             <div class="section-header">
               <h3><el-icon><DataAnalysis /></el-icon> 系统资源</h3>
-              <el-button type="text" @click="refreshStatus" class="icon-button">
+              <el-button type="primary" @click="refreshStatus" class="icon-button">
                 <el-icon><Refresh /></el-icon>
               </el-button>
             </div>
@@ -886,7 +886,7 @@ watch(connectionMode, handleModeChange);
                   </div>
                   <div>
                     <span class="service-name">拉取模式</span>
-                    <el-tag :type="status.pull_running ? 'success' : 'info'" size="mini" class="service-status">
+                    <el-tag :type="status.pull_running ? 'success' : 'info'" size="small" class="service-status">
                       {{ status.pull_running ? '运行中' : '已停止' }}
                     </el-tag>
                   </div>
@@ -894,7 +894,7 @@ watch(connectionMode, handleModeChange);
                 <div class="service-actions">
                   <el-button 
                     type="primary" 
-                    size="mini" 
+                    size="small" 
                     @click="startService('pull')" 
                     :disabled="status.pull_running"
                     class="control-button"
@@ -903,7 +903,7 @@ watch(connectionMode, handleModeChange);
                   </el-button>
                   <el-button 
                     type="danger" 
-                    size="mini" 
+                    size="small" 
                     @click="stopService('pull')"
                     :disabled="!status.pull_running"
                     class="control-button"
@@ -921,7 +921,7 @@ watch(connectionMode, handleModeChange);
                   </div>
                   <div>
                     <span class="service-name">接收模式</span>
-                    <el-tag :type="status.push_running ? 'success' : 'info'" size="mini" class="service-status">
+                    <el-tag :type="status.push_running ? 'success' : 'info'" size="small" class="service-status">
                       {{ status.push_running ? '运行中' : '已停止' }}
                     </el-tag>
                   </div>
@@ -929,7 +929,7 @@ watch(connectionMode, handleModeChange);
                 <div class="service-actions">
                   <el-button 
                     type="primary" 
-                    size="mini" 
+                    size="small" 
                     @click="startService('push')"
                     :disabled="status.push_running"
                     class="control-button"
@@ -938,7 +938,7 @@ watch(connectionMode, handleModeChange);
                   </el-button>
                   <el-button 
                     type="danger" 
-                    size="mini" 
+                    size="small" 
                     @click="stopService('push')"
                     :disabled="!status.push_running"
                     class="control-button"
@@ -1004,7 +1004,7 @@ watch(connectionMode, handleModeChange);
                   <div class="camera-id">摄像头 #{{ id }}</div>
                   <el-tag 
                     :type="cameraStatus === '在线' ? 'success' : 'danger'"
-                    size="mini"
+                    size="small"
                     class="camera-status"
                   >
                     {{ cameraStatus }}
@@ -1096,7 +1096,7 @@ watch(connectionMode, handleModeChange);
                           <template #default="scope">
                             <el-button 
                               type="danger" 
-                              size="mini"
+                              size="small"
                               @click="removeCamera(scope.$index)"
                               circle
                             >
@@ -1145,7 +1145,7 @@ watch(connectionMode, handleModeChange);
                   <template #default="scope">
                     <el-tag 
                       :type="getLogLevelType(scope.row.level)"
-                      size="mini"
+                      size="small"
                       effect="dark"
                       class="log-level"
                     >
@@ -1169,7 +1169,6 @@ watch(connectionMode, handleModeChange);
   padding: 12px;
   max-width: 1400px;
   margin: 0 auto;
-  background: #f7f9fc;
   min-height: calc(100vh - 24px);
 }
 

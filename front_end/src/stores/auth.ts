@@ -148,7 +148,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const setUser = (userData: any) => {
-    console.log('[AUTH-STORE] 设置用户信息:', userData)
+    console.log('[AUTH-STORE] 正在缓存用户信息')
     if (!userData || !userData.username) {
       console.error('[AUTH-STORE] 用户数据无效')
       return
@@ -175,7 +175,10 @@ export const useAuthStore = defineStore('auth', () => {
         const newToken = response.access
         accessToken.value = newToken
         localStorage.setItem('access', newToken)
-
+        
+        // 每次刷新都更新过期时间，确保保持3天有效期
+        updateTokenExpiration()
+        
         console.log('[AUTH-STORE] Token刷新成功')
         return true
       }
@@ -184,6 +187,13 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     } catch (error) {
       console.error('[AUTH-STORE] 刷新token失败:', error)
+      
+      // 如果是401错误，说明refresh token也过期了，需要清除认证状态
+      if (error.response && error.response.status === 401) {
+        console.error('[AUTH-STORE] Refresh token已过期，执行登出')
+        logout()
+      }
+      
       return false
     } finally {
       isLoading.value = false
@@ -306,6 +316,17 @@ export const useAuthStore = defineStore('auth', () => {
         // 刷新token过期时间
         updateTokenExpiration()
         setupTokenRefresh();
+      } else {
+        // 如果session无效，尝试刷新token
+        refreshAccessToken().then(success => {
+          if (success) {
+            updateTokenExpiration()
+            setupTokenRefresh();
+          } else {
+            // 如果刷新失败，清除认证状态
+            clearAuthData();
+          }
+        });
       }
     }).catch(error => {
       console.error('[AUTH-STORE] 初始会话验证失败:', error)
@@ -333,7 +354,6 @@ export const useAuthStore = defineStore('auth', () => {
     getCurrentUser,
     validateSession,
     cleanupStore,
-    // 添加新方法
     updateTokenExpiration
   }
 })

@@ -324,48 +324,50 @@ onBeforeUnmount(() => {
       </div>
     </el-card>
     <el-card class="stats-card mb-20 mt-20">
-      <el-skeleton :rows="1" animated :loading="loadingSummary">
-        <template #default>
-          <div v-if="Object.values(summary).some(value => value > 0)">
-            <el-row :gutter="20">
-              <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
-                :lg="3">
-                <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
-                  <template #suffix>
-                    <el-icon v-if="key === 'people_count'" class="stat-icon">
-                      <User />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'nodes_count'" class="stat-icon">
-                      <Monitor />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'buildings_count'" class="stat-icon">
-                      <OfficeBuilding />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'terminals_count'" class="stat-icon">
-                      <Connection />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'areas_count'" class="stat-icon">
-                      <MapLocation />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
-                      <DataAnalysis />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
-                      <Bell />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
-                      <Warning />
-                    </el-icon>
-                  </template>
-                </el-statistic>
-              </el-col>
-            </el-row>
-          </div>
-          <div v-else class="no-data-message">
-            <el-empty description="暂无统计数据" />
-          </div>
-        </template>
-      </el-skeleton>
+      <div v-loading="loadingSummary">
+        <el-skeleton :rows="1" animated :loading="loadingSummary">
+          <template #default>
+            <div v-if="Object.values(summary).some(value => value > 0)">
+              <el-row :gutter="20">
+                <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
+                  :lg="3">
+                  <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
+                    <template #suffix>
+                      <el-icon v-if="key === 'people_count'" class="stat-icon">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'nodes_count'" class="stat-icon">
+                        <Monitor />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'buildings_count'" class="stat-icon">
+                        <OfficeBuilding />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'terminals_count'" class="stat-icon">
+                        <Connection />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'areas_count'" class="stat-icon">
+                        <MapLocation />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
+                        <DataAnalysis />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
+                        <Bell />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
+                        <Warning />
+                      </el-icon>
+                    </template>
+                  </el-statistic>
+                </el-col>
+              </el-row>
+            </div>
+            <div v-else class="no-data-message">
+              <el-empty description="暂无统计数据" />
+            </div>
+          </template>
+        </el-skeleton>
+      </div>
     </el-card>
 
     <el-row :gutter="20" class="mt-20">
@@ -393,18 +395,20 @@ onBeforeUnmount(() => {
               </el-button>
             </div>
           </template>
-          <el-skeleton :rows="8" animated :loading="chartLoading">
-            <template #default>
-              <div v-if="!chartInitFailed" id="trend-chart" style="height:320px; width:100%;"></div>
-              <div v-else class="chart-error">
-                <el-empty description="图表加载失败" :image-size="100">
-                  <template #description>
-                    <p>趋势图加载失败，请点击"重新加载图表"按钮重试</p>
-                  </template>
-                </el-empty>
-              </div>
-            </template>
-          </el-skeleton>
+          <div v-loading="chartLoading">
+            <el-skeleton :rows="8" animated :loading="chartLoading">
+              <template #default>
+                <div v-if="!chartInitFailed" id="trend-chart" style="height:320px; width:100%;"></div>
+                <div v-else class="chart-error">
+                  <el-empty description="图表加载失败" :image-size="100">
+                    <template #description>
+                      <p>趋势图加载失败，请点击"重新加载图表"按钮重试</p>
+                    </template>
+                  </el-empty>
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
         </el-card>
       </el-col>
       <el-col :span="isMobile ? 24 : 8" :xs="24" :sm="24" :md="8" :lg="8">
@@ -412,70 +416,74 @@ onBeforeUnmount(() => {
           <template #header>
             <span class="card-title">⚠️ 公开告警</span>
           </template>
-          <el-skeleton :rows="2" animated :loading="loadingAlerts">
-            <template #default>
-              <div v-if="alerts.length > 0">
-                <el-alert v-for="alert in alerts" :key="alert.id" :type="getAlertType(alert.grade)" show-icon
-                  class="animated-alert mb-10">
-                  <template #icon>
-                    <el-icon v-if="alert.alert_type === 'fire'">
-                      <Warning />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'guard'">
-                      <Bell />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'crowd'">
-                      <User />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'health'">
-                      <FirstAidKit />
-                    </el-icon>
-                    <el-icon v-else>
-                      <Warning />
-                    </el-icon>
-                  </template>
-                  <template #default>
-                    <div class="alert-content">
-                      <span class="alert-message">{{ alert.message }}</span>
-                      <router-link :to="`/alerts?tab=alerts&alertId=${alert.id}`" class="alert-link">查看详情</router-link>
-                    </div>
-                  </template>
-                </el-alert>
-              </div>
-              <div v-else class="no-data-text">
-                暂无安全提醒
-              </div>
-            </template>
-          </el-skeleton>
+          <div v-loading="loadingAlerts">
+            <el-skeleton :rows="2" animated :loading="loadingAlerts">
+              <template #default>
+                <div v-if="alerts.length > 0">
+                  <el-alert v-for="alert in alerts" :key="alert.id" :type="getAlertType(alert.grade)" show-icon
+                    class="animated-alert mb-10">
+                    <template #icon>
+                      <el-icon v-if="alert.alert_type === 'fire'">
+                        <Warning />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'guard'">
+                        <Bell />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'crowd'">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'health'">
+                        <FirstAidKit />
+                      </el-icon>
+                      <el-icon v-else>
+                        <Warning />
+                      </el-icon>
+                    </template>
+                    <template #default>
+                      <div class="alert-content">
+                        <span class="alert-message">{{ alert.message }}</span>
+                        <router-link :to="`/alerts?tab=alerts&alertId=${alert.id}`" class="alert-link">查看详情</router-link>
+                      </div>
+                    </template>
+                  </el-alert>
+                </div>
+                <div v-else class="no-data-text">
+                  暂无安全提醒
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
         </el-card>
         <el-card class="dashboard-card">
           <template #header>
             <span class="card-title">📢 近期通知</span>
           </template>
-          <el-skeleton :rows="2" animated :loading="loadingNotices">
-            <template #default>
-              <div v-if="notices.length > 0">
-                <el-alert v-for="notice in notices" :key="notice.id" type="info" show-icon class="animated-alert mt-10">
-                  <template #icon>
-                    <el-icon>
-                      <Bell />
-                    </el-icon>
-                  </template>
-                  <template #default>
-                    <div class="alert-content">
-                      <span class="alert-message">{{ notice.content }}</span>
-                      <router-link :to="`/alerts?tab=notices&noticeId=${notice.id}`"
-                        class="alert-link">查看详情</router-link>
-                    </div>
+          <div v-loading="loadingNotices">
+            <el-skeleton :rows="2" animated :loading="loadingNotices">
+              <template #default>
+                <div v-if="notices.length > 0">
+                  <el-alert v-for="notice in notices" :key="notice.id" type="info" show-icon class="animated-alert mt-10">
+                    <template #icon>
+                      <el-icon>
+                        <Bell />
+                      </el-icon>
+                    </template>
+                    <template #default>
+                      <div class="alert-content">
+                        <span class="alert-message">{{ notice.content }}</span>
+                        <router-link :to="`/alerts?tab=notices&noticeId=${notice.id}`"
+                          class="alert-link">查看详情</router-link>
+                      </div>
 
-                  </template>
-                </el-alert>
-              </div>
-              <div v-else class="no-data-text">
-                暂无重要通知
-              </div>
-            </template>
-          </el-skeleton>
+                    </template>
+                  </el-alert>
+                </div>
+                <div v-else class="no-data-text">
+                  暂无重要通知
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
         </el-card>
 
         <el-card class="dashboard-card">

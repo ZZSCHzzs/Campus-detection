@@ -14,6 +14,8 @@ const buildingFilter = ref<number | "all">("all")
 const searchKeyword = ref("")
 
 const isFirstLoad = ref(true)
+const isComponentMounted = ref(true)
+let fetchInterval: number | null = null
 
 watch(searchKeyword, (newVal) => {
   if (newVal) {
@@ -42,22 +44,36 @@ const getAreasByFloor = (areas: AreaItem[] | undefined, floor: number) => {
 }
 
 const fetchBuildings = async () => {
+  if (!isComponentMounted.value) return
+
   if (isFirstLoad.value) {
     loading.value = true
   }
   try {
     const buildingsData = await buildingService.getAll()
+    if (!isComponentMounted.value) return
+
     buildings.value = await Promise.all(
         buildingsData.map(async (b: Building) => {
-          const areas = await buildingService.getBuildingAreas(b.id)
-          return {...b, areas}
+          try {
+            const areas = await buildingService.getBuildingAreas(b.id)
+            return {...b, areas}
+          } catch (error) {
+            console.error(`获取建筑 ${b.id} 的区域失败`, error)
+            return {...b, areas: []}
+          }
         })
     )
-    console.log('建筑及区域数据加载成功:', buildings.value)
+    console.log('建筑及区域数据加载成功')
   } catch (error) {
-    ElMessage.error('数据加载失败')
+    if (isComponentMounted.value) {
+      console.error('建筑数据加载失败:', error)
+      ElMessage.error('数据加载失败')
+    }
   } finally {
-    loading.value = false
+    if (isComponentMounted.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -102,12 +118,28 @@ const toggleLayoutMode = () => {
 }
 
 onMounted(() => {
+  isComponentMounted.value = true
   fetchBuildings()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
 
+  // 设置定期刷新数据的间隔，避免频繁刷新
+  fetchInterval = window.setInterval(() => {
+    fetchBuildings()
+  }, 30000) // 每30秒刷新一次
+
   isFirstLoad.value = false
 
+})
+
+onBeforeUnmount(() => {
+  isComponentMounted.value = false
+  window.removeEventListener('resize', checkScreenSize)
+
+  if (fetchInterval !== null) {
+    clearInterval(fetchInterval)
+    fetchInterval = null
+  }
 })
 </script>
 
@@ -187,101 +219,105 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-skeleton v-loading="loading" :loading="loading" animated>
-      <div v-if="searchKeyword" class="search-results">
-        <div class="search-header">
-          <el-icon>
-            <Search/>
-          </el-icon>
-          <span>搜索结果: "{{ searchKeyword }}"</span>
-        </div>
-        <el-row :gutter="20" class="card-row">
-          <el-col
-              v-for="area in filteredAreas"
-              :key="area.id"
-              :lg="6"
-              :md="isCompactView ? 6 : 8"
-              :sm="isCompactView ? 8 : 12"
-              :xs="isCompactView ? 12 : 24"
-              class="card-animation"
-          >
-            <AreaCard
-                :area="area"
-                :compact="isCompactView"
-                :expectStatus="expectStatus"
-                @visible-change="(v) => handleCardVisibility(area.id, v)"
-            />
-          </el-col>
-        </el-row>
-      </div>
-      <div v-else>
-        <div v-for="building in filteredBuildings" :key="building.id" class="building-section">
-          <div class="building-header">
-            <div class="header-icon-wrapper">
+    <div v-loading="loading">
+      <el-skeleton :loading="loading" animated>
+        <template #default>
+          <div v-if="searchKeyword" class="search-results">
+            <div class="search-header">
               <el-icon>
-                <OfficeBuilding/>
+                <Search/>
               </el-icon>
+              <span>搜索结果: "{{ searchKeyword }}"</span>
             </div>
-            <h2 class="building-title">{{ building.name }}</h2>
-          </div>
-
-          <div v-show="!isBuildingVisible(building.id)" class="empty-state">
-            <el-empty description="该建筑暂无可见区域"/>
-          </div>
-
-          <div v-show="isBuildingVisible(building.id)">
-            <el-row v-for="floor in getFloors(building.areas)" v-show="isFloorVisible(building.id, floor)" :key="floor"
-                    :gutter="10"
-            >
-              <el-col :span="isMobile ? 24 : 2" class="floor-header">
-                <div class="floor-header">
-                  <div class="floor-icon-wrapper">
-                    <el-icon>
-                      <HomeFilled/>
-                    </el-icon>
-                  </div>
-                  <h3 class="floor-title">{{ floor }}F</h3>
-                </div>
-              </el-col>
-              <el-col :span='isMobile ? 24 : 22'>
-                <el-row :gutter="20" class="card-row">
-                  <el-col
-                      v-for="area in getAreasByFloor(building.areas, floor)"
-                      :key="area.id"
-                      :class="{ 'floor-card-indent': !isCompactView }"
-                      :lg="6"
-                      :md="isCompactView ? 6 : 8"
-                      :offset="isCompactView ? 0 : 0"
-                      :sm="isCompactView ? 8 : 12"
-                      :xs="isCompactView ? 12 : 24"
-                      class="card-animation"
-                      v-show="cardVisibilities[area.id] !== false"
-                  >
-
-                      <AreaCard
-
-                          :area="area"
-                          :compact="isCompactView"
-                          :expectStatus="expectStatus"
-                          @visible-change="(v) => handleCardVisibility(area.id, v)"
-                      />
-
-
-                  </el-col>
-                </el-row>
-
+            <el-row :gutter="20" class="card-row">
+              <el-col
+                  v-for="area in filteredAreas"
+                  :key="area.id"
+                  :lg="6"
+                  :md="isCompactView ? 6 : 8"
+                  :sm="isCompactView ? 8 : 12"
+                  :xs="isCompactView ? 12 : 24"
+                  class="card-animation"
+              >
+                <AreaCard
+                    :area="area"
+                    :compact="isCompactView"
+                    :expectStatus="expectStatus"
+                    @visible-change="(v) => handleCardVisibility(area.id, v)"
+                />
               </el-col>
             </el-row>
           </div>
-        </div>
-      </div>
-    </el-skeleton>
+          <div v-else>
+            <div v-for="building in filteredBuildings" :key="building.id" class="building-section">
+              <div class="building-header">
+                <div class="header-icon-wrapper">
+                  <el-icon>
+                    <OfficeBuilding/>
+                  </el-icon>
+                </div>
+                <h2 class="building-title">{{ building.name }}</h2>
+              </div>
+
+              <div v-show="!isBuildingVisible(building.id)" class="empty-state">
+                <el-empty description="该建筑暂无可见区域"/>
+              </div>
+
+              <div v-show="isBuildingVisible(building.id)">
+                <el-row v-for="floor in getFloors(building.areas)" v-show="isFloorVisible(building.id, floor)" :key="floor"
+                        :gutter="10"
+                >
+                  <el-col :span="isMobile ? 24 : 2" class="floor-header">
+                    <div class="floor-header">
+                      <div class="floor-icon-wrapper">
+                        <el-icon>
+                          <HomeFilled/>
+                        </el-icon>
+                      </div>
+                      <h3 class="floor-title">{{ floor }}F</h3>
+                    </div>
+                  </el-col>
+                  <el-col :span='isMobile ? 24 : 22'>
+                    <el-row :gutter="20" class="card-row">
+                      <el-col
+                          v-for="area in getAreasByFloor(building.areas, floor)"
+                          :key="area.id"
+                          :class="{ 'floor-card-indent': !isCompactView }"
+                          :lg="6"
+                          :md="isCompactView ? 6 : 8"
+                          :offset="isCompactView ? 0 : 0"
+                          :sm="isCompactView ? 8 : 12"
+                          :xs="isCompactView ? 12 : 24"
+                          class="card-animation"
+                          v-show="cardVisibilities[area.id] !== false"
+                      >
+
+                          <AreaCard
+
+                              :area="area"
+                              :compact="isCompactView"
+                              :expectStatus="expectStatus"
+                              @visible-change="(v) => handleCardVisibility(area.id, v)"
+                          />
+
+
+                      </el-col>
+                    </el-row>
+
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
+          </div>
+        </template>
+      </el-skeleton>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .areas-container {
-  max-width: 1200px;
+  max-width: 1300px;
   margin: 10px auto;
   padding: 25px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);

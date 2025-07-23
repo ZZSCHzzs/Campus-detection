@@ -26,6 +26,8 @@ export interface HardwareNode {
     status: boolean
     terminal: number
     updated_at: string
+    temperature?: number
+    humidity?: number
 }
 
 export interface ProcessTerminal {
@@ -46,6 +48,7 @@ export interface ProcessTerminal {
     preload_model?: boolean
     cameras?: Record<string, string>
     version?: string
+    co2_level?: number
 }
 
 export interface Building {

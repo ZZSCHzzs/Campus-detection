@@ -335,6 +335,9 @@ const getRoleTagType = (role: string) => {
     <div class="user-header">
       <div class="user-header-content">
         <div class="user-info-brief">
+          <div class="user-avatar">
+            <el-avatar :size="80" :icon="User"></el-avatar>
+          </div>
           <div class="user-header-text">
             <h1 class="page-title">{{ userInfo.username }}</h1>
             <div class="user-meta">
@@ -350,29 +353,11 @@ const getRoleTagType = (role: string) => {
         </div>
         <div class="user-stats">
           <el-row :gutter="20">
-            <el-col :span="8">
+            <el-col :span="24">
               <el-statistic :value="favoriteAreas.length" title="收藏区域">
                 <template #prefix>
                   <el-icon class="stat-icon">
                     <Star />
-                  </el-icon>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="8">
-              <el-statistic title="最近登录" value="今天">
-                <template #prefix>
-                  <el-icon class="stat-icon">
-                    <Calendar />
-                  </el-icon>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="8">
-              <el-statistic title="账户状态" value="正常">
-                <template #prefix>
-                  <el-icon class="stat-icon">
-                    <Check />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -386,7 +371,7 @@ const getRoleTagType = (role: string) => {
       <el-tabs v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
         <el-tab-pane label="个人信息" name="profile">
           <div class="tab-content">
-            <el-card v-loading="loading" :shadow="false" class="profile-card content-card">
+            <el-card v-loading="loading" shadow="never" class="profile-card content-card">
 
               <div class="section-header">
                 <div class="section-title">
@@ -495,7 +480,7 @@ const getRoleTagType = (role: string) => {
           <div class="tab-content">
             <el-row :gutter="20">
               <el-col :md="14" :sm="24" :xs="24">
-                <el-card :shadow="false" class="password-card content-card">
+                <el-card shadow="never" class="password-card content-card">
                   <template #header>
                     <div class="pw-card-header">
                       <span class="title">
@@ -569,7 +554,7 @@ const getRoleTagType = (role: string) => {
               </el-col>
 
               <el-col :md="10" :sm="24" :xs="24">
-                <el-card :shadow="false" class="security-tips-card">
+                <el-card shadow="never" class="security-tips-card">
                   <template #header>
                     <div class="security-card-header">
                       <span class="title">
@@ -685,7 +670,6 @@ const getRoleTagType = (role: string) => {
 </template>
 
 <style scoped>
-
 :root {
   --primary-color: #409EFF;
   --success-color: #67C23A;
@@ -721,14 +705,12 @@ const getRoleTagType = (role: string) => {
 }
 
 .user-header {
-  background-color: #f7faff;
-  background-image: linear-gradient(to right, rgba(236, 245, 255, 0.8), rgba(243, 248, 255, 0.5)),
-    repeating-linear-gradient(45deg, rgba(200, 222, 255, 0.12), rgba(200, 222, 255, 0.12) 15px, rgba(255, 255, 255, 0.5) 15px, rgba(255, 255, 255, 0.5) 30px);
+  background: linear-gradient(135deg, #f7faff 0%, #ecf5ff 100%);
   color: #333;
-  padding: 30px 20px;
-  border-radius: var(--border-radius);
-  margin: 20px 20px 30px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  padding: 25px 25px; /* 减少内间距 */
+  border-radius: 12px;
+  margin: 15px 15px 25px; /* 减少外边距 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(64, 158, 255, 0.1);
   position: relative;
   overflow: hidden;
@@ -740,16 +722,27 @@ const getRoleTagType = (role: string) => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 4px;
+  height: 5px;
   background: linear-gradient(90deg, #409EFF, #79bbff);
+}
+
+.user-header::after {
+  content: '';
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(64, 158, 255, 0.05) 0%, rgba(64, 158, 255, 0) 70%);
+  border-radius: 50%;
 }
 
 .user-header-content {
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
-  flex-direction: column;
-  gap: 30px;
+  justify-content: space-between;
+  align-items: center;
   position: relative;
   z-index: 1;
 }
@@ -757,87 +750,108 @@ const getRoleTagType = (role: string) => {
 .user-info-brief {
   display: flex;
   align-items: center;
+  gap: 20px; /* 减少间距 */
+}
+
+.user-avatar {
+  display: flex;
   justify-content: center;
-  text-align: center;
+  align-items: center;
+  background: linear-gradient(135deg, #e6f1ff, #ffffff);
+  border-radius: 50%;
+  padding: 3px; /* 减少内间距 */
+  box-shadow: 0 4px 15px rgba(64, 158, 255, 0.2);
+  border: 2px solid white; /* 减小边框 */
 }
 
 .user-header-text {
   display: flex;
   flex-direction: column;
-  align-items: center;
 }
 
 .page-title {
-  margin: 0;
+  margin: 0 0 8px 0; /* 减少下边距 */
   color: #333;
-  font-size: 32px;
+  font-size: 28px; /* 减小字体大小 */
   font-weight: 700;
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
-  position: relative;
-  padding-bottom: 10px;
-}
-
-.page-title::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 3px;
-  background-color: #409EFF;
-  border-radius: 3px;
 }
 
 .user-meta {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-top: 15px;
 }
 
 .role-tag {
   font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 0 12px;
+  height: 28px;
+  line-height: 26px;
+  border-radius: 14px;
 }
 
 .join-date {
   font-size: 14px;
   color: #606266;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.join-date::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #909399;
 }
 
 .user-stats {
   background-color: white;
-  border-radius: var(--border-radius);
-  padding: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(235, 238, 245, 0.8);
+  border-radius: 10px;
+  padding: 15px; /* 减少内间距 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f0f2f5;
+  min-width: 180px; /* 减小最小宽度 */
+  transition: all 0.3s ease;
+}
+
+.user-stats:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 }
 
 .user-stats :deep(.el-statistic__title) {
   color: #606266;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
 .user-stats :deep(.el-statistic__content) {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   color: #303133;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 30px !important; /* 减小字体大小 */
 }
 
 .stat-icon {
   color: #409EFF;
   background-color: rgba(64, 158, 255, 0.1);
   border-radius: 50%;
-  padding: 5px;
+  padding: 6px; /* 减少内间距 */
   margin-right: 5px;
+  font-size: 20px; /* 减小图标大小 */
 }
 
 .tabs-container {
-  padding: 0 20px;
+  padding: 0 20px 30px;
 }
 
 .main-tabs :deep(.el-tabs__header) {
@@ -866,6 +880,7 @@ const getRoleTagType = (role: string) => {
 :deep(.el-tabs__active-bar) {
   height: 5px !important;
   bottom: -2px !important;
+  border-radius: 5px 5px 0 0;
 }
 
 .tab-content {
@@ -1170,34 +1185,39 @@ const getRoleTagType = (role: string) => {
 @media (max-width: 768px) {
   .user-header {
     margin: 10px;
-    padding: 20px 15px;
+    padding: 15px 10px; /* 移动端更小的内间距 */
   }
-
+  
+  .user-header-content {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .user-info-brief {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+  }
+  
+  .user-header-text {
+    align-items: center;
+  }
+  
   .page-title {
-    font-size: 24px;
+    font-size: 22px; /* 移动端更小的字体大小 */
   }
-
+  
+  .user-stats {
+    width: 100%;
+  }
+  
   .main-tabs :deep(.el-tabs__item) {
     padding: 0 15px;
     font-size: 14px;
   }
-
-  .favorites-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-  
-  .header-actions {
-    width: 100%;
-  }
-  
-  .toggle-view-btn,
-  .header-actions .el-button {
-    flex: 1;
-  }
 }
 
+/* 其他样式保持不变 */
 @keyframes fadeIn {
   from {
     opacity: 0;

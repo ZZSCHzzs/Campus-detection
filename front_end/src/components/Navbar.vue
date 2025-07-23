@@ -10,7 +10,7 @@
 
         <div class="logo-container">
           <img alt="Logo" class="logo" src="/favicon256.ico"/>
-          <span class="site-name">校园慧感</span>
+          <span class="site-name">慧感云瞻</span>
         </div>
 
         <div v-if="authStore.isAuthenticated" class="mobile-user-button">
@@ -37,7 +37,7 @@
         <div class="side-menu-header">
           <div class="logo-container">
             <img alt="Logo" class="logo" src="/favicon256.ico"/>
-            <span class="site-name">校园慧感</span>
+            <span class="site-name">慧感云瞻</span>
           </div>
           <el-button class="close-menu-btn" @click="closeMobileMenu">
             <el-icon size="20"><Close /></el-icon>
@@ -111,7 +111,7 @@
             alt="Logo"
             class="logo"
             src="/favicon256.ico"/>
-        <span class="site-name">校园慧感</span>
+        <span class="site-name">慧感云瞻</span>
       </div>
       <el-menu-item 
         v-for="item in content" 
