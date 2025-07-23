@@ -133,18 +133,23 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         """获取终端日志"""
         terminal = self.get_object()
         
+        # 获取日志数量限制参数
+        limit = int(request.query_params.get('limit', 100))
+        
         # 从Redis缓存获取日志
         cache_key = f"terminal:{pk}:logs"
         cached_logs = cache.get(cache_key)
         
         if cached_logs:
             logger.debug(f"从缓存获取终端{pk}日志")
+            # 如果指定了限制，返回指定数量的日志
+            if limit and limit < len(cached_logs):
+                return Response(cached_logs[:limit])
             return Response(cached_logs)
         
         # 如果缓存中没有，返回空列表
-        # 在实际应用中，你可能需要从数据库或日志文件中获取
         empty_logs = []
-        cache.set(cache_key, empty_logs, timeout=30)  # 缓存30秒
+        cache.set(cache_key, empty_logs, timeout=120)  # 缓存2分钟
         return Response(empty_logs)
             
     @action(detail=True, methods=['get', 'post'])

@@ -55,6 +55,18 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         # 添加: 启动连接心跳检查任务 
         self.heartbeat_check_task = asyncio.create_task(self.heartbeat_check_loop())
         
+        # 如果不是检测端连接，主动发送最新日志
+        if not self.is_detector:
+            # 从缓存获取最新日志并发送
+            cache_key = f"terminal:{self.terminal_id}:logs"
+            cached_logs = cache.get(cache_key)
+            if cached_logs:
+                await self.send(text_data=json.dumps({
+                    'type': 'logs_batch',
+                    'logs': cached_logs[:100],  # 最多发送100条日志
+                    'timestamp': timezone.now().isoformat()
+                }))
+        
         # 如果是新的检测端连接，主动请求状态更新
         # 延迟2秒发送，确保检测端准备好接收命令
         await asyncio.sleep(2)
@@ -222,11 +234,11 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         logs.insert(0, log_entry)
         
         # 限制日志数量
-        if len(logs) > 100:
-            logs = logs[:100]
+        if len(logs) > 500:  # 增加日志保留数量
+            logs = logs[:500]
         
-        # 更新缓存
-        cache.set(cache_key, logs, timeout=300)  # 5分钟过期
+        # 更新缓存，延长过期时间
+        cache.set(cache_key, logs, timeout=1800)  # 30分钟过期
         
         # 广播日志消息
         await self.channel_layer.group_send(

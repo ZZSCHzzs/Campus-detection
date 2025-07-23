@@ -229,7 +229,8 @@ const loadLogs = async () => {
     if (connectionMode.value === 'local') {
       logsData = await apiService.localTerminal.getLogs();
     } else {
-      logsData = await apiService.terminals.getTerminalLogs(terminal.id);
+      // 添加日志限制参数，确保获取较多的日志记录
+      logsData = await apiService.terminals.getTerminalLogs(terminal.id, {limit: 200});
     }
     
     // 标准化日志格式
@@ -255,11 +256,14 @@ const setupPolling = () => {
     clearInterval(pollTimer.value);
   }
   
-  // 设置新的轮询间隔 (每10秒更新一次状态)
+  // 设置新的轮询间隔 (每10秒更新一次状态和日志)
   pollTimer.value = setInterval(async () => {
     try {
       await loadTerminalStatus();
-      await loadLogs();
+      // 确保在远程模式下也能定时获取日志
+      if (connectionMode.value === 'remote') {
+        await loadLogs();
+      }
     } catch (error) {
       console.error('状态轮询失败:', error);
     }
@@ -495,7 +499,6 @@ onMounted(async () => {
       // 如果本地和远程都不可用，显示提示
       ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
     }
-    ElMessage.warning("未检测到本地终端服务，使用远程模式");
     // 根据选定的模式加载相应数据
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
@@ -1169,7 +1172,7 @@ watch(connectionMode, handleModeChange);
   padding: 12px;
   max-width: 1400px;
   margin: 0 auto;
-  min-height: calc(100vh - 24px);
+  /* 删除 min-height 固定高度限制 */
 }
 
 .main-card {
@@ -1177,7 +1180,9 @@ watch(connectionMode, handleModeChange);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   background: #fff;
-  height: calc(100vh - 48px);
+  /* 修改为 auto 高度，确保卡片可以随内容扩展 */
+  height: auto;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
 }
@@ -1191,6 +1196,10 @@ watch(connectionMode, handleModeChange);
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #2c3e50;
+  /* 添加固定定位，确保头部始终可见 */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .title-area {
@@ -1238,21 +1247,26 @@ watch(connectionMode, handleModeChange);
 /* 主要仪表盘区域 */
 .dashboard-container {
   display: flex;
-  height: calc(100% - 70px);
-  overflow: hidden;
+  /* 删除固定高度限制 */
+  height: auto;
+  /* 允许内容溢出时滚动 */
+  overflow: visible;
+  padding-top: 1px; /* 防止margin塌陷 */
 }
 
 .left-panel {
   width: 38%;
   background-color: #f4f6f9;
   border-right: 1px solid #e6e9ed;
-  overflow-y: auto;
+  /* 内容溢出时可滚动 */
+  overflow-y: visible;
   padding: 16px;
 }
 
 .right-panel {
   width: 62%;
-  overflow-y: auto;
+  /* 内容溢出时可滚动 */
+  overflow-y: visible;
   padding: 16px;
 }
 
@@ -1741,6 +1755,8 @@ watch(connectionMode, handleModeChange);
   .left-panel, .right-panel {
     width: 100%;
     padding: 12px;
+    /* 确保在移动视图下内容可以滚动 */
+    overflow-y: visible;
   }
   
   .system-metrics {

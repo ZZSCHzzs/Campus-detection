@@ -64,6 +64,7 @@ declare module 'vue' {
     HardwareNodeStatus: typeof import('./src/components/HardwareNodeStatus.vue')['default']
     HeatMap: typeof import('./src/components/HeatMap.vue')['default']
     HistoricalDataManager: typeof import('./src/components/admin/HistoricalDataManager.vue')['default']
+    InfoModal: typeof import('./src/components/InfoModal.vue')['default']
     Jump: typeof import('./src/components/admin/Jump.vue')['default']
     Navbar: typeof import('./src/components/Navbar.vue')['default']
     NodeManager: typeof import('./src/components/admin/NodeManager.vue')['default']

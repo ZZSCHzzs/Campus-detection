@@ -71,8 +71,8 @@ export const terminalCustomMethods = {
   getTerminalStatus: (id: number) => 
     customApiCall(`/api/terminals/${id}/status/`, 'get', undefined, {}, false),
     
-  getTerminalLogs: (id: number) => 
-    customApiCall<LogEntry[]>(`/api/terminals/${id}/logs/`, 'get', undefined, {}, false),
+  getTerminalLogs: (id: number, params = {}) => 
+    customApiCall<LogEntry[]>(`/api/terminals/${id}/logs/`, 'get', undefined, params, false),
     
   getTerminalConfig: (id: number) => 
     customApiCall<TerminalConfig>(`/api/terminals/${id}/config/`, 'get', undefined, {}, false),
@@ -115,7 +115,7 @@ export const historicalCustomMethods = {
       { ...params, start_date: startDate, end_date: endDate }),
 
   getLatestHistorical: (count = 10) => 
-    customApiCall<HistoricalData[]>(`/api/historical/latest/`, 'get', undefined, { count }),
+    customApiCall<HistoricalData>(`/api/historical/latest/`, 'get', undefined, { count }),
 };
 
 // 用户服务自定义方法
@@ -226,6 +226,7 @@ export const localTerminalCustomMethods = {
       await http.local.get('/api/heartbeat', { timeout: 3000 });
       return true;
     } catch (error) {
+      ElMessage.warning("未检测到本地终端服务，使用远程模式");
       return false;
     }
   },

@@ -308,7 +308,7 @@ class TerminalWebSocketClient:
                     # 添加异常堆栈信息以便调试
                     import traceback
                     logger.error(f"异常堆栈: {traceback.format_exc()}")
-        elif message_type == 'status' or message_type == 'new_log':
+        elif message_type == 'status' or message_type == 'new_log' or message_type == 'logs_batch':
             # 这些是服务端返回的状态更新和日志信息，只需记录日志，不需要特殊处理
             # 避免处理这些消息时又向服务端发送数据，造成循环
             logger.debug(f"收到服务端状态/日志反馈: {message_type}")
