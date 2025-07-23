@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
@@ -27,6 +27,20 @@ const modelStructure = ref<{name: string, type: string, depth: number, id: strin
 const modelObjectsMap = ref<Map<string, THREE.Object3D>>(new Map())
 const originalMaterials = ref<Map<string, THREE.Material | THREE.Material[]>>(new Map())
 const highlightedObjectId = ref<string | null>(null)
+
+// 添加编辑状态管理
+const editingItemId = ref<string | null>(null);
+const newItemName = ref('');
+
+// 添加坐标显示相关变量
+const showCoordinates = ref(false)
+const selectedPosition = reactive({
+  x: 0,
+  y: 0,
+  z: 0
+})
+const raycaster = new THREE.Raycaster()
+const mouse = new THREE.Vector2()
 
 // 初始化Three.js场景
 const initThreeScene = () => {
@@ -57,6 +71,11 @@ const initThreeScene = () => {
   controls.maxPolarAngle = Math.PI / 2
   
 
+  // 添加坐标轴辅助工具
+  const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
+  scene.add(axesHelper)
+  
+
   // 加载OBJ建筑模型
   loadBuildingModel()
   
@@ -80,7 +99,7 @@ const loadBuildingModel = () => {
       '/models/campus.obj',
       (object) => {
         // 先缩放模型
-        object.scale.set(0.1, 0.1, 0.1)
+        object.scale.set(0.005, 0.005, 0.005)
         
         // 计算模型边界盒
         const boundingBox = new THREE.Box3().setFromObject(object)
@@ -184,7 +203,8 @@ const collectModelStructure = (object, depth = 0, result = []) => {
     type: typeName,
     depth: depth,
     id: object.uuid,
-    isMesh: object instanceof THREE.Mesh
+    isMesh: object instanceof THREE.Mesh,
+    visible: object.visible // 记录初始可见性状态
   });
   
   if (object.children && object.children.length > 0) {
@@ -290,6 +310,11 @@ const animate = () => {
 // 组件挂载时初始化
 onMounted(() => {
   initThreeScene()
+  
+  // 添加点击事件监听
+  if (heatmapRef.value) {
+    heatmapRef.value.addEventListener('click', handleCanvasClick)
+  }
 })
 
 // 组件卸载前清理资源
@@ -329,6 +354,162 @@ onBeforeUnmount(() => {
   originalMaterials.value.clear();
   modelObjectsMap.value.clear();
 })
+
+// 处理双击开始编辑名称
+const startEditName = (item) => {
+  // 只允许编辑一项
+  editingItemId.value = item.id;
+  newItemName.value = item.name || '';
+}
+
+// 应用名称修改
+const applyRename = () => {
+  if (!editingItemId.value || !newItemName.value.trim()) {
+    cancelRename();
+    return;
+  }
+
+  // 获取正在编辑的对象
+  const object = modelObjectsMap.value.get(editingItemId.value);
+  if (object) {
+    // 更改实际3D对象的名称
+    object.name = newItemName.value.trim();
+    
+    // 更新结构树显示
+    const itemIndex = modelStructure.value.findIndex(item => item.id === editingItemId.value);
+    if (itemIndex >= 0) {
+      modelStructure.value[itemIndex].name = newItemName.value.trim();
+    }
+  }
+  
+  // 清除编辑状态
+  editingItemId.value = null;
+  newItemName.value = '';
+}
+
+// 取消重命名操作
+const cancelRename = () => {
+  editingItemId.value = null;
+  newItemName.value = '';
+}
+
+// 处理重命名输入框的按键事件
+const handleRenameKeydown = (event) => {
+  if (event.key === 'Enter') {
+    applyRename();
+  } else if (event.key === 'Escape') {
+    cancelRename();
+  }
+}
+
+// 添加坐标显示功能
+const updateMousePosition = (event) => {
+  if (!renderer.value || !camera.value) return;
+  
+  const rect = renderer.value.domElement.getBoundingClientRect();
+  
+  // 计算鼠标在场景中的位置
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  // 更新射线投射器
+  raycaster.setFromCamera(mouse, camera);
+  
+  // 计算物体与鼠标射线的交点
+  const intersects = raycaster.intersectObjects(scene.children, true);
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+    selectedPosition.x = point.x;
+    selectedPosition.y = point.y;
+    selectedPosition.z = point.z;
+  }
+}
+
+// 监听鼠标移动事件
+const onDocumentMouseMove = (event) => {
+  updateMousePosition(event);
+}
+
+// 监听鼠标点击事件
+const onDocumentMouseClick = (event) => {
+  if (!showCoordinates.value) return;
+  
+  // 更新坐标
+  updateMousePosition(event);
+}
+
+// 处理点击事件获取坐标
+const handleCanvasClick = (event) => {
+  if (!heatmapRef.value || !camera || !scene) return
+  
+  // 计算鼠标在canvas中的归一化坐标（-1到1之间）
+  const rect = renderer.domElement.getBoundingClientRect()
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+  
+  // 设置射线投射器
+  raycaster.setFromCamera(mouse, camera)
+  
+  // 获取与射线相交的所有物体
+  const intersects = raycaster.intersectObjects(scene.children, true)
+  
+  // 如果有相交的物体
+  if (intersects.length > 0) {
+    // 获取第一个交点的坐标（最近的）
+    const point = intersects[0].point
+    
+    // 更新选中位置
+    selectedPosition.x = parseFloat(point.x.toFixed(3))
+    selectedPosition.y = parseFloat(point.y.toFixed(3))
+    selectedPosition.z = parseFloat(point.z.toFixed(3))
+    
+    // 显示坐标信息
+    showCoordinates.value = true
+  }
+}
+
+// 切换坐标显示
+const toggleCoordinates = () => {
+  showCoordinates.value = !showCoordinates.value;
+}
+
+// 切换对象可见性
+const toggleVisibility = (id) => {
+  // 获取目标对象
+  const object = modelObjectsMap.value.get(id);
+  if (!object) return;
+  
+  // 切换可见性
+  object.visible = !object.visible;
+  
+  // 更新结构树状态
+  const itemIndex = modelStructure.value.findIndex(item => item.id === id);
+  if (itemIndex >= 0) {
+    modelStructure.value[itemIndex].visible = object.visible;
+  }
+  
+  // 如果之前高亮了这个对象但现在设为不可见，则取消高亮
+  if (!object.visible && highlightedObjectId.value === id) {
+    resetHighlight();
+  }
+}
+
+// 在组件挂载时添加事件监听
+onMounted(() => {
+  window.addEventListener('mousemove', onDocumentMouseMove);
+  window.addEventListener('click', onDocumentMouseClick);
+})
+
+// 在组件卸载时移除事件监听
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onDocumentMouseMove);
+  window.removeEventListener('click', onDocumentMouseClick);
+  
+  // 移除点击事件监听
+  if (heatmapRef.value) {
+    heatmapRef.value.removeEventListener('click', handleCanvasClick)
+  }
+})
 </script>
 
 <template>
@@ -367,15 +548,54 @@ onBeforeUnmount(() => {
           v-for="item in modelStructure" 
           :key="item.id" 
           class="structure-item" 
-          :class="{ 'is-mesh': item.isMesh, 'is-highlighted': item.id === highlightedObjectId }"
+          :class="{ 
+            'is-mesh': item.isMesh, 
+            'is-highlighted': item.id === highlightedObjectId,
+            'is-editing': item.id === editingItemId,
+            'is-hidden': !item.visible
+          }"
           :style="{paddingLeft: `${item.depth * 16}px`}"
           @mouseenter="item.isMesh ? handleItemMouseEnter(item.id) : null"
           @mouseleave="handleItemMouseLeave"
+          @dblclick.stop="startEditName(item)"
         >
-          <span class="item-name">{{ item.name || '未命名' }}</span>
-          <span class="item-type">{{ item.type }}</span>
+          <!-- 可见性切换按钮 -->
+          <button 
+            class="visibility-toggle"
+            @click.stop="toggleVisibility(item.id)"
+            :title="item.visible ? '隐藏' : '显示'"
+          >
+            <span v-if="item.visible">👁️</span>
+            <span v-else>👁️‍🗨️</span>
+          </button>
+          
+          <!-- 编辑状态 -->
+          <div v-if="item.id === editingItemId" class="edit-name-container" @click.stop>
+            <input 
+              v-model="newItemName" 
+              class="edit-name-input"
+              @keydown="handleRenameKeydown"
+              @blur="applyRename"
+              v-focus
+            />
+          </div>
+          
+          <!-- 显示状态 -->
+          <template v-else>
+            <span class="item-name">{{ item.name || '未命名' }}</span>
+            <span class="item-type">{{ item.type }}</span>
+          </template>
         </div>
       </div>
+    </div>
+    
+    <!-- 坐标显示面板 -->
+    <div v-if="showCoordinates" class="coordinates-panel">
+      <div class="coordinates-title">点击位置坐标</div>
+      <div class="coordinates-value">X: {{ selectedPosition.x }}</div>
+      <div class="coordinates-value">Y: {{ selectedPosition.y }}</div>
+      <div class="coordinates-value">Z: {{ selectedPosition.z }}</div>
+      <button class="close-btn" @click="showCoordinates = false">关闭</button>
     </div>
   </div>
 </template>
@@ -582,10 +802,48 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+/* 添加可见性切换按钮样式 */
+.visibility-toggle {
+  background: none;
+  border: none;
+  padding: 2px;
+  margin-right: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  color: #e2e8f0;
+}
+
+.visibility-toggle:hover {
+  opacity: 1;
+}
+
 .structure-item {
   padding: 3px 0;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+}
+
+/* 隐藏项目样式 */
+.structure-item.is-hidden {
+  opacity: 0.5;
+}
+
+.structure-item.is-hidden .item-name {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.item-name {
+  flex-grow: 1;
+}
+
+.item-type {
+  margin-left: auto;
 }
 
 .structure-item.is-mesh {
@@ -615,9 +873,33 @@ onBeforeUnmount(() => {
   font-size: 10px;
 }
 
-/* 添加悬停提示 */
+/* 添加重命名相关样式 */
+.structure-item.is-editing {
+  background-color: rgba(56, 189, 248, 0.15);
+  padding: 6px 0;
+}
+
+.edit-name-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.edit-name-input {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 3px;
+  padding: 4px 8px;
+  color: #ffffff;
+  width: calc(100% - 16px);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* 添加悬停提示 - 包含双击重命名信息 */
 .structure-item.is-mesh::after {
-  content: "👆 悬停可高亮";
+  content: "👆 悬停高亮 | 双击重命名";
   position: absolute;
   right: 10px;
   font-size: 10px;
@@ -628,5 +910,41 @@ onBeforeUnmount(() => {
 
 .structure-item.is-mesh:hover::after {
   opacity: 0.7;
+}
+
+/* 坐标显示样式 */
+.coordinates-panel {
+  position: absolute;
+  top: 100px;
+  left: 20px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 8px;
+  padding: 12px;
+  z-index: 100;
+  color: #e2e8f0;
+}
+
+.coordinates-title {
+  font-weight: bold;
+  color: #38bdf8;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+  padding-bottom: 4px;
+}
+
+.coordinates-value {
+  font-family: monospace;
+  margin: 4px 0;
+}
+
+.close-btn {
+  margin-top: 8px;
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 </style>
