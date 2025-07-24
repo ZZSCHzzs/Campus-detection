@@ -398,6 +398,12 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.nodes = status_data['nodes']
             if 'co2_level' in status_data:  # 添加CO2数据处理
                 terminal.co2_level = status_data['co2_level']
+            if 'system_uptime' in status_data:
+                terminal.system_uptime = status_data['system_uptime']
+            if 'frame_rate' in status_data:
+                terminal.frame_rate = status_data['frame_rate']
+            if 'total_frames' in status_data:
+                terminal.total_frames = status_data['total_frames']
                 
             terminal.last_active = timezone.now()
             terminal.save()

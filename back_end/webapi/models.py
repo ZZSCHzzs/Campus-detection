@@ -45,9 +45,15 @@ class ProcessTerminal(models.Model):
     camera_config = models.JSONField(default=dict, blank=True)
     save_image = models.BooleanField(default=True)
     preload_model = models.BooleanField(default=True)
+    node_config = models.JSONField(default=dict, blank=True, verbose_name="节点配置")
 
     # 节点状态
     nodes = models.JSONField(default=dict, blank=True)
+
+    # 系统状态
+    system_uptime = models.IntegerField(default=0, verbose_name="系统运行时间", blank=True, null=True)
+    frame_rate = models.FloatField(default=0, verbose_name="帧率", blank=True, null=True)
+    total_frames = models.IntegerField(default=0, verbose_name="总帧数", blank=True, null=True)
 
     def update_status(self, status_data):
         # 更新状态字段
