@@ -574,3 +574,21 @@ class TerminalWebSocketClient:
             logger.error(f"发送命令响应失败: {str(e)}")
             logger.error(f"异常堆栈: {traceback.format_exc()}")
             return False
+        
+    async def send_system_status(self, status_data):
+        """发送系统状态到服务器（用于系统监控主动推送）"""
+        # 确保有终端ID
+        if 'terminal_id' not in status_data and self.terminal_id:
+            status_data['terminal_id'] = self.terminal_id
+        message = {
+            'type': 'system_status',
+            'status': status_data,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        }
+        if not self.is_connected():
+            logger.warning("WebSocket未连接，无法发送系统状态")
+            return False
+        return await self.send_message(message)
+       
+    async def send_status(self, status_data):
+        return await self.send_system_status(status_data)
