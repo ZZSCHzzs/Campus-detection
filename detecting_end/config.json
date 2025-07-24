@@ -1,16 +1,15 @@
 {
     "mode": "push",
     "interval": 3,
-    "cameras": {
-        "1": "192.168.1.100",
-        "2": "192.168.1.101"
+    "nodes": {
+        "3": "192.168.43.200:81"
     },
     "save_image": true,
     "preload_model": true,
     "terminal_id": 2,
     "server_url": "https://smarthit.top",
     "api_url": "https://smarthit.top/api/upload/",
-    "camera_config": {
+    "node_config": {
         "framesize": 8,
         "quality": 10,
         "brightness": 1,

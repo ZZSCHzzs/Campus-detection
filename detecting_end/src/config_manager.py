@@ -13,13 +13,13 @@ class ConfigManager:
     DEFAULT_CONFIG = {
         'mode': 'push',  # 默认为被动接收模式，可选值: push, pull, both
         'interval': 1,   # 主动拉取模式的间隔时间（秒）
-        'cameras': {1: "http://192.168.1.101:81"},  # 摄像头配置
+        'nodes': {1: "http://192.168.1.101:81"},  # 摄像头配置
         'save_image': True,   # 是否保存图像
         'preload_model': True,  # 是否预加载模型
         'terminal_id': 1,  # 当前终端的ID
         'server_url': "wss://smarthit.top",  # WebSocket服务器URL
         'api_url': "https://smarthit.top/api/upload/",  # API上传URL
-        'camera_config': {
+        'node_config': {
             'framesize': 8,  # XGA(1024x768)
             'quality': 10,
             'brightness': 1,

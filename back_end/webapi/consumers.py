@@ -394,8 +394,8 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.pull_running = status_data['pull_running']
             if 'model_loaded' in status_data:
                 terminal.model_loaded = status_data['model_loaded']
-            if 'cameras' in status_data:
-                terminal.cameras = status_data['cameras']
+            if 'nodes' in status_data:
+                terminal.nodes = status_data['nodes']
             if 'co2_level' in status_data:  # 添加CO2数据处理
                 terminal.co2_level = status_data['co2_level']
                 

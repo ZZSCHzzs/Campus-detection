@@ -115,7 +115,7 @@ class LogManager:
             self.memory_logs.insert(0, log_entry)  # 新日志添加到开头
         
         # 写入日志文件
-        logger = logging.getLogger('detect_app')
+        logger = logging.getLogger('System')
         
         if level == 'debug':
             logger.debug(f"{message}")

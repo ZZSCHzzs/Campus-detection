@@ -43,10 +43,10 @@ export interface ProcessTerminal {
     pull_running?: boolean
     mode?: 'pull' | 'push' | 'both'
     interval?: number
-    camera_config?: Record<string, any>
+    node_config?: Record<string, any>
     save_image?: boolean
     preload_model?: boolean
-    cameras?: Record<string, string>
+    nodes?: Record<string, string>
     version?: string
     co2_level?: number
 }
@@ -121,7 +121,7 @@ export interface TerminalCommand {
  * 终端状态接口
  */
 export interface TerminalStatus {
-  cameras: Record<string, string>;
+  nodes: Record<string, string | number | boolean>;
   cpu_usage: number;
   memory_usage: number;
   push_running: boolean;
@@ -129,6 +129,16 @@ export interface TerminalStatus {
   model_loaded: boolean;
   started_at?: string;
   mode?: string;
+  co2_level?: number;
+  system_uptime?: number;
+  frame_rate?: number;
+  total_frames?: number;
+  last_detection?: {
+    camera_id: number;
+    count: number;
+    time: string;
+  };
+  terminal_online?: boolean;
   [key: string]: any;
 }
 
@@ -170,5 +180,3 @@ export interface EnvironmentInfo {
   };
   terminal_mode?: 'local' | 'remote'; // 终端模式
 }
-
-// 注意：ProcessTerminal接口保持不变，因为它已经足够完整

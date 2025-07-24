@@ -226,7 +226,7 @@ export const localTerminalCustomMethods = {
       await http.local.get('/api/heartbeat', { timeout: 3000 });
       return true;
     } catch (error) {
-      ElMessage.warning("未检测到本地终端服务，使用远程模式");
+      console.error('本地终端不可用:', error);
       return false;
     }
   },

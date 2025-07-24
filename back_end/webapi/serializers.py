@@ -77,8 +77,6 @@ class DataUploadSerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField()
     temperature = serializers.FloatField(required=False, allow_null=True)
     humidity = serializers.FloatField(required=False, allow_null=True)
-    co2_level = serializers.FloatField(required=False, allow_null=True)
-
 
 class AlertSerializer(serializers.ModelSerializer):
     class Meta:

@@ -43,7 +43,7 @@ const router = useRouter();
 const connectionMode = ref('remote');
 const loading = ref(true);
 const pollTimer = ref(null);
-
+const isActive = ref(true);
 // 终端信息
 const terminal = reactive({
   id: null,
@@ -53,19 +53,32 @@ const terminal = reactive({
 
 // 终端状态
 const status = reactive({
-  cameras: {},
+  nodes: {},
   cpu_usage: 0,
   memory_usage: 0,
+  disk_usage: 0,
+  disk_free: 0,
+  disk_total: 0,
+  memory_available: 0,
+  memory_total: 0,
   push_running: false,
   pull_running: false,
-  model_loaded: false
+  model_loaded: false,
+  co2_level: null,
+  system_uptime: null,
+  frame_rate: null,
+  total_frames: null,
+  terminal_online: false,
+  last_detection: null,
+  mode: 'both',
+  terminal_id: null
 });
 
 // 终端配置
 const config = reactive({
   mode: 'both',
   interval: 5,
-  cameras: [],
+  nodes: [],
   save_image: true,
   preload_model: true
 });
@@ -73,8 +86,8 @@ const config = reactive({
 // 原始配置（用于重置）
 const originalConfig = reactive({});
 
-// 新摄像头信息
-const newCamera = reactive({
+// 新节点信息
+const newNode = reactive({
   id: '',
   url: ''
 });
@@ -162,25 +175,30 @@ const loadTerminalStatus = async () => {
     } else {
       data = await apiService.terminals.getTerminalStatus(terminal.id);
     }
-    
     // 标准化数据格式
     const statusData = {
-      cameras: data.cameras || {},
+      nodes: data.nodes || {},
       cpu_usage: data.cpu_usage || 0,
       memory_usage: data.memory_usage || 0,
+      disk_usage: data.disk_usage || 0,
+      disk_free: data.disk_free || 0,
+      disk_total: data.disk_total || 0,
+      memory_available: data.memory_available || 0,
+      memory_total: data.memory_total || 0,
       push_running: data.push_running || false,
       pull_running: data.pull_running || false,
       model_loaded: data.model_loaded || false,
-      system_uptime: data.system_uptime,
-      frame_rate: data.frame_rate,
-      total_frames: data.total_frames
+      co2_level: data.co2_level ?? null,
+      system_uptime: data.system_uptime ?? null,
+      frame_rate: data.frame_rate ?? null,
+      total_frames: data.total_frames ?? null,
+      terminal_online: data.terminal_online ?? false,
+      last_detection: data.last_detection ?? null,
+      mode: data.mode ?? 'both',
+      terminal_id: data.terminal_id ?? null
     };
-    
     Object.assign(status, statusData);
-    
-    // 更新终端状态
     terminal.status = status.model_loaded || status.push_running || status.pull_running;
-    
     return data;
   } catch (error) {
     console.error('加载终端状态失败:', error);
@@ -205,8 +223,8 @@ const loadTerminalConfig = async () => {
     config.save_image = configData.save_image !== undefined ? configData.save_image : true;
     config.preload_model = configData.preload_model !== undefined ? configData.preload_model : true;
     
-    // 转换摄像头数据格式
-    config.cameras = Object.entries(configData.cameras || {}).map(([id, url]) => ({
+    // 转换节点数据格式
+    config.nodes = Object.entries(configData.nodes || {}).map(([id, url]) => ({
       id: parseInt(id),
       url
     }));
@@ -308,34 +326,34 @@ const refreshStatus = async () => {
   }
 };
 
-// 添加摄像头
-const addCamera = () => {
-  if (!newCamera.id || !newCamera.url) {
-    ElMessage.warning('请输入完整的摄像头信息');
+// 添加节点
+const addNode = () => {
+  if (!newNode.id || !newNode.url) {
+    ElMessage.warning('请输入完整的节点信息');
     return;
   }
   
-  const camId = parseInt(newCamera.id);
+  const camId = parseInt(newNode.id);
   
   // 检查ID是否已存在
-  if (config.cameras.some(cam => cam.id === camId)) {
+  if (config.nodes.some(cam => cam.id === camId)) {
     ElMessage.warning(`ID ${camId} 已存在`);
     return;
   }
   
-  config.cameras.push({
+  config.nodes.push({
     id: camId,
-    url: newCamera.url
+    url: newNode.url
   });
   
   // 清空输入
-  newCamera.id = '';
-  newCamera.url = '';
+  newNode.id = '';
+  newNode.url = '';
 };
 
-// 移除摄像头
-const removeCamera = (index) => {
-  config.cameras.splice(index, 1);
+// 移除节点
+const removeNode = (index) => {
+  config.nodes.splice(index, 1);
 };
 
 // 保存配置
@@ -343,16 +361,16 @@ const saveConfig = async () => {
   try {
     loading.value = true;
     
-    // 转换摄像头格式为对象
-    const camerasObj = {};
-    config.cameras.forEach(cam => {
-      camerasObj[cam.id] = cam.url;
+    // 转换节点格式为对象
+    const nodesObj = {};
+    config.nodes.forEach(cam => {
+      nodesObj[cam.id] = cam.url;
     });
     
     const configToSave = {
       mode: config.mode,
       interval: parseFloat(config.interval),
-      cameras: camerasObj,
+      nodes: nodesObj,
       save_image: config.save_image,
       preload_model: config.preload_model
     };
@@ -471,13 +489,13 @@ const customColorMethod = (percentage) => {
 const statusRefreshTimer = ref(null);
 
 
-// 简化初始化流程
 onMounted(async () => {
   loading.value = true;
   
   try {
     // 检查本地终端是否可用
     localAvailable.value = await apiService.localTerminal.checkLocalAvailable();
+    if (!isActive.value) return;
     
     // 加载终端列表（用于远程模式）并确定远程可用性
     await loadTerminalList();
@@ -500,6 +518,10 @@ onMounted(async () => {
       ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
     }
     // 根据选定的模式加载相应数据
+    if (!isActive.value) return;
+    if(!localAvailable.value){
+      ElMessage.warning('未检测到本地终端服务，使用远程模式');
+    }
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
       if (route.params.id) {
@@ -509,8 +531,9 @@ onMounted(async () => {
         // 否则使用列表中第一个终端
         terminal.id = terminalList.value[0].id;
         selectedTerminalId.value = terminal.id;
-        // 修正路由路径
-        router.replace(`/terminal/${terminal.id}`);
+        if(isActive.value) {
+          router.replace(`/terminal/${terminal.id}`);
+        }
       }
     }
     
@@ -547,7 +570,7 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('初始化失败:', error);
-    ElMessage.error('加载终端数据失败');
+    ElMessage.error('初始化失败:', error.message);
   } finally {
     loading.value = false;
   }
@@ -686,6 +709,7 @@ const formatUptime = (seconds) => {
 
 // 组件卸载时的清理
 onUnmounted(() => {
+  isActive.value = false;
   // 清除轮询
   if (pollTimer.value) {
     clearInterval(pollTimer.value);
@@ -812,6 +836,30 @@ watch(connectionMode, handleModeChange);
                 <el-progress :percentage="status.memory_usage" :color="customColorMethod" :stroke-width="10" :show-text="false" />
               </div>
               
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">磁盘使用率</span>
+                  <span class="metric-value">{{ status.disk_usage.toFixed(1) }}%</span>
+                </div>
+                <el-progress :percentage="status.disk_usage" :color="customColorMethod" :stroke-width="10" :show-text="false" />
+              </div>
+              
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">可用内存 / 总内存</span>
+                  <span class="metric-value">{{ (status.memory_available / 1024 / 1024 / 1024).toFixed(2) }} / {{ (status.memory_total / 1024 / 1024 / 1024).toFixed(2) }}  GB</span>
+                </div>
+              </div>
+              
+              
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">可用磁盘 / 总磁盘</span>
+                  <span class="metric-value">{{ (status.disk_free / 1024 / 1024 / 1024).toFixed(2) }} / {{ (status.disk_total / 1024 / 1024 / 1024).toFixed(2) }} GB</span>
+                </div>
+              </div>
+              
+              
               <!-- 添加额外系统信息显示 -->
               <div class="system-metrics">
                 <div class="metric-box" v-if="status.system_uptime">
@@ -850,7 +898,7 @@ watch(connectionMode, handleModeChange);
                 <div class="info-icon"><el-icon><Location /></el-icon></div>
                 <div class="info-content">
                   <span class="info-label">终端ID</span>
-                  <span class="info-value chip">{{ terminal.id || '本地终端' }}</span>
+                  <span class="info-value chip">{{ status.terminal_id || terminal.id || '本地终端' }}</span>
                 </div>
               </div>
               
@@ -861,6 +909,14 @@ watch(connectionMode, handleModeChange);
                   <el-tag :type="status.model_loaded ? 'success' : 'warning'" size="small" class="status-chip">
                     {{ status.model_loaded ? '已加载' : '未加载' }}
                   </el-tag>
+                </div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-icon"><el-icon><Setting /></el-icon></div>
+                <div class="info-content">
+                  <span class="info-label">工作模式</span>
+                  <span class="info-value">{{ status.mode }}</span>
                 </div>
               </div>
               
@@ -986,31 +1042,31 @@ watch(connectionMode, handleModeChange);
             </div>
           </div>
           
-          <!-- 摄像头状态 -->
+          <!-- 节点状态 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><VideoCamera /></el-icon> 摄像头状态</h3>
+              <h3><el-icon><VideoCamera /></el-icon> 节点状态</h3>
             </div>
             
-            <el-empty v-if="Object.keys(status.cameras).length === 0" description="暂无摄像头数据" :image-size="80"></el-empty>
-            <div v-else class="camera-grid">
+            <el-empty v-if="Object.keys(status.nodes).length === 0" description="暂无节点数据" :image-size="80"></el-empty>
+            <div v-else class="node-grid">
               <div 
-                v-for="[id, cameraStatus] in Object.entries(status.cameras)" 
+                v-for="[id, nodeStatus] in Object.entries(status.nodes)" 
                 :key="id"
-                class="camera-item"
-                :class="{ 'camera-active': cameraStatus === '在线' }"
+                class="node-item"
+                :class="{ 'node-active': nodeStatus === '在线' }"
               >
-                <div class="camera-icon">
+                <div class="node-icon">
                   <el-icon><VideoCamera /></el-icon>
                 </div>
-                <div class="camera-info">
-                  <div class="camera-id">摄像头 #{{ id }}</div>
+                <div class="node-info">
+                  <div class="node-id">节点 #{{ id }}</div>
                   <el-tag 
-                    :type="cameraStatus === '在线' ? 'success' : 'danger'"
+                    :type="nodeStatus === '在线' ? 'success' : 'danger'"
                     size="small"
-                    class="camera-status"
+                    class="node-status"
                   >
-                    {{ cameraStatus }}
+                    {{ nodeStatus }}
                   </el-tag>
                 </div>
               </div>
@@ -1083,15 +1139,15 @@ watch(connectionMode, handleModeChange);
                   </div>
                 </el-tab-pane>
                 
-                <el-tab-pane label="摄像头配置">
-                  <div class="camera-config">
-                    <div class="camera-list-container">
+                <el-tab-pane label="节点配置">
+                  <div class="node-config">
+                    <div class="node-list-container">
                       <el-table 
-                        :data="config.cameras" 
+                        :data="config.nodes" 
                         border 
                         size="small"
                         height="200px"
-                        class="camera-table"
+                        class="node-table"
                       >
                         <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
                         <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
@@ -1100,7 +1156,7 @@ watch(connectionMode, handleModeChange);
                             <el-button 
                               type="danger" 
                               size="small"
-                              @click="removeCamera(scope.$index)"
+                              @click="removeNode(scope.$index)"
                               circle
                             >
                               <el-icon><Delete /></el-icon>
@@ -1110,10 +1166,10 @@ watch(connectionMode, handleModeChange);
                       </el-table>
                     </div>
                     
-                    <div class="add-camera-form">
-                      <el-input v-model="newCamera.id" placeholder="ID" class="camera-id-input" size="small"></el-input>
-                      <el-input v-model="newCamera.url" placeholder="摄像头URL" class="camera-url-input" size="small"></el-input>
-                      <el-button type="primary" @click="addCamera" size="small" class="add-button">
+                    <div class="add-node-form">
+                      <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
+                      <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input" size="small"></el-input>
+                      <el-button type="primary" @click="addNode" size="small" class="add-button">
                         <el-icon><Plus /></el-icon>添加
                       </el-button>
                     </div>
@@ -1523,14 +1579,14 @@ watch(connectionMode, handleModeChange);
   min-width: 90px;
 }
 
-/* 摄像头显示 */
-.camera-grid {
+/* 节点显示 */
+.node-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
-.camera-item {
+.node-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1541,12 +1597,12 @@ watch(connectionMode, handleModeChange);
   transition: all 0.3s ease;
 }
 
-.camera-active {
+.node-active {
   background: linear-gradient(to right, rgba(19, 206, 102, 0.1), rgba(19, 206, 102, 0.05));
   border-color: rgba(19, 206, 102, 0.2);
 }
 
-.camera-icon {
+.node-icon {
   width: 32px;
   height: 32px;
   border-radius: 6px;
@@ -1558,23 +1614,23 @@ watch(connectionMode, handleModeChange);
   font-size: 16px;
 }
 
-.camera-active .camera-icon {
+.node-active .node-icon {
   background: rgba(19, 206, 102, 0.1);
   color: #13ce66;
 }
 
-.camera-info {
+.node-info {
   flex: 1;
 }
 
-.camera-id {
+.node-id {
   font-size: 0.85rem;
   font-weight: 500;
   color: #2c3e50;
   margin-bottom: 3px;
 }
 
-.camera-status {
+.node-status {
   font-size: 0.7rem;
 }
 
@@ -1613,18 +1669,18 @@ watch(connectionMode, handleModeChange);
   color: #606266;
 }
 
-.camera-config {
+.node-config {
   padding: 10px;
 }
 
-.camera-list-container {
+.node-list-container {
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #ebeef5;
   margin-bottom: 12px;
 }
 
-.add-camera-form {
+.add-node-form {
   display: flex;
   gap: 10px;
   padding: 12px;
@@ -1633,11 +1689,11 @@ watch(connectionMode, handleModeChange);
   border: 1px solid #ebeef5;
 }
 
-.camera-id-input {
+.node-id-input {
   width: 80px;
 }
 
-.camera-url-input {
+.node-url-input {
   flex-grow: 1;
 }
 
@@ -1799,7 +1855,7 @@ watch(connectionMode, handleModeChange);
     justify-content: space-between;
   }
   
-  .camera-grid {
+  .node-grid {
     grid-template-columns: 1fr;
   }
   
@@ -1807,11 +1863,11 @@ watch(connectionMode, handleModeChange);
     grid-template-columns: 1fr;
   }
   
-  .add-camera-form {
+  .add-node-form {
     flex-direction: column;
   }
   
-  .camera-id-input, .camera-url-input {
+  .node-id-input, .node-url-input {
     width: 100%;
   }
   

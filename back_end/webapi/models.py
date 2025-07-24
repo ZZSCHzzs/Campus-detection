@@ -45,9 +45,9 @@ class ProcessTerminal(models.Model):
     camera_config = models.JSONField(default=dict, blank=True)
     save_image = models.BooleanField(default=True)
     preload_model = models.BooleanField(default=True)
-    
-    # 摄像头状态
-    cameras = models.JSONField(default=dict, blank=True)
+
+    # 节点状态
+    nodes = models.JSONField(default=dict, blank=True)
 
     def update_status(self, status_data):
         # 更新状态字段
