@@ -243,7 +243,7 @@ const updateChart = (option: any) => {
     // 强化series校验
     if (clonedOption?.series) {
       clonedOption.series = clonedOption.series
-        .filter(s => 
+        .filter(s =>
           s &&
           typeof s.type === 'string' &&
           echartsSeriesTypes.includes(s.type) &&
@@ -420,7 +420,10 @@ onMounted(async () => {
     setTimeout(async () => {
       await initChart()
       if (chart.value) {
-        cleanupChartEvents = setupChartEvents()
+        const cleanup = setupChartEvents()
+        if (cleanup) {
+          cleanupChartEvents = cleanup
+        }
       }
 
       // 如果图表初始化后宽度为0，尝试再次初始化
@@ -429,7 +432,10 @@ onMounted(async () => {
         setTimeout(async () => {
           await initChart()
           if (chart.value && !cleanupChartEvents) {
-            cleanupChartEvents = setupChartEvents()
+            const cleanup = setupChartEvents();
+            if (cleanup) {
+              cleanupChartEvents = cleanup;
+            }
           }
         }, 200)
       }
@@ -510,7 +516,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px; /* 增加左右内边距 */
+  padding: 16px 20px;
+  /* 增加左右内边距 */
   border-bottom: none;
   background: transparent;
 }
@@ -518,13 +525,15 @@ onUnmounted(() => {
 .chart-title {
   font-size: 18px;
   font-weight: 600;
-  margin: 0 0 8px 12px; /* 增加下边距 */
+  margin: 0 0 8px 12px;
+  /* 增加下边距 */
   padding-left: 4px;
   border-left: 4px solid var(--el-color-primary);
 }
 
 .chart-header {
-  padding: 16px 20px 16px 28px; /* 增大左侧内边距 */
+  padding: 16px 20px 16px 28px;
+  /* 增大左侧内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
