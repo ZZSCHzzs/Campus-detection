@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.utils import timezone
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from django.core.cache import cache
 
 class HardwareNode(models.Model):
     name = models.CharField(max_length=100, verbose_name="节点名称")
@@ -242,3 +245,18 @@ class Notice(models.Model):
     class Meta:
         verbose_name = "公告"
         verbose_name_plural = "公告"
+
+
+@receiver([post_save, post_delete], sender=Area)
+@receiver([post_save, post_delete], sender=HardwareNode)
+@receiver([post_save, post_delete], sender=ProcessTerminal)
+@receiver([post_save, post_delete], sender=Building)
+@receiver([post_save, post_delete], sender=Notice)
+@receiver([post_save, post_delete], sender=Alert)
+@receiver([post_save, post_delete], sender=CustomUser)
+def clear_summary_cache(sender, **kwargs):
+    """清除相关缓存"""
+    cache.delete("system_summary")
+    # 清除热门区域缓存
+    for count in [5, 8, 10]:  # 常用的count值
+        cache.delete(f"popular_areas_{count}")

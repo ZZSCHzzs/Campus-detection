@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { AreaItem, Alert, Notice, SummaryData } from '../types'
+import type { AreaItem, Alert, Notice, SummaryData, Building } from '../types'
 import { useAuthStore } from '../stores/auth'
 import { areaService, noticeService, alertService, summaryService, buildingService } from '../services'
 import apiService from '../services'
@@ -37,6 +37,12 @@ const loadingFavorites = ref(false)
 const selectedAreaForEnvironmental = ref<number | null>(null)
 const allAreas = ref<AreaItem[]>([])
 const loadingAllAreas = ref(false)
+
+// 添加新的响应式数据
+const selectedBuildingForEnvironmental = ref<number | null>(null)
+const buildingAreas = ref<AreaItem[]>([])
+const loadingBuildingAreas = ref(false)
+const buildings = ref<Building[]>([])
 
 const isFirstLoad = ref(true)
 
@@ -125,6 +131,34 @@ const fetchAllAreas = async () => {
     if (isFirstLoad.value) {
       loadingAllAreas.value = false
     }
+  }
+}
+
+// 获取建筑列表
+const fetchBuildings = async () => {
+  try {
+    buildings.value = await buildingService.getBuildingsBasic()
+  } catch (error) {
+    console.error('获取建筑列表失败:', error)
+  }
+}
+
+// 建筑选择变化处理
+const onBuildingChange = async (buildingId: number | null) => {
+  selectedAreaForEnvironmental.value = null
+  buildingAreas.value = []
+  
+  if (!buildingId) return
+  
+  try {
+    loadingBuildingAreas.value = true
+    const areas = await buildingService.getBuildingAreas(buildingId)
+    buildingAreas.value = areas
+  } catch (error) {
+    ElMessage.error('获取建筑区域失败')
+    buildingAreas.value = []
+  } finally {
+    loadingBuildingAreas.value = false
   }
 }
 
@@ -232,7 +266,8 @@ onMounted(async () => {
     fetchFavoriteAreas(),
     fetchPublicAlerts(),
     fetchLatestNotices(),
-    fetchAllAreas()
+    fetchAllAreas(),
+    fetchBuildings()
   ]).catch(() => ElMessage.error('数据获取出错'))
   isFirstLoad.value = false
   
@@ -350,37 +385,48 @@ onBeforeUnmount(() => {
           <template #header>
             <div class="chart-header">
               <span class="card-title">🌡️ 环境数据监测</span>
-              <el-select 
-                v-model="selectedAreaForEnvironmental" 
-                placeholder="选择区域" 
-                size="small" 
-                style="width: 180px;"
-                :loading="loadingAllAreas"
-              >
-                <el-option
-                  v-for="area in allAreas"
-                  :key="area.id"
-                  :label="area.name"
-                  :value="area.id"
-                />
-              </el-select>
+              <div class="chart-controls">
+                <el-select 
+                  v-model="selectedBuildingForEnvironmental" 
+                  placeholder="选择建筑" 
+                  size="small" 
+                  style="width: 120px; margin-right: 8px;"
+                  @change="onBuildingChange"
+                  clearable
+                >
+                  <el-option
+                    v-for="building in buildings"
+                    :key="building.id"
+                    :label="building.name"
+                    :value="building.id"
+                  />
+                </el-select>
+                <el-select 
+                  v-model="selectedAreaForEnvironmental" 
+                  placeholder="选择区域" 
+                  size="small" 
+                  style="width: 180px;"
+                  :loading="loadingBuildingAreas"
+                  :disabled="!selectedBuildingForEnvironmental"
+                >
+                  <el-option
+                    v-for="area in buildingAreas"
+                    :key="area.id"
+                    :label="area.name"
+                    :value="area.id"
+                  />
+                </el-select>
+              </div>
             </div>
           </template>
-          <div v-loading="loadingAllAreas">
-            <el-skeleton :rows="8" animated :loading="loadingAllAreas">
-              <template #default>
-                <div v-if="selectedAreaForEnvironmental">
-                  <EnvironmentalChart 
-                    :area-id="selectedAreaForEnvironmental" 
-                    data-type="temperature-humidity" 
-                    height="320px" 
-                  />
-                </div>
-                <div v-else class="chart-error">
-                  <el-empty description="请选择区域查看环境数据" :image-size="100" />
-                </div>
-              </template>
-            </el-skeleton>
+          <EnvironmentalChart 
+            v-if="selectedAreaForEnvironmental"
+            :area-id="selectedAreaForEnvironmental" 
+            data-type="temperature-humidity" 
+            height="280px" 
+          />
+          <div v-else class="empty-chart">
+            <el-empty description="请先选择建筑和区域" :image-size="80" />
           </div>
         </el-card>
       </el-col>
@@ -734,6 +780,21 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-chart {
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chart-error {
@@ -905,6 +966,16 @@ onBeforeUnmount(() => {
 
   .navigation-links {
     grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .chart-controls {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

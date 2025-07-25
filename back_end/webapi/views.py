@@ -334,9 +334,20 @@ class AreaViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def popular(self, request):
         count = int(request.query_params.get('count', 5))
-        areas = Area.objects.all()
-        areas = sorted(areas, key=lambda x: x.bound_node.detected_count, reverse=True)[:count]
+        cache_key = f"popular_areas_{count}"
+        
+        # 尝试从缓存获取
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
+        # 缓存未命中，查询数据库
+        areas = Area.objects.all().select_related('bound_node')
+        areas = sorted(areas, key=lambda x: x.bound_node.detected_count if x.bound_node else 0, reverse=True)[:count]
         serializer = AreaSerializer(areas, many=True)
+        
+        # 缓存结果（5分钟）
+        cache.set(cache_key, serializer.data, timeout=300)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
@@ -649,8 +660,15 @@ class CO2UploadView(APIView):
 
 
 class SummaryView(APIView):
-
     def get(self, request):
+        cache_key = "system_summary"
+        
+        # 尝试从缓存获取
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
+        # 缓存未命中，查询数据库
         nodes_count = HardwareNode.objects.count()
         nodes_online_count = HardwareNode.objects.filter(status=True).count()        
         terminals_count = ProcessTerminal.objects.count()
@@ -662,7 +680,8 @@ class SummaryView(APIView):
         notice_count = Notice.objects.count()
         alerts_count = Alert.objects.count()
         users_count = CustomUser.objects.count()
-        return Response({
+        
+        summary_data = {
             "nodes_count": nodes_count,
             "terminals_count": terminals_count,
             "buildings_count": buildings_count,
@@ -674,7 +693,11 @@ class SummaryView(APIView):
             "users_count": users_count,
             "nodes_online_count": nodes_online_count,
             "terminals_online_count": terminals_online_count
-        })
+        }
+        
+        # 缓存结果（2分钟）
+        cache.set(cache_key, summary_data, timeout=120)
+        return Response(summary_data)
 
 
 class TerminalCommandView(APIView):
