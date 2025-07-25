@@ -1,13 +1,22 @@
 <script lang="ts" setup>
-import {ref, onMounted, onBeforeUnmount, computed, watch} from 'vue'
+import {ref, onMounted, onBeforeUnmount, computed, watch, nextTick} from 'vue'
 import {ElMessage} from 'element-plus'
 import {Search, HomeFilled, OfficeBuilding, Grid, List} from '@element-plus/icons-vue'
 import type {AreaItem, Building} from '../types'
 import {buildingService} from '../services'
-import apiService from '../services'
+import {buildingCustomMethods} from '../services/ResourceServiceDefinitions'
 import AreaCard from '../components/data/AreaCard.vue'
 
+// 建筑和区域数据
 const buildings = ref<Building[]>([])
+const buildingAreas = ref<Map<number, {
+  areas: AreaItem[];
+  loaded: boolean;
+  loading: boolean;
+  hasMore: boolean;
+  page: number;
+}>>(new Map())
+
 const loading = ref(false)
 const expectStatus = ref<string | "all">("all")
 const buildingFilter = ref<number | "all">("all")
@@ -17,6 +26,11 @@ const isFirstLoad = ref(true)
 const isComponentMounted = ref(true)
 let fetchInterval: number | null = null
 
+// 懒加载相关
+const loadedBuildingIds = ref<Set<number>>(new Set())
+const INITIAL_LOAD_COUNT = 3 // 初始加载前3个建筑
+const PAGE_SIZE = 20 // 每页区域数量
+
 watch(searchKeyword, (newVal) => {
   if (newVal) {
     buildingFilter.value = "all"
@@ -24,10 +38,17 @@ watch(searchKeyword, (newVal) => {
   }
 })
 
+// 获取已加载的区域（用于搜索）
+const loadedAreas = computed(() => {
+  const areas: AreaItem[] = []
+  buildingAreas.value.forEach((buildingData) => {
+    areas.push(...buildingData.areas)
+  })
+  return areas
+})
+
 const filteredAreas = computed(() => {
-  return buildings.value
-      .flatMap(b => b.areas || [])
-      .filter(a => a.name.includes(searchKeyword.value))
+  return loadedAreas.value.filter(a => a.name.includes(searchKeyword.value))
 })
 
 const filteredBuildings = computed(() => {
@@ -43,28 +64,46 @@ const getAreasByFloor = (areas: AreaItem[] | undefined, floor: number) => {
   return areas?.filter(a => a.floor === floor)
 }
 
-const fetchBuildings = async () => {
+// 获取建筑的区域数据
+const getBuildingAreas = (buildingId: number): AreaItem[] => {
+  return buildingAreas.value.get(buildingId)?.areas || []
+}
+
+// 检查建筑是否已加载
+const isBuildingLoaded = (buildingId: number): boolean => {
+  return buildingAreas.value.get(buildingId)?.loaded || false
+}
+
+// 检查建筑是否正在加载
+const isBuildingLoading = (buildingId: number): boolean => {
+  return buildingAreas.value.get(buildingId)?.loading || false
+}
+
+// 初始化建筑基本信息
+const fetchBuildingsBasic = async () => {
   if (!isComponentMounted.value) return
-
-  if (isFirstLoad.value) {
-    loading.value = true
-  }
+  
+  loading.value = true
   try {
-    const buildingsData = await buildingService.getAll()
+    const buildingsData = await buildingCustomMethods.getBuildingsBasic()
     if (!isComponentMounted.value) return
-
-    buildings.value = await Promise.all(
-        buildingsData.map(async (b: Building) => {
-          try {
-            const areas = await buildingService.getBuildingAreas(b.id)
-            return {...b, areas}
-          } catch (error) {
-            console.error(`获取建筑 ${b.id} 的区域失败`, error)
-            return {...b, areas: []}
-          }
-        })
-    )
-
+    
+    buildings.value = buildingsData
+    
+    // 初始化建筑区域数据结构
+    buildingsData.forEach(building => {
+      buildingAreas.value.set(building.id, {
+        areas: [],
+        loaded: false,
+        loading: false,
+        hasMore: true,
+        page: 1
+      })
+    })
+    
+    // 自动加载前几个建筑的区域
+    await loadInitialBuildings()
+    
   } catch (error) {
     if (isComponentMounted.value) {
       console.error('建筑数据加载失败:', error)
@@ -77,6 +116,67 @@ const fetchBuildings = async () => {
   }
 }
 
+// 加载初始建筑区域
+const loadInitialBuildings = async () => {
+  const initialBuildings = buildings.value.slice(0, INITIAL_LOAD_COUNT)
+  await Promise.all(
+    initialBuildings.map(building => loadBuildingAreas(building.id))
+  )
+}
+
+// 加载指定建筑的区域
+const loadBuildingAreas = async (buildingId: number, loadMore = false) => {
+  if (!isComponentMounted.value) return
+  
+  const buildingData = buildingAreas.value.get(buildingId)
+  if (!buildingData) return
+  
+  // 防止重复加载
+  if (buildingData.loading || (buildingData.loaded && !loadMore)) return
+  
+  buildingData.loading = true
+  buildingAreas.value.set(buildingId, buildingData)
+  
+  try {
+    const page = loadMore ? buildingData.page + 1 : 1
+    const response = await buildingCustomMethods.getBuildingAreasPaginated(
+      buildingId, 
+      page, 
+      PAGE_SIZE
+    )
+    
+    if (!isComponentMounted.value) return
+    
+    const updatedData = {
+      areas: loadMore ? [...buildingData.areas, ...response.areas] : response.areas,
+      loaded: true,
+      loading: false,
+      hasMore: response.has_next,
+      page: page
+    }
+    
+    buildingAreas.value.set(buildingId, updatedData)
+    loadedBuildingIds.value.add(buildingId)
+    
+  } catch (error) {
+    console.error(`加载建筑 ${buildingId} 的区域失败:`, error)
+    buildingData.loading = false
+    buildingAreas.value.set(buildingId, buildingData)
+  }
+}
+
+// 懒加载处理
+const handleBuildingVisible = async (buildingId: number) => {
+  if (!loadedBuildingIds.value.has(buildingId)) {
+    await loadBuildingAreas(buildingId)
+  }
+}
+
+// 加载更多区域
+const loadMoreAreas = async (buildingId: number) => {
+  await loadBuildingAreas(buildingId, true)
+}
+
 const cardVisibilities = ref<Record<number, boolean>>({})
 
 const handleCardVisibility = (areaId: number, visible: boolean) => {
@@ -84,10 +184,9 @@ const handleCardVisibility = (areaId: number, visible: boolean) => {
 }
 
 const isFloorVisible = (buildingId: number, floor: number) => {
-
-  const currentBuilding = buildings.value.find(b => b.id === buildingId)
-  const areasInFloor = currentBuilding?.areas?.filter(a => a.floor === floor) || []
-
+  const areas = getBuildingAreas(buildingId)
+  const areasInFloor = areas.filter(a => a.floor === floor)
+  
   return areasInFloor.some(area =>
       cardVisibilities.value[area.id]
   )
@@ -96,7 +195,9 @@ const isFloorVisible = (buildingId: number, floor: number) => {
 const isBuildingVisible = computed(() => (buildingId: number) => {
   const building = filteredBuildings.value.find(b => b.id === buildingId)
   if (!building) return false
-  return getFloors(building.areas).some(floor =>
+  
+  const areas = getBuildingAreas(buildingId)
+  return getFloors(areas).some(floor =>
       isFloorVisible(buildingId, floor)
   )
 })
@@ -105,7 +206,7 @@ const isMobile = ref(false)
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
-
+  
   if (isFirstLoad.value) {
     isCompactView.value = isMobile.value
   }
@@ -117,25 +218,43 @@ const toggleLayoutMode = () => {
   isCompactView.value = !isCompactView.value
 }
 
+// 定期刷新已加载的建筑数据
+const refreshLoadedBuildings = async () => {
+  if (!isComponentMounted.value) return
+  
+  const loadedIds = Array.from(loadedBuildingIds.value)
+  await Promise.all(
+    loadedIds.map(id => {
+      // 重置页码，重新加载第一页
+      const buildingData = buildingAreas.value.get(id)
+      if (buildingData) {
+        buildingData.page = 1
+        buildingData.loaded = false
+        buildingAreas.value.set(id, buildingData)
+      }
+      return loadBuildingAreas(id)
+    })
+  )
+}
+
 onMounted(() => {
   isComponentMounted.value = true
-  fetchBuildings()
+  fetchBuildingsBasic()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
-
-  // 设置定期刷新数据的间隔，避免频繁刷新
+  
+  // 设置定期刷新数据的间隔
   fetchInterval = window.setInterval(() => {
-    fetchBuildings()
+    refreshLoadedBuildings()
   }, 30000) // 每30秒刷新一次
-
+  
   isFirstLoad.value = false
-
 })
 
 onBeforeUnmount(() => {
   isComponentMounted.value = false
   window.removeEventListener('resize', checkScreenSize)
-
+  
   if (fetchInterval !== null) {
     clearInterval(fetchInterval)
     fetchInterval = null
@@ -252,7 +371,12 @@ onBeforeUnmount(() => {
             </el-row>
           </div>
           <div v-else>
-            <div v-for="building in filteredBuildings" :key="building.id" class="building-section">
+            <div 
+              v-for="building in filteredBuildings" 
+              :key="building.id" 
+              class="building-section"
+              v-intersection="() => handleBuildingVisible(building.id)"
+            >
               <div class="building-header">
                 <div class="header-icon-wrapper">
                   <el-icon>
@@ -260,15 +384,34 @@ onBeforeUnmount(() => {
                   </el-icon>
                 </div>
                 <h2 class="building-title">{{ building.name }}</h2>
+                <div v-if="isBuildingLoading(building.id)" class="loading-indicator">
+                  <el-icon class="is-loading">
+                    <Loading/>
+                  </el-icon>
+                  <span>加载中...</span>
+                </div>
               </div>
 
-              <div v-show="!isBuildingVisible(building.id)" class="empty-state">
+              <div v-if="!isBuildingLoaded(building.id) && !isBuildingLoading(building.id)" class="lazy-load-placeholder">
+                <el-button 
+                  type="primary" 
+                  plain 
+                  @click="handleBuildingVisible(building.id)"
+                >
+                  点击加载区域数据
+                </el-button>
+              </div>
+
+              <div v-else-if="!isBuildingVisible(building.id)" class="empty-state">
                 <el-empty description="该建筑暂无可见区域"/>
               </div>
 
-              <div v-show="isBuildingVisible(building.id)">
-                <el-row v-for="floor in getFloors(building.areas)" v-show="isFloorVisible(building.id, floor)" :key="floor"
-                        :gutter="10"
+              <div v-else>
+                <el-row 
+                  v-for="floor in getFloors(getBuildingAreas(building.id))" 
+                  v-show="isFloorVisible(building.id, floor)" 
+                  :key="floor"
+                  :gutter="10"
                 >
                   <el-col :span="isMobile ? 24 : 2" class="floor-header">
                     <div class="floor-header">
@@ -283,7 +426,7 @@ onBeforeUnmount(() => {
                   <el-col :span='isMobile ? 24 : 22'>
                     <el-row :gutter="20" class="card-row">
                       <el-col
-                          v-for="area in getAreasByFloor(building.areas, floor)"
+                          v-for="area in getAreasByFloor(getBuildingAreas(building.id), floor)"
                           :key="area.id"
                           :class="{ 'floor-card-indent': !isCompactView }"
                           :lg="6"
@@ -304,6 +447,21 @@ onBeforeUnmount(() => {
                     </el-row>
                   </el-col>
                 </el-row>
+                
+                <!-- 加载更多按钮 -->
+                <div 
+                  v-if="buildingAreas.get(building.id)?.hasMore" 
+                  class="load-more-container"
+                >
+                  <el-button 
+                    type="primary" 
+                    plain 
+                    :loading="isBuildingLoading(building.id)"
+                    @click="loadMoreAreas(building.id)"
+                  >
+                    加载更多区域
+                  </el-button>
+                </div>
               </div>
             </div>
           </div>

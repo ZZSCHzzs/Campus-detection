@@ -54,16 +54,51 @@ class BuildingSerializer(serializers.ModelSerializer):
 
 
 class AreaSerializer(serializers.ModelSerializer):
-    detected_count = serializers.IntegerField(source='bound_node.detected_count', read_only=True)
+    detected_count = serializers.SerializerMethodField()
     is_favorite = serializers.SerializerMethodField()
+    node_status = serializers.SerializerMethodField()
+    
     class Meta:
         model = Area
-        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity', 'detected_count', 'is_favorite']
+        fields = ['id', 'name', 'bound_node', 'description', 'type', 'floor', 'capacity', 'detected_count', 'is_favorite', 'node_status']
+    
+    def get_detected_count(self, obj):
+        # 针对none节点(id=12)的优化处理
+        if obj.bound_node_id == 12:
+            # 对于none节点，返回默认值或缓存值
+            return 0
+        return obj.bound_node.detected_count if obj.bound_node else 0
+    
+    def get_node_status(self, obj):
+        # 针对none节点的状态优化
+        if obj.bound_node_id == 12:
+            return 'none'  # 标记为none节点
+        return 'normal'
+    
     def get_is_favorite(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return request.user.favorite_areas.filter(id=obj.id).exists()
         return False
+
+# 新增：轻量级区域序列化器（用于列表显示）
+class AreaLightSerializer(serializers.ModelSerializer):
+    detected_count = serializers.SerializerMethodField()
+    node_status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Area
+        fields = ['id', 'name', 'floor', 'capacity', 'detected_count', 'node_status']
+    
+    def get_detected_count(self, obj):
+        if obj.bound_node_id == 12:
+            return 0
+        return obj.bound_node.detected_count if obj.bound_node else 0
+    
+    def get_node_status(self, obj):
+        if obj.bound_node_id == 12:
+            return 'none'
+        return 'normal'
 
 class HistoricalDataSerializer(serializers.ModelSerializer):
     class Meta:

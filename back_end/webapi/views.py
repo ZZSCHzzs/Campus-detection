@@ -276,12 +276,46 @@ class BuildingViewSet(viewsets.ModelViewSet):
     serializer_class = BuildingSerializer
     permission_classes = [StaffEditSelected]
     allow_staff_edit = False
+    
     @action(detail=True, methods=['get'])
     def areas(self, request, pk=None):
         building = self.get_object()
         areas = Area.objects.filter(type=building)
         serializer = AreaSerializer(areas, many=True, context={'request': request})
-        return Response(serializer.data)    
+        return Response(serializer.data)
+    
+    # 新增：分页获取建筑区域
+    @action(detail=True, methods=['get'])
+    def areas_paginated(self, request, pk=None):
+        building = self.get_object()
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        
+        areas = Area.objects.filter(type=building).select_related('bound_node')
+        
+        # 计算分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        total_count = areas.count()
+        paginated_areas = areas[start:end]
+        
+        serializer = AreaSerializer(paginated_areas, many=True, context={'request': request})
+        
+        return Response({
+            'areas': serializer.data,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total_count,
+            'has_previous': page > 1
+        })
+    
+    # 新增：获取建筑基本信息（不包含区域）
+    @action(detail=False, methods=['get'])
+    def list_basic(self, request):
+        buildings = Building.objects.all()
+        serializer = BuildingSerializer(buildings, many=True)
+        return Response(serializer.data)
 
 
 class AreaViewSet(viewsets.ModelViewSet):

@@ -59,6 +59,37 @@ export const areaCustomMethods = {
 export const buildingCustomMethods = {
   getBuildingAreas: (id: number) => 
     customApiCall<AreaItem[]>(`/api/buildings/${id}/areas/`),
+  
+  // 新增：分页获取建筑区域
+  getBuildingAreasPaginated: (id: number, page = 1, pageSize = 20) => 
+    customApiCall<{
+      areas: AreaItem[];
+      total_count: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      has_previous: boolean;
+    }>(`/api/buildings/${id}/areas_paginated/`, 'get', undefined, { page, page_size: pageSize }),
+  
+  // 新增：获取建筑基本信息
+  getBuildingsBasic: () => 
+    customApiCall<Building[]>('/api/buildings/list_basic/', 'get', undefined, {}, true, 5 * 60 * 1000),
+  
+  // 新增：批量加载多个建筑的区域
+  loadBuildingsWithAreas: async (buildingIds: number[], pageSize = 20) => {
+    const results = await Promise.all(
+      buildingIds.map(async (id) => {
+        try {
+          const response = await buildingCustomMethods.getBuildingAreasPaginated(id, 1, pageSize);
+          return { buildingId: id, ...response };
+        } catch (error) {
+          console.error(`加载建筑 ${id} 的区域失败:`, error);
+          return { buildingId: id, areas: [], total_count: 0, has_next: false };
+        }
+      })
+    );
+    return results;
+  }
 };
 
 // 节点服务自定义方法
