@@ -1,12 +1,13 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import type { AreaItem, Alert, Notice, SummaryData } from '../types'
 import { useAuthStore } from '../stores/auth'
-import { areaService, noticeService, alertService, summaryService } from '../services'
+import { areaService, noticeService, alertService, summaryService, buildingService } from '../services'
 import apiService from '../services'
-import AreaList from '../components/AreaList.vue'
+import AreaList from '../components/data/AreaList.vue'
+import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue'
+import TrendChart from '../components/chart/TrendChart.vue'
 
 import {
   User, Monitor, OfficeBuilding, Connection, MapLocation,
@@ -31,6 +32,11 @@ const Hotareas = ref<AreaItem[]>([])
 const loading = ref(false)
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
+
+// 添加温湿度图表相关状态
+const selectedAreaForEnvironmental = ref<number | null>(null)
+const allAreas = ref<AreaItem[]>([])
+const loadingAllAreas = ref(false)
 
 const isFirstLoad = ref(true)
 
@@ -86,95 +92,47 @@ const fetchFavoriteAreas = async () => {
   }
 }
 
-const chartLoading = ref(false)
-const chartInitFailed = ref(false)
-
-let chart: echarts.ECharts | null = null
-let resizeHandler: (() => void) | null = null
-let intervalTimer1: number | null = null 
-let intervalTimer2: number | null = null
-
-const initChart = async () => {
-  chartLoading.value = false
-  chartInitFailed.value = false
+// 获取所有区域用于环境数据图表选择
+const fetchAllAreas = async () => {
   try {
-    const chartDom = document.getElementById('trend-chart')
-    if (!chartDom) {
-      chartInitFailed.value = true
-      return
+    if (isFirstLoad.value) {
+      loadingAllAreas.value = true
     }
-
-    if (chart) {
-      chart.dispose()
+    
+    // 先获取所有建筑
+    const buildingsData = await buildingService.getAll()
+    const areasList: AreaItem[] = []
+    
+    // 遍历每个建筑，获取其区域
+    for (const building of buildingsData) {
+      try {
+        const areas = await buildingService.getBuildingAreas(building.id)
+        areasList.push(...areas)
+      } catch (error) {
+        console.error(`获取建筑 ${building.id} 的区域失败`, error)
+      }
     }
-
-    chart = echarts.init(chartDom)
-    const hours = Array.from({ length: 18 }, (_, i) => `${i + 6}:00`)
-    const peopleData = [
-      10,   // 6:00
-      20,   // 7:00
-      180,  // 8:00 早高峰
-      195,  // 9:00
-      320,  // 10:00
-      325,  // 11:00
-      250,  // 12:00 午餐高峰
-      180,  // 13:00
-      280,  // 14:00
-      285,  // 15:00
-      160,   // 16:00
-      130,  // 17:00 晚餐高峰
-      180,  // 18:00
-      310,  // 19:00 晚自习高峰
-      330,  // 20:00
-      340,  // 21:00
-      120,   // 22:00
-      20    // 23:00
-    ]
-    const option = {
-      title: { text: '今日人流趋势' },
-      tooltip: { trigger: 'axis' },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: { type: 'category', data: hours },
-      yAxis: { type: 'value' },
-      series: [{
-        data: peopleData,
-        type: 'line',
-        smooth: true,
-        symbolSize: 8,
-        lineStyle: {
-          width: 3,
-          shadowColor: 'rgba(64, 158, 255, 0.2)',
-          shadowBlur: 12,
-          shadowOffsetY: 6
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.4)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.02)' }
-          ])
-        },
-        label: {
-          show: true,
-          position: 'top',
-          color: '#36b5ff',
-          fontSize: 12
-        }
-      }]
+    
+    allAreas.value = areasList
+    // 默认选择第一个区域
+    if (allAreas.value.length > 0 && !selectedAreaForEnvironmental.value) {
+      selectedAreaForEnvironmental.value = allAreas.value[0].id
     }
-
-    chart.setOption(option)
-    chartLoading.value = false
   } catch (error) {
-    chartLoading.value = false
-    chartInitFailed.value = true
+    console.error('获取区域列表失败:', error)
+    ElMessage.error('获取区域列表失败')
+  } finally {
+    if (isFirstLoad.value) {
+      loadingAllAreas.value = false
+    }
   }
 }
 
+let intervalTimer1: number | null = null 
+let intervalTimer2: number | null = null
+
+// 添加缺失的状态变量
+const isMobile = ref(false)
 const summary = ref<SummaryData>({
   nodes_count: 0,
   terminals_count: 0,
@@ -189,7 +147,12 @@ const summary = ref<SummaryData>({
   terminals_online_count: 0
 })
 const loadingSummary = ref(false)
+const alerts = ref<Alert[]>([])
+const notices = ref<Notice[]>([])
+const loadingAlerts = ref(false)
+const loadingNotices = ref(false)
 
+// 获取统计数据
 const fetchSummary = async () => {
   try {
     if (isFirstLoad.value) {
@@ -197,7 +160,6 @@ const fetchSummary = async () => {
     }
     const data = await summaryService.getSummary()
     summary.value = data as SummaryData
-
   } catch (error) {
     ElMessage.error('统计信息获取失败')
   } finally {
@@ -209,18 +171,12 @@ const fetchSummary = async () => {
   }
 }
 
-const alerts = ref<Alert[]>([])
-const notices = ref<Notice[]>([])
-const loadingAlerts = ref(false)
-const loadingNotices = ref(false)
-
+// 获取公开告警
 const fetchPublicAlerts = async () => {
   try {
-
     if (isFirstLoad.value) {
       loadingAlerts.value = true
     }
-
     alerts.value = await alertService.getPublicAlerts()
   } catch (error) {
     ElMessage.error('获取告警信息失败')
@@ -234,13 +190,12 @@ const fetchPublicAlerts = async () => {
   }
 }
 
+// 获取最新通知
 const fetchLatestNotices = async () => {
   try {
-
     if (isFirstLoad.value) {
       loadingNotices.value = true
     }
-
     notices.value = await noticeService.getLatestNotices()
   } catch (error) {
     ElMessage.error('获取通知信息失败')
@@ -254,6 +209,7 @@ const fetchLatestNotices = async () => {
   }
 }
 
+// 获取告警类型
 const getAlertType = (grade: number) => {
   switch (grade) {
     case 3: return 'error'
@@ -262,8 +218,6 @@ const getAlertType = (grade: number) => {
     default: return 'success'
   }
 }
-
-const isMobile = ref(false)
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
@@ -277,22 +231,11 @@ onMounted(async () => {
     fetchSummary(),
     fetchFavoriteAreas(),
     fetchPublicAlerts(),
-    fetchLatestNotices()
+    fetchLatestNotices(),
+    fetchAllAreas()
   ]).catch(() => ElMessage.error('数据获取出错'))
   isFirstLoad.value = false
-  setTimeout(async () => {
-    await initChart()
-    resizeHandler = () => {
-      if (chart) {
-        try {
-          chart.resize()
-        } catch (e) {
-
-        }
-      }
-    }
-    window.addEventListener('resize', resizeHandler)
-  })
+  
   intervalTimer1 = setInterval(() => {
     fetchHotAreas();
     fetchPublicAlerts();
@@ -312,12 +255,6 @@ onBeforeUnmount(() => {
   if (intervalTimer2) clearInterval(intervalTimer2)
 
   window.removeEventListener('resize', checkScreenSize)
-  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-
-  if (chart) {
-    chart.dispose()
-    chart = null
-  }
 })
 </script>
 
@@ -403,23 +340,44 @@ onBeforeUnmount(() => {
         </el-card>
         <el-card class="dashboard-card">
           <template #header>
-            <div class="chart-header">
               <span class="card-title">📈 人员变化趋势</span>
-              <el-button v-if="chartInitFailed" size="small" type="primary" @click="initChart">
-                重新加载图表
-              </el-button>
+          </template>
+          <TrendChart height="320px" />
+        </el-card>
+        
+        <!-- 温湿度图表 -->
+        <el-card class="dashboard-card">
+          <template #header>
+            <div class="chart-header">
+              <span class="card-title">🌡️ 环境数据监测</span>
+              <el-select 
+                v-model="selectedAreaForEnvironmental" 
+                placeholder="选择区域" 
+                size="small" 
+                style="width: 180px;"
+                :loading="loadingAllAreas"
+              >
+                <el-option
+                  v-for="area in allAreas"
+                  :key="area.id"
+                  :label="area.name"
+                  :value="area.id"
+                />
+              </el-select>
             </div>
           </template>
-          <div v-loading="chartLoading">
-            <el-skeleton :rows="8" animated :loading="chartLoading">
+          <div v-loading="loadingAllAreas">
+            <el-skeleton :rows="8" animated :loading="loadingAllAreas">
               <template #default>
-                <div v-if="!chartInitFailed" id="trend-chart" style="height:320px; width:100%;"></div>
+                <div v-if="selectedAreaForEnvironmental">
+                  <EnvironmentalChart 
+                    :area-id="selectedAreaForEnvironmental" 
+                    data-type="temperature-humidity" 
+                    height="320px" 
+                  />
+                </div>
                 <div v-else class="chart-error">
-                  <el-empty description="图表加载失败" :image-size="100">
-                    <template #description>
-                      <p>趋势图加载失败，请点击"重新加载图表"按钮重试</p>
-                    </template>
-                  </el-empty>
+                  <el-empty description="请选择区域查看环境数据" :image-size="100" />
                 </div>
               </template>
             </el-skeleton>

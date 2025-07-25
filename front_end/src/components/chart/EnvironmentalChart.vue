@@ -2,8 +2,8 @@
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from './BaseChart.vue'
-import { areaService, temperatureHumidityService, co2Service, terminalService } from '../services'
-import type { TemperatureHumidityData, CO2Data } from '../types'
+import { areaService, temperatureHumidityService, co2Service, terminalService } from '../../services'
+import type { TemperatureHumidityData, CO2Data } from '../../types.ts'
 
 // Props定义
 interface Props {

@@ -22,6 +22,8 @@ import {
   alertCustomMethods,
   noticeCustomMethods,
   historicalCustomMethods,
+  temperatureHumidityCustomMethods,
+  co2CustomMethods,
   userCustomMethods,
   summaryCustomMethods,
   localTerminalCustomMethods,
@@ -32,7 +34,7 @@ import {
 // 导入类型
 import type { 
   AreaItem, Building, HardwareNode, ProcessTerminal, 
-  User, Alert, Notice, HistoricalData 
+  User, Alert, Notice, HistoricalData, TemperatureHumidityData, CO2Data
 } from '../types';
 
 // 创建各个资源服务
@@ -44,6 +46,12 @@ export const alertService = createResourceService<Alert>('alerts', alertCustomMe
 export const noticeService = createResourceService<Notice>('notice', noticeCustomMethods);
 export const userService = createResourceService<User>('users', userCustomMethods);
 export const historicalService = createResourceService<HistoricalData>('historical', historicalCustomMethods);
+
+// 环境数据服务
+export const temperatureHumidityService = createResourceService<TemperatureHumidityData>('temperature-humidity', temperatureHumidityCustomMethods);
+export const co2Service = createResourceService<CO2Data>('co2', co2CustomMethods);
+
+// 系统服务
 export const summaryService = summaryCustomMethods;
 export const localTerminalService = localTerminalCustomMethods;
 
@@ -119,6 +127,8 @@ const apiService = {
   notice: noticeService,
   users: userService,
   historical: historicalService,
+  temperatureHumidity: temperatureHumidityService,
+  co2: co2Service,
   summary: summaryService,
   localTerminal: localTerminalService,
   

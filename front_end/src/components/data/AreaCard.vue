@@ -1,10 +1,10 @@
 <script lang="ts" setup>
 import {ref, onMounted, onBeforeUnmount, defineProps, computed, watch} from 'vue'
-import { nodeService,areaService } from '../services'
-import apiService from '../services'
-import type {AreaItem, HardwareNode} from '../types'
+import { nodeService,areaService } from '../../services'
+import apiService from '../../services'
+import type {AreaItem, HardwareNode} from '../../types.ts'
 import {Star, Timer, Warning} from '@element-plus/icons-vue'
-import HistoricalChart from './chart/HistoricalChart.vue'
+import HistoricalChart from '../chart/HistoricalChart.vue'
 
 const props = defineProps<{
   area: AreaItem

@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue';
 
 import apiService from '../services';
 
@@ -1387,6 +1388,26 @@ watch(connectionMode, handleModeChange);
             </div>
           </div>
 
+          <!-- CO2数据图表 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3><el-icon>
+                  <WarningFilled />
+                </el-icon> CO2浓度监测</h3>
+              <el-tag :type="getCO2StatusType(status.co2_status)" size="small" class="status-chip">
+                {{ status.co2_status }}
+              </el-tag>
+            </div>
+
+            <div class="co2-chart-container">
+              <EnvironmentalChart
+                :terminal-id="terminal.id"
+                data-type="co2"
+                height="400px"
+              />
+            </div>
+          </div>
+
           <!-- 日志查看 -->
           <div class="panel-section">
             <div class="section-header">
@@ -1916,6 +1937,24 @@ watch(connectionMode, handleModeChange);
 .log-level {
   padding: 2px 6px;
   font-size: 0.7rem;
+}
+
+/* CO2图表样式 */
+.co2-chart-container {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.no-co2-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 280px;
+  background-color: #f9fafc;
+  border-radius: 8px;
+  border: 1px dashed #dcdfe6;
 }
 
 /* 空状态样式 */

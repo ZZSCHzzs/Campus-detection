@@ -5,7 +5,7 @@ import {Search, HomeFilled, OfficeBuilding, Grid, List} from '@element-plus/icon
 import type {AreaItem, Building} from '../types'
 import {buildingService} from '../services'
 import apiService from '../services'
-import AreaCard from '../components/AreaCard.vue'
+import AreaCard from '../components/data/AreaCard.vue'
 
 const buildings = ref<Building[]>([])
 const loading = ref(false)

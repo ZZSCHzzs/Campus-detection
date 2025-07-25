@@ -9,7 +9,7 @@ import { areaService, userService } from '../services'
 import type { User as UserType, AreaItem } from '../types'
 import CryptoJS from 'crypto-js'
 import { Calendar, Check, InfoFilled, Phone, Plus, Grid, List } from '@element-plus/icons-vue'
-import AreaCard from '../components/AreaCard.vue'
+import AreaCard from '../components/data/AreaCard.vue'
 
 const authStore = useAuthStore()
 const route = useRoute()

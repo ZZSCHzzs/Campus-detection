@@ -4,8 +4,8 @@ import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService } from '../services'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
-import AreaHistoryChart from '../components/AreaHistoryChart.vue'
-import HardwareNodeStatus from '../components/HardwareNodeStatus.vue'
+import AreaHistoryChart from '../components/chart/AreaHistoryChart.vue'
+import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
 
 const summary = ref<SummaryData>({
   nodes_count: 0,

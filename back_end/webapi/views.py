@@ -79,7 +79,7 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         nodes = HardwareNode.objects.filter(terminal=terminal)
         serializer = HardwareNodeSerializer(nodes, many=True)
         return Response(serializer.data)
-    
+        
     @action(detail=True, methods=['get'])
     def co2_data(self, request, pk=None):
         terminal = self.get_object()

@@ -172,9 +172,9 @@
 
 <script lang="ts" setup>
 import {ref, onMounted, watch, computed} from 'vue'
-import router from '../router'
+import router from '../../router'
 import {useRoute} from 'vue-router'
-import {useAuthStore} from '../stores/auth'
+import {useAuthStore} from '../../stores/auth.ts'
 import {
   UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine,
   SwitchButton, Operation, Lock, Star, Bell, Menu, Close

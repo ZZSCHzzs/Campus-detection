@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AreaItem } from '../types'
+import type { AreaItem } from '../../types.ts'
 import { computed } from 'vue'
 
 const props = defineProps({
