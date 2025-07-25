@@ -347,6 +347,31 @@ async def handle_ws_command(command_data):
                     success=False
                 )
         
+        elif command == "get_logs":
+            # 获取并返回当前日志 - 批量发送到服务端
+            try:
+                # 获取最近的日志
+                count = params.get("count", 100)  # 默认获取100条日志
+                logs_data = log_manager.get_logs(count)
+                
+                log_manager.info(f"返回 {len(logs_data)} 条日志数据")
+                
+                # 通过WebSocket发送日志批次
+                send_success = await ws_client.send_command_response(command, logs_data, success=True)
+                if not send_success:
+                    log_manager.warning("通过WebSocket发送日志失败")
+                                
+            except Exception as e:
+                log_manager.error(f"处理get_logs命令失败: {str(e)}")
+                log_manager.error(f"异常堆栈: {traceback.format_exc()}")
+                
+                # 发送错误响应
+                await ws_client.send_command_response(
+                    command, 
+                    {"error": f"获取日志失败: {str(e)}"}, 
+                    success=False
+                )
+        
         elif command == "update_config" or command == "change_config":
             # 更新配置
             config_data = params

@@ -97,6 +97,9 @@ export interface SummaryData {
     people_count: number
     notice_count: number
     alerts_count: number
+    users_count: number
+    nodes_online_count: number
+    terminals_online_count: number
 }
 
 /**

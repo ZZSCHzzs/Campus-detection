@@ -79,6 +79,28 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 'timestamp': timezone.now().isoformat()
             }
         )
+        
+        # 同时请求配置信息
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'send_command',
+                'command': 'get_config',
+                'params': {},
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+        
+        # 同时请求日志信息
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type': 'send_command',
+                'command': 'get_logs',
+                'params': {'count': 100},  # 请求最近100条日志
+                'timestamp': timezone.now().isoformat()
+            }
+        )
     
     async def disconnect(self, close_code):
         """处理WebSocket断开连接"""
@@ -128,6 +150,28 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                         'type': 'send_command',
                         'command': 'get_status',
                         'params': {},
+                        'timestamp': timezone.now().isoformat()
+                    }
+                )
+                
+                # 同时发送配置请求命令
+                await self.channel_layer.group_send(
+                    self.group_name,
+                    {
+                        'type': 'send_command',
+                        'command': 'get_config',
+                        'params': {},
+                        'timestamp': timezone.now().isoformat()
+                    }
+                )
+                
+                # 同时发送日志请求命令
+                await self.channel_layer.group_send(
+                    self.group_name,
+                    {
+                        'type': 'send_command',
+                        'command': 'get_logs',
+                        'params': {'count': 100},  # 请求最近100条日志
                         'timestamp': timezone.now().isoformat()
                     }
                 )
@@ -305,6 +349,29 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         success = data.get('success', False)
         
         logger.info(f"收到终端 {self.terminal_id} 的命令响应: {command}, 结果: {'成功' if success else '失败'}")
+        
+        # 特殊处理get_config命令的响应 - 将配置数据保存到缓存
+        if command == 'get_config' and success and result:
+            try:
+                cache_key = f"terminal:{self.terminal_id}:config"
+                # 保存配置数据到缓存，5分钟过期
+                cache.set(cache_key, result, timeout=300)
+                logger.info(f"已将终端 {self.terminal_id} 的配置数据保存到缓存")
+                
+                # 同时更新数据库中的配置数据
+                await self.update_terminal_config_from_response(self.terminal_id, result)
+            except Exception as e:
+                logger.error(f"保存终端 {self.terminal_id} 配置到缓存失败: {str(e)}")
+        
+        # 特殊处理get_logs命令的响应 - 将日志数据保存到缓存
+        elif command == 'get_logs' and success and result:
+            try:
+                cache_key = f"terminal:{self.terminal_id}:logs"
+                # 保存日志数据到缓存，30分钟过期
+                cache.set(cache_key, result, timeout=1800)
+                logger.info(f"已将终端 {self.terminal_id} 的 {len(result)} 条日志保存到缓存")
+            except Exception as e:
+                logger.error(f"保存终端 {self.terminal_id} 日志到缓存失败: {str(e)}")
         
         # 广播命令响应到组内所有连接
         await self.channel_layer.group_send(
@@ -530,6 +597,34 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"获取终端 {terminal_id} 最后活动时间失败: {str(e)}")
             return None
+
+    @database_sync_to_async
+    def update_terminal_config_from_response(self, terminal_id, config_data):
+        """从命令响应更新终端配置到数据库"""
+        try:
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+            
+            # 更新配置字段
+            if 'mode' in config_data:
+                terminal.mode = config_data['mode']
+            if 'interval' in config_data:
+                terminal.interval = config_data['interval']
+            if 'nodes' in config_data:
+                terminal.node_config = config_data['nodes']
+            if 'save_image' in config_data:
+                terminal.save_image = config_data['save_image']
+            if 'preload_model' in config_data:
+                terminal.preload_model = config_data['preload_model']
+                
+            terminal.save()
+            logger.debug(f"已更新终端 {terminal_id} 的数据库配置")
+            return True
+        except ProcessTerminal.DoesNotExist:
+            logger.error(f"终端 {terminal_id} 不存在")
+            return False
+        except Exception as e:
+            logger.error(f"更新终端 {terminal_id} 数据库配置失败: {str(e)}")
+            return False
 
 # 添加一个系统广播消费者，用于向所有连接的客户端广播系统消息
 

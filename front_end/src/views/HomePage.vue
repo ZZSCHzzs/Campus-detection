@@ -46,7 +46,10 @@ const STATS_LABELS = {
   historical_data_count: '历史记录',
   people_count: '系统总人数',
   notice_count: '系统通知',
-  alerts_count: '安全告警'
+  alerts_count: '安全告警',
+  users_count: '注册用户',
+  nodes_online_count: '在线节点',
+  terminals_online_count: '在线终端'
 } as const
 
 const fetchHotAreas = async () => {
@@ -180,7 +183,10 @@ const summary = ref<SummaryData>({
   historical_data_count: 0,
   people_count: 0,
   notice_count: 0,
-  alerts_count: 0
+  alerts_count: 0,
+  users_count: 0,
+  nodes_online_count: 0,
+  terminals_online_count: 0
 })
 const loadingSummary = ref(false)
 
@@ -356,6 +362,15 @@ onBeforeUnmount(() => {
                       </el-icon>
                       <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
                         <Warning />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'users_count'" class="stat-icon">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'nodes_online_count'" class="stat-icon">
+                        <Monitor />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'terminals_online_count'" class="stat-icon">
+                        <Connection />
                       </el-icon>
                     </template>
                   </el-statistic>
