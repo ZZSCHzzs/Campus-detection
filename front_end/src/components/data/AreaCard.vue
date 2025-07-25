@@ -4,6 +4,7 @@ import { nodeService,areaService } from '../services'
 import apiService from '../services'
 import type {AreaItem, HardwareNode} from '../types'
 import {Star, Timer, Warning} from '@element-plus/icons-vue'
+import HistoricalChart from './chart/HistoricalChart.vue'
 
 const props = defineProps<{
   area: AreaItem
@@ -12,6 +13,9 @@ const props = defineProps<{
   expectStatus?: string
   compact?: boolean
 }>()
+
+// 添加弹窗状态
+const showHistoryDialog = ref(false)
 
 const nodeData = ref<HardwareNode | null>(null)
 const loading = ref(true)
@@ -123,6 +127,10 @@ onBeforeUnmount(() => {
   }
 })
 
+// 点击区域标题显示历史数据
+const showHistoryChart = () => {
+  showHistoryDialog.value = true
+}
 </script>
 
 <template>
@@ -131,7 +139,7 @@ onBeforeUnmount(() => {
 
     <div class="card-header-compact">
       <div class="header-main">
-        <h4 class="area-name">{{ area.name }}</h4>
+        <h4 class="area-name clickable-title" @click="showHistoryChart">{{ area.name }}</h4>
         <div class="status-indicator">
           <el-tag :type="nodeData?.status ? 'success' : 'danger'" effect="light" size="small" round>
             {{ nodeData?.status ? '在线' : '离线' }}
@@ -190,7 +198,7 @@ onBeforeUnmount(() => {
 
   <el-card v-else-if="displayCard()" :body-style="{ padding: '0px' }" class="area-card">
     <div :style="{ background: `linear-gradient(135deg, ${loadColor}22, ${loadColor}44)` }" class="card-header">
-      <h3>{{ area.name }}</h3>
+      <h3 class="clickable-title" @click="showHistoryChart">{{ area.name }}</h3>
       <div class="card-header-actions">
         <el-button
             :icon="Star"
@@ -277,6 +285,32 @@ onBeforeUnmount(() => {
       </template>
     </el-skeleton>
   </el-card>
+  
+  <!-- 历史数据弹窗 -->
+  <el-dialog
+    v-model="showHistoryDialog"
+    :title="`${area.name} - 历史数据`"
+    width="80%"
+    :close-on-click-modal="false"
+    :append-to-body="true"
+    :destroy-on-close="true"
+    top="5vh"
+    class="history-dialog"
+  >
+    <div class="history-chart-container">
+      <HistoricalChart 
+        :area-id="area.id" 
+        :area-name="area.name"
+        height="400px" 
+        chart-type="area"
+      />
+    </div>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="showHistoryDialog = false">关闭</el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -434,6 +468,32 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: calc(100% - 50px);
+}
+
+.clickable-title {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.clickable-title:hover {
+  color: #409EFF !important;
+  transform: translateX(2px);
+}
+
+.clickable-title::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: #409EFF;
+  transition: width 0.3s ease;
+}
+
+.clickable-title:hover::after {
+  width: 100%;
 }
 
 .status-indicator {
@@ -632,5 +692,21 @@ onBeforeUnmount(() => {
 .meta-tags {
   flex-wrap: wrap;
   row-gap: 4px;
+}
+
+/* 弹窗样式 */
+.dialog-footer {
+  text-align: right;
+}
+
+.history-chart-container {
+  height: 500px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+:deep(.history-dialog .el-dialog__body) {
+  padding: 10px 20px;
 }
 </style>
