@@ -199,8 +199,7 @@ const createMockData = (areaId: number) => {
   if (rotationState.areaDataCache.has(areaId)) {
     return rotationState.areaDataCache.get(areaId)
   }
-  
-  console.log(`为区域ID ${areaId} 创建模拟数据`)
+
   const mockData: HistoricalData[] = []
   const now = new Date()
   
@@ -275,7 +274,6 @@ const fetchHistoricalData = async (areaId: number) => {
     //     return
     //   }
     // } catch (apiError) {
-    //   console.log('API数据获取失败，使用模拟数据', apiError)
     // }
     
     // 创建模拟历史数据（当API调用失败或返回空数据时）

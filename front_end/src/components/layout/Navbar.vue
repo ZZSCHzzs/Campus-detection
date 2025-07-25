@@ -306,11 +306,9 @@ watch(() => route.path, () => {
 }, { immediate: true })
 
 const handleSelect = (key: string) => {
-  console.log('Menu item selected:', key)
 
   const path = routePathMap[key]
   if (path) {
-    console.log('Navigating to:', path)
     router.push(path)
     mobileMenuVisible.value = false
   } else {

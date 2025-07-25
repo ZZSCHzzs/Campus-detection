@@ -137,7 +137,7 @@ const calculateCardWidths = () => {
     cardAnimationState.cardWidths.push(cardWidth)
   })
 
-  console.log('卡片宽度数组:', cardAnimationState.cardWidths)
+
 }
 
 const animateCards = () => {

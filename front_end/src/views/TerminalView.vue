@@ -599,7 +599,7 @@ onMounted(async () => {
     if (localAvailable.value) {
       // 1. 获取环境信息
       environmentInfo.value = await apiService.localTerminal.getEnvironmentInfo();
-      console.log('检测到环境:', environmentInfo.value);
+
 
       // 如果是检测端环境，默认使用本地模式
       if (environmentInfo.value.type === 'detector') {

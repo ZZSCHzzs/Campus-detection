@@ -109,7 +109,7 @@ const handleLogin = async () => {
                 
                 const encryptedPassword = encryptPassword(loginForm.value.password)
 
-                console.log('尝试登录...')
+
                 const response = await AuthService.login(
                     loginForm.value.username, 
                     encryptedPassword
@@ -119,7 +119,7 @@ const handleLogin = async () => {
 
                 const { access, refresh } = response
                 
-                console.log('登录成功，设置token')
+
                 
                 localStorage.removeItem('access')
                 localStorage.removeItem('refresh')
@@ -137,7 +137,7 @@ const handleLogin = async () => {
                 }
 
                 try {
-                    console.log('获取用户信息中...')
+
                     
                     const userInfo = await AuthService.getUserInfo()
                     
@@ -333,7 +333,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     // 设置标志，防止异步操作在组件卸载后继续执行
     isComponentMounted.value = false
-    console.log('AuthView组件已卸载，清理异步操作')
+
 })
 </script>
 

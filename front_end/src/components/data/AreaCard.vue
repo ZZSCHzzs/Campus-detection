@@ -432,7 +432,7 @@ const showHistoryChart = () => {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 120px;
+  height: 130px;
 }
 
 .area-card-compact:hover {
@@ -612,7 +612,7 @@ const showHistoryChart = () => {
 
 @media (max-width: 768px) {
   .area-card-compact {
-    height: 110px;
+    height: 130px;
   }
   
   .card-header-compact {

@@ -64,7 +64,7 @@ const fetchBuildings = async () => {
           }
         })
     )
-    console.log('建筑及区域数据加载成功')
+
   } catch (error) {
     if (isComponentMounted.value) {
       console.error('建筑数据加载失败:', error)
@@ -145,7 +145,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="areas-container">
-    <div class="page-header">
+    <!-- 顶部标题卡片 -->
+    <div class="page-header-card">
       <div class="header-content">
         <h1 class="main-title">校园区域监测</h1>
         <p class="subtitle">实时查看各区域人流情况</p>
@@ -153,6 +154,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- 搜索栏卡片 -->
     <div class="search-bar-container">
       <div class="search-bar">
         <el-row :gutter="15">
@@ -219,7 +221,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-loading="loading">
+    <!-- 内容区域 -->
+    <div v-loading="loading" class="content-area">
       <el-skeleton :loading="loading" animated>
         <template #default>
           <div v-if="searchKeyword" class="search-results">
@@ -291,19 +294,14 @@ onBeforeUnmount(() => {
                           class="card-animation"
                           v-show="cardVisibilities[area.id] !== false"
                       >
-
                           <AreaCard
-
                               :area="area"
                               :compact="isCompactView"
                               :expectStatus="expectStatus"
                               @visible-change="(v) => handleCardVisibility(area.id, v)"
                           />
-
-
                       </el-col>
                     </el-row>
-
                   </el-col>
                 </el-row>
               </div>
@@ -318,16 +316,24 @@ onBeforeUnmount(() => {
 <style scoped>
 .areas-container {
   max-width: 1300px;
-  margin: 10px auto;
-  padding: 25px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-radius: 0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  margin: 0 auto;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+/* 顶部标题卡片样式 */
+.page-header-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+  padding: 30px;
+  text-align: center;
   position: relative;
   overflow: hidden;
 }
 
-.areas-container::before {
+.page-header-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -335,15 +341,7 @@ onBeforeUnmount(() => {
   right: 0;
   height: 4px;
   background: linear-gradient(90deg, #3498db, #1abc9c, #9b59b6);
-  border-radius: 16px 16px 0 0;
-}
-
-.page-header {
-  text-align: center;
-  margin-bottom: 35px;
-  padding-bottom: 25px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  position: relative;
+  border-radius: 12px 12px 0 0;
 }
 
 .header-content {
@@ -380,33 +378,16 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 
+/* 搜索栏样式 */
+.search-bar-container {
+  margin-bottom: 20px;
+}
+
 .search-bar {
   background: white;
   padding: 20px;
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-}
-
-.building-filter,
-.status-filter {
-  flex: 1;
-  min-width: 150px;
-}
-
-.search-input {
-  flex: 2;
-  min-width: 200px;
-}
-
-.layout-toggle {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.toggle-button {
-  width: 100%;
-  white-space: nowrap;
 }
 
 .custom-select,
@@ -424,47 +405,34 @@ onBeforeUnmount(() => {
   color: #64748b;
 }
 
-.search-bar {
-  gap: 20px;
-  margin-bottom: 35px;
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  align-items: center;
-}
-
-.custom-select, .custom-input {
+.toggle-button {
   width: 100%;
-  transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
-.custom-select:hover, .custom-input:hover {
-  transform: translateY(-2px);
+.toggle-icon {
+  margin-right: 6px;
 }
 
-.search-input-wrapper {
-  position: relative;
-}
-
-.search-icon {
-  color: #64748b;
+/* 内容区域 */
+.content-area {
+  background: transparent;
 }
 
 .building-section {
-  margin-bottom: 40px;
+  margin-bottom: 20px;
   transition: all 0.4s ease;
   background: white;
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   transform: translateY(0);
   animation: fadeIn 0.5s ease-out;
 }
 
 .building-section:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes fadeIn {
@@ -555,7 +523,7 @@ onBeforeUnmount(() => {
   padding: 20px;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   animation: fadeIn 0.5s ease;
 }
 
@@ -589,57 +557,47 @@ onBeforeUnmount(() => {
   transition: all 0.3s ease;
 }
 
+.search-item {
+  margin: 4px 0;
+}
+
+.layout-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+/* 响应式设计 */
 @media (max-width: 768px) {
   .areas-container {
     padding: 15px;
-    margin: 10px;
+  }
+
+  .page-header-card {
+    padding: 20px;
+    margin-bottom: 15px;
   }
 
   .main-title {
     font-size: 24px;
   }
 
+  .subtitle {
+    font-size: 14px;
+  }
+
   .building-section {
     padding: 15px;
-    margin-bottom: 20px;
-  }
-
-  .search-bar {
-    padding: 10px;
-    gap: 12px;
-    flex-direction: column;
-  }
-
-  .search-item {
-    width: 100%;
-  }
-
-  .building-filter,
-  .status-filter,
-  .search-input,
-  .layout-toggle {
-    flex: 1 1 100%;
-  }
-
-  .toggle-button {
-    width: 100%;
-  }
-
-  .card-row {
     margin-bottom: 15px;
   }
 
-  .building-header {
-    margin-bottom: 10px;
+  .search-bar {
+    padding: 15px;
   }
 
   .building-title {
     font-size: 20px;
     margin: 10px 0;
-  }
-
-  .floor-header {
-    margin-bottom: 5px;
   }
 
   .floor-title {
@@ -651,25 +609,8 @@ onBeforeUnmount(() => {
     margin-bottom: 15px;
   }
 
-  .header-content {
-    padding: 0 10px;
-  }
-
-  .subtitle {
-    font-size: 14px;
-  }
-
-  .layout-toggle {
-    justify-content: center;
-    margin: 0;
-  }
-
-  .floor-card-indent {
-    margin-left: 0;
-  }
-
-  .card-row {
-    margin-bottom: 15px;
+  .toggle-button {
+    width: 100%;
   }
 }
 
@@ -703,29 +644,14 @@ onBeforeUnmount(() => {
     font-size: 18px;
   }
 
-  .page-header {
-    margin-bottom: 20px;
-    padding-bottom: 15px;
+  .page-header-card {
+    padding: 15px;
+    margin-bottom: 10px;
   }
 
   .search-bar {
     padding: 12px;
-    gap: 10px;
   }
-}
-
-.search-item {
-  margin: 4px 0;
-}
-
-.layout-toggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-left: auto;
-}
-
-.toggle-icon {
-  margin-right: 6px;
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

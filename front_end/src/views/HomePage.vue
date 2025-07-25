@@ -50,7 +50,7 @@ const STATS_LABELS = {
   buildings_count: '楼宇数量',
   areas_count: '监测区域',
   historical_data_count: '历史记录',
-  people_count: '系统总人数',
+  people_count: '当前总人数',
   notice_count: '系统通知',
   alerts_count: '安全告警',
   users_count: '注册用户',

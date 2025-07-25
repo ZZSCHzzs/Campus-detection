@@ -57,7 +57,7 @@ const fetchAreas = async () => {
   try {
     
     areas.value = await areaService.getAll()
-    console.log('区域数据加载完成，共加载:', areas.value.length, '个区域')
+
     return true
   } catch (error) {
     console.error('获取区域列表失败:', error)
@@ -78,9 +78,6 @@ const processAlertData = (alertsData: ExtendedAlert[]) => {
   alertsData.forEach(alert => {
     if (alert.area) {
       alert.area_name = getAreaName(alert.area)
-      console.log(`处理告警 ID: ${alert.id}, 区域ID: ${alert.area}, 区域名称: ${alert.area_name}`)
-    } else {
-      console.log(`告警 ID: ${alert.id} 没有关联区域`)
     }
   })
   alerts.value = alertsData
@@ -103,7 +100,7 @@ const fetchAlerts = async () => {
       }
     }
     
-    console.log(`获取到 ${alertsData.length} 条告警数据`)
+
     processAlertData(alertsData)
 
     checkUrlForDetails()

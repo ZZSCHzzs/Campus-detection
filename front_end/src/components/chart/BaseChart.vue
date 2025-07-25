@@ -198,12 +198,28 @@ const initChart = async () => {
       }
     }
 
-    chart.value.setOption(baseOption as any)
+    try {
+      // 设置基础配置时添加错误捕获
+      try {
+        chart.value.setOption(baseOption as any)
+      } catch (error) {
+        // 静默处理 ECharts 内部错误，避免控制台报错
+        if (error instanceof Error && error.message.includes('Cannot read properties of undefined')) {
+          // 忽略这个特定错误
+          console.warn('ECharts 内部错误已忽略:', error.message)
+        } else {
+          throw error // 重新抛出其他错误
+        }
+      }
 
-    // 触发图表就绪事件
-    emit('chartReady', chart.value)
-
-  } catch (error) {
+      // 触发图表就绪事件
+      emit('chartReady', chart.value)
+    } catch (error) {
+      console.error('图表初始化失败:', error)
+      ElMessage.error('图表初始化失败')
+    }
+  }
+  catch (error) {
     console.error('图表初始化失败:', error)
     ElMessage.error('图表初始化失败')
   }
@@ -220,7 +236,8 @@ const setupChartEvents = () => {
     }
   }
 
-  window.addEventListener('resize', resizeHandler)
+  // 添加被动选项
+  window.addEventListener('resize', resizeHandler, { passive: true })
 
   // 组件卸载时移除监听 - 移动到 onUnmounted 钩子中
   return () => {
@@ -261,9 +278,19 @@ const updateChart = (option: any) => {
       }
     }
 
-    // 先清除旧配置再渲染
-    chart.value.clear();
-    chart.value.setOption(clonedOption, { notMerge: true });
+    // 先清除旧配置再渲染时添加错误捕获
+    try {
+      chart.value.clear();
+      chart.value.setOption(clonedOption, { notMerge: true });
+    } catch (error) {
+      // 静默处理 ECharts 内部错误
+      if (error instanceof Error && error.message.includes('Cannot read properties of undefined')) {
+        console.warn('ECharts setOption 错误已忽略:', error.message)
+        return // 直接返回，不继续执行
+      } else {
+        throw error
+      }
+    }
 
     // 检查图表容器尺寸
     if (chart.value.getWidth() === 0 || chart.value.getHeight() === 0) {
@@ -411,6 +438,11 @@ let cleanupChartEvents: (() => void) | null = null
 
 // 生命周期
 onMounted(async () => {
+  // 移除错误屏蔽相关代码
+  // console.error = filteredConsoleError
+  // window.addEventListener('error', handleGlobalError, true)
+  // window.addEventListener('unhandledrejection', handleUnhandledRejection, true)
+  
   // 确保DOM完全渲染
   await nextTick()
 
@@ -444,6 +476,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 移除错误处理恢复相关代码
+  // console.error = originalConsoleError
+  // window.removeEventListener('error', handleGlobalError, true)
+  // window.removeEventListener('unhandledrejection', handleUnhandledRejection, true)
+  
   if (cleanupChartEvents) {
     cleanupChartEvents()
   }

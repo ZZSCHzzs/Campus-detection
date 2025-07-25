@@ -150,7 +150,7 @@ const submitUserUpdate = async () => {
         loading.value = false
       }
     } else {
-      console.log('表单验证失败:', fields)
+
     }
   })
 }
@@ -189,7 +189,7 @@ const submitPasswordUpdate = async () => {
         loading.value = false
       }
     } else {
-      console.log('表单验证失败:', fields)
+
     }
   })
 }
@@ -268,7 +268,7 @@ const toggleLayoutMode = () => {
 }
 
 onMounted(async () => {
-  console.log('UserView组件已挂载，准备获取用户信息')
+
 
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
@@ -647,7 +647,6 @@ const getRoleTagType = (role: string) => {
                   <AreaCard 
                     :area="area" 
                     :compact="isCompactView"
-                    :isFavorite="true" 
                     @favorite-change="handleFavoriteChange" 
                   />
                 </el-col>

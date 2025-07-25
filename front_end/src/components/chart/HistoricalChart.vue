@@ -74,7 +74,7 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
     } catch (apiError) {
       // 保留错误日志
       console.error('区域历史数据API失败:', apiError);
-      console.log('区域历史数据API失败，尝试通用API:', apiError)
+
       
       // 尝试使用通用历史数据服务
       try {
@@ -88,7 +88,7 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
           historicalData.value = data.sort((a, b) => 
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           )
-          console.log('历史数据获取成功(备用API):', historicalData.value.length, '条记录')
+
           // 立即更新图表
           updateChart()
           return
@@ -101,7 +101,7 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
     // 如果没有数据，清空数组并设置提示信息
     historicalData.value = []
     error.value = '暂无历史数据'
-    console.log('没有获取到历史数据')
+
     
   } catch (err: any) {
     error.value = err.message || '获取历史数据失败'
