@@ -19,6 +19,21 @@ export interface HistoricalData {
     timestamp: string
 }
 
+export interface TemperatureHumidityData {
+    id: number
+    area: number
+    temperature?: number
+    humidity?: number
+    timestamp: string
+}
+
+export interface CO2Data {
+    id: number
+    terminal: number
+    co2_level: number
+    timestamp: string
+}
+
 export interface HardwareNode {
     id: number
     name: string
@@ -38,6 +53,11 @@ export interface ProcessTerminal {
     last_active?: string
     cpu_usage?: number
     memory_usage?: number
+    disk_usage?: number
+    disk_free?: number
+    disk_total?: number
+    memory_available?: number
+    memory_total?: number
     model_loaded?: boolean
     push_running?: boolean
     pull_running?: boolean
@@ -49,6 +69,17 @@ export interface ProcessTerminal {
     nodes?: Record<string, string>
     version?: string
     co2_level?: number
+    co2_status?: string
+    system_uptime?: number
+    frame_rate?: number
+    total_frames?: number
+    terminal_id?: number
+    last_detection?: {
+        camera_id?: number
+        count?: number
+        time?: string
+        [key: string]: any
+    }
 }
 
 export interface Building {
@@ -127,19 +158,27 @@ export interface TerminalStatus {
   nodes: Record<string, string | number | boolean>;
   cpu_usage: number;
   memory_usage: number;
+  disk_usage: number;
+  disk_free: number;
+  disk_total: number;
+  memory_available: number;
+  memory_total: number;
   push_running: boolean;
   pull_running: boolean;
   model_loaded: boolean;
   started_at?: string;
   mode?: string;
   co2_level?: number;
+  co2_status?: string;
   system_uptime?: number;
   frame_rate?: number;
   total_frames?: number;
+  terminal_id?: number;
   last_detection?: {
-    camera_id: number;
-    count: number;
-    time: string;
+    camera_id?: number;
+    count?: number;
+    time?: string;
+    [key: string]: any;
   };
   terminal_online?: boolean;
   [key: string]: any;
@@ -154,6 +193,8 @@ export interface TerminalConfig {
   cameras: Record<string, string>;
   save_image: boolean;
   preload_model: boolean;
+  co2_enabled?: boolean;
+  co2_read_interval?: number;
   [key: string]: any;
 }
 

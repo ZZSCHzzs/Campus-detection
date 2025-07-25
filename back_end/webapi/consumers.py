@@ -455,6 +455,16 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.cpu_usage = status_data['cpu_usage']
             if 'memory_usage' in status_data:
                 terminal.memory_usage = status_data['memory_usage']
+            if 'disk_usage' in status_data:
+                terminal.disk_usage = status_data['disk_usage']
+            if 'disk_free' in status_data:
+                terminal.disk_free = status_data['disk_free']
+            if 'disk_total' in status_data:
+                terminal.disk_total = status_data['disk_total']
+            if 'memory_available' in status_data:
+                terminal.memory_available = status_data['memory_available']
+            if 'memory_total' in status_data:
+                terminal.memory_total = status_data['memory_total']
             if 'push_running' in status_data:
                 terminal.push_running = status_data['push_running']
             if 'pull_running' in status_data:
@@ -463,7 +473,7 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.model_loaded = status_data['model_loaded']
             if 'nodes' in status_data:
                 terminal.nodes = status_data['nodes']
-            if 'co2_level' in status_data:  # 添加CO2数据处理
+            if 'co2_level' in status_data:
                 terminal.co2_level = status_data['co2_level']
             if 'system_uptime' in status_data:
                 terminal.system_uptime = status_data['system_uptime']
@@ -471,6 +481,12 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.frame_rate = status_data['frame_rate']
             if 'total_frames' in status_data:
                 terminal.total_frames = status_data['total_frames']
+            if 'terminal_id' in status_data:
+                terminal.terminal_id = status_data['terminal_id']
+            if 'mode' in status_data:
+                terminal.mode = status_data['mode']
+            if 'last_detection' in status_data:
+                terminal.last_detection = status_data['last_detection']
                 
             terminal.last_active = timezone.now()
             terminal.save()
@@ -615,6 +631,10 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 terminal.save_image = config_data['save_image']
             if 'preload_model' in config_data:
                 terminal.preload_model = config_data['preload_model']
+            if 'co2_enabled' in config_data:
+                terminal.co2_enabled = config_data['co2_enabled']
+            if 'co2_read_interval' in config_data:
+                terminal.co2_read_interval = config_data['co2_read_interval']
                 
             terminal.save()
             logger.debug(f"已更新终端 {terminal_id} 的数据库配置")

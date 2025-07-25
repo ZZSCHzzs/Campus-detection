@@ -36,7 +36,7 @@ class ProcessTerminalSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProcessTerminal
-        fields = ['id', 'name', 'status', 'nodes_count', 'co2_level']
+        fields = ['id', 'name', 'status', 'nodes_count', 'co2_level', 'co2_status']
 
     def get_nodes_count(self, obj):
         return HardwareNode.objects.filter(terminal=obj).count()
@@ -71,12 +71,37 @@ class HistoricalDataSerializer(serializers.ModelSerializer):
         fields = ['id', 'area', 'detected_count', 'timestamp']
 
 
+class TemperatureHumidityDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemperatureHumidityData
+        fields = ['id', 'area', 'temperature', 'humidity', 'timestamp']
+
+
+class CO2DataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CO2Data
+        fields = ['id', 'terminal', 'co2_level', 'timestamp']
+
+
 class DataUploadSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     detected_count = serializers.IntegerField()
     timestamp = serializers.DateTimeField()
     temperature = serializers.FloatField(required=False, allow_null=True)
     humidity = serializers.FloatField(required=False, allow_null=True)
+
+
+class TemperatureHumidityUploadSerializer(serializers.Serializer):
+    area_id = serializers.IntegerField()
+    temperature = serializers.FloatField(required=False, allow_null=True)
+    humidity = serializers.FloatField(required=False, allow_null=True)
+    timestamp = serializers.DateTimeField()
+
+
+class CO2UploadSerializer(serializers.Serializer):
+    terminal_id = serializers.IntegerField()
+    co2_level = serializers.IntegerField()
+    timestamp = serializers.DateTimeField()
 
 class AlertSerializer(serializers.ModelSerializer):
     class Meta:

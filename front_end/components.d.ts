@@ -60,6 +60,7 @@ declare module 'vue' {
     ElTimeline: typeof import('element-plus/es')['ElTimeline']
     ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    EnvironmentalChart: typeof import('./src/components/EnvironmentalChart.vue')['default']
     Footer: typeof import('./src/components/Footer.vue')['default']
     HardwareNodeStatus: typeof import('./src/components/HardwareNodeStatus.vue')['default']
     HeatMap: typeof import('./src/components/HeatMap.vue')['default']

@@ -9,6 +9,8 @@
     "terminal_id": 2,
     "server_url": "https://smarthit.top",
     "api_url": "https://smarthit.top/api/upload/",
+    "co2_enabled": true,
+    "co2_read_interval": 30,
     "node_config": {
         "framesize": 8,
         "quality": 10,

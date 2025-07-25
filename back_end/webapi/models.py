@@ -28,7 +28,13 @@ class ProcessTerminal(models.Model):
     # 终端性能状态
     cpu_usage = models.FloatField(default=0)
     memory_usage = models.FloatField(default=0)
-    co2_level = models.FloatField(null=True, blank=True, verbose_name="CO2浓度")
+    disk_usage = models.FloatField(default=0, verbose_name="磁盘使用率")
+    disk_free = models.BigIntegerField(default=0, verbose_name="可用磁盘空间(字节)")
+    disk_total = models.BigIntegerField(default=0, verbose_name="总磁盘空间(字节)")
+    memory_available = models.BigIntegerField(default=0, verbose_name="可用内存(字节)")
+    memory_total = models.BigIntegerField(default=0, verbose_name="总内存(字节)")
+    co2_level = models.IntegerField(default=-1, verbose_name="CO2浓度(ppm)")
+    co2_status = models.CharField(max_length=20, default="未连接", verbose_name="CO2传感器状态")
     
     # 检测服务状态
     model_loaded = models.BooleanField(default=False)
@@ -45,6 +51,8 @@ class ProcessTerminal(models.Model):
     camera_config = models.JSONField(default=dict, blank=True)
     save_image = models.BooleanField(default=True)
     preload_model = models.BooleanField(default=True)
+    co2_enabled = models.BooleanField(default=True, verbose_name="启用CO2传感器")
+    co2_read_interval = models.IntegerField(default=30, verbose_name="CO2读取间隔(秒)")
     node_config = models.JSONField(default=dict, blank=True, verbose_name="节点配置")
 
     # 节点状态
@@ -54,6 +62,10 @@ class ProcessTerminal(models.Model):
     system_uptime = models.IntegerField(default=0, verbose_name="系统运行时间", blank=True, null=True)
     frame_rate = models.FloatField(default=0, verbose_name="帧率", blank=True, null=True)
     total_frames = models.IntegerField(default=0, verbose_name="总帧数", blank=True, null=True)
+    terminal_id = models.IntegerField(default=1, verbose_name="终端ID")
+    
+    # 最后检测信息
+    last_detection = models.JSONField(default=dict, blank=True, verbose_name="最后检测信息")
 
     def update_status(self, status_data):
         # 更新状态字段
@@ -155,6 +167,35 @@ class HistoricalData(models.Model):
     class Meta:
         verbose_name = "历史数据"
         verbose_name_plural = "历史数据"
+
+
+class TemperatureHumidityData(models.Model):
+    area = models.ForeignKey('Area', on_delete=models.CASCADE, verbose_name="区域")
+    temperature = models.FloatField(null=True, blank=True, verbose_name="温度(°C)")
+    humidity = models.FloatField(null=True, blank=True, verbose_name="湿度(%)")
+    timestamp = models.DateTimeField(verbose_name="记录时间")
+
+    def __str__(self):
+        return f"{self.area.name} - 温湿度 - {self.timestamp}"
+
+    class Meta:
+        verbose_name = "温湿度数据"
+        verbose_name_plural = "温湿度数据"
+        ordering = ['-timestamp']
+
+
+class CO2Data(models.Model):
+    terminal = models.ForeignKey('ProcessTerminal', on_delete=models.CASCADE, verbose_name="终端")
+    co2_level = models.IntegerField(verbose_name="CO2浓度(ppm)")
+    timestamp = models.DateTimeField(verbose_name="记录时间")
+
+    def __str__(self):
+        return f"{self.terminal.name} - CO2:{self.co2_level}ppm - {self.timestamp}"
+
+    class Meta:
+        verbose_name = "CO2数据"
+        verbose_name_plural = "CO2数据"
+        ordering = ['-timestamp']
 
 
 class Alert(models.Model):

@@ -5,4 +5,8 @@ numpy==1.26.4            # 数值计算
 requests          # HTTP 客户端
 ultralytics       # YOLO 模型推理
 
+# CO2传感器依赖
+smbus2            # I2C通信库
+sgp30             # SGP30传感器库
+
 

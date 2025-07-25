@@ -803,6 +803,3 @@ class DetectionManager:
                 logger.info("开始加载模型...")
                 self.load_model_async()
 
-    def read_co2_sensor(self):
-        """读取CO2传感器数据"""
-        pass
