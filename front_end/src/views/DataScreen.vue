@@ -429,19 +429,65 @@ function formatTime(value: string) {
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'temperature'" />
+                <EnvironmentalChart 
+                  :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" 
+                  :dataType="'temperature-humidity'" 
+                  :hideTitle="true" 
+                  :hideControls="true"
+                  :styleConfig="{
+                    gridLineColor: 'rgba(255, 255, 255, 0.15)',
+                    gridLineType: 'solid',
+                    showGridLine: true,
+                    axisLineColor: 'rgba(255, 255, 255, 0.3)',
+                    axisLabelColor: '#ffffff',
+                    axisLabelFontSize: 12,
+                    seriesColors: ['#ff9500', '#00d4ff'],
+                    backgroundColor: 'transparent',
+                    textColor: '#ffffff',
+                    fontSize: 13,
+                    padding: {
+                      top: '8%',
+                      right: '4%',
+                      bottom: '10%',
+                      left: '10%'
+                    },
+                    showLegend: true,
+                    legendPosition: 'top',
+                    tooltipBackgroundColor: 'rgba(0, 0, 0, 0.9)',
+                    tooltipTextColor: '#ffffff',
+                  }"
+                />
               </div>
             </div>
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'humidity'" />
-              </div>
-            </div>
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="chart-inner-container">
-                <HistoricalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+                <HistoricalChart 
+                  :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" 
+                  :hideTitle="true" 
+                  :hideControls="true"
+                  :styleConfig="{
+                    gridLineColor: 'rgba(255, 255, 255, 0.15)',
+                    gridLineType: 'solid',
+                    showGridLine: true,
+                    axisLineColor: 'rgba(255, 255, 255, 0.3)',
+                    axisLabelColor: '#ffffff',
+                    axisLabelFontSize: 12,
+                    seriesColors: ['#3b82f6'],
+                    backgroundColor: 'transparent',
+                    textColor: '#ffffff',
+                    fontSize: 13,
+                    padding: {
+                      top: '8%',
+                      right: '4%',
+                      bottom: '10%',
+                      left: '10%'
+                    },
+                    showLegend: false,
+                    tooltipBackgroundColor: 'rgba(0, 0, 0, 0.9)',
+                    tooltipTextColor: '#ffffff',
+                  }"
+                />
               </div>
             </div>
           </div> 

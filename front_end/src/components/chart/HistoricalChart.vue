@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed} from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from './BaseChart.vue'
 import { areaService, historicalService } from '../../services'
@@ -11,13 +11,41 @@ interface Props {
   areaName?: string
   height?: string
   showControls?: boolean
+  hideTitle?: boolean
+  hideControls?: boolean
   chartType?: 'line' | 'bar' | 'area'
+  // 新增样式配置支持
+  styleConfig?: {
+    gridLineColor?: string
+    gridLineType?: 'solid' | 'dashed' | 'dotted'
+    showGridLine?: boolean
+    axisLineColor?: string
+    axisLabelColor?: string
+    axisLabelFontSize?: number
+    seriesColors?: string[]
+    backgroundColor?: string
+    textColor?: string
+    fontSize?: number
+    padding?: {
+      top?: string
+      right?: string
+      bottom?: string
+      left?: string
+    }
+    legendPosition?: 'top' | 'bottom' | 'left' | 'right'
+    showLegend?: boolean
+    tooltipBackgroundColor?: string
+    tooltipTextColor?: string
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  height: '100%', // 修改默认高度为100%而不是固定的400px
+  height: '100%',
   showControls: true,
-  chartType: 'line'
+  hideTitle: false,
+  hideControls: false,
+  chartType: 'line',
+  styleConfig: () => ({})
 })
 
 // 状态管理
@@ -44,11 +72,14 @@ const fetchAreaName = async (areaId: number): Promise<string> => {
 }
 
 // 获取历史数据
-const fetchHistoricalData = async (areaId: number, hours = 24) => {
+// 获取历史数据
+const fetchHistoricalData = async (areaId: number, hours: number) => {
+  if (!areaId) return
+  
+  loading.value = true
+  error.value = ''
+  
   try {
-    loading.value = true
-    error.value = null
-    
     // 获取区域名称
     currentAreaName.value = await fetchAreaName(areaId)
     
@@ -64,17 +95,20 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
       })
       
       if (data && data.length > 0) {
-        historicalData.value = data.sort((a, b) => 
+        // 前端筛选：只保留当前时间范围内的数据
+        const filteredData = data.filter(item => {
+          const itemTime = new Date(item.timestamp).getTime()
+          return itemTime >= startTime.getTime() && itemTime <= endTime.getTime()
+        })
+        
+        historicalData.value = filteredData.sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-        // 移除成功日志
-        updateChart();
-        return;
+        )
+        updateChart()
+        return
       }
     } catch (apiError) {
-      // 保留错误日志
-      console.error('区域历史数据API失败:', apiError);
-
+      console.error('区域历史数据API失败:', apiError)
       
       // 尝试使用通用历史数据服务
       try {
@@ -85,11 +119,15 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
         )
         
         if (data && data.length > 0) {
-          historicalData.value = data.sort((a, b) => 
+          // 前端筛选：只保留当前时间范围内的数据
+          const filteredData = data.filter(item => {
+            const itemTime = new Date(item.timestamp).getTime()
+            return itemTime >= startTime.getTime() && itemTime <= endTime.getTime()
+          })
+          
+          historicalData.value = filteredData.sort((a, b) => 
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           )
-
-          // 立即更新图表
           updateChart()
           return
         }
@@ -101,7 +139,7 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
     // 如果没有数据，清空数组并设置提示信息
     historicalData.value = []
     error.value = '暂无历史数据'
-
+    updateChart() // 确保图表更新显示空状态
     
   } catch (err: any) {
     error.value = err.message || '获取历史数据失败'
@@ -239,8 +277,8 @@ const generateChartOption = () => {
       {
         type: 'slider',
         show: historicalData.value.length > 20,
-        start: historicalData.value.length > 20 ? 70 : 0,
-        end: 100,
+        start: 0,  // 修改：从0%开始显示
+        end: 100,  // 到100%结束，显示全部数据
         height: 20,
         bottom: 10
       }
@@ -250,9 +288,50 @@ const generateChartOption = () => {
 
 // 图表就绪事件处理
 const handleChartReady = (chart: any) => {
+  // 添加 dataZoom 事件监听
+  chart.on('dataZoom', (params: any) => {
+    handleDataZoomChange(params)
+  })
+  
   // 图表准备好后，如果已有数据则立即更新
   if (historicalData.value.length > 0) {
     updateChart()
+  }
+}
+
+// 处理 dataZoom 滑块变化
+const handleDataZoomChange = (params: any) => {
+  if (!historicalData.value.length) return
+  
+  // 获取滑块的开始和结束百分比
+  const startPercent = params.start || 0
+  const endPercent = params.end || 100
+  
+  // 计算对应的数据索引范围
+  const totalCount = historicalData.value.length
+  const startIndex = Math.floor((startPercent / 100) * totalCount)
+  const endIndex = Math.ceil((endPercent / 100) * totalCount)
+  
+  // 获取对应时间范围的数据
+  const visibleData = historicalData.value.slice(startIndex, endIndex)
+  
+  if (visibleData.length > 0) {
+    // 计算实际的时间范围（小时数）
+    const firstTime = new Date(visibleData[0].timestamp)
+    const lastTime = new Date(visibleData[visibleData.length - 1].timestamp)
+    const timeDiffHours = (lastTime.getTime() - firstTime.getTime()) / (1000 * 60 * 60)
+    
+    // 更新当前时间范围（但不触发数据重新获取）
+    currentTimeRange.value = Math.max(1, Math.ceil(timeDiffHours))
+    
+    // 可选：向父组件发送滑块时间范围变化事件
+    const emit = defineEmits(['dataZoomChange'])
+    emit('dataZoomChange', {
+      timeRange: currentTimeRange.value,
+      startPercent,
+      endPercent,
+      visibleData
+    })
   }
 }
 
@@ -268,10 +347,10 @@ const updateChart = () => {
   }
 }
 
-// 时间范围变化处理
+// 时间范围变化处理（来自下拉选择器）
 const handleTimeRangeChange = (hours: number) => {
   currentTimeRange.value = hours
-  refreshData()
+  refreshData() // 重新获取数据
 }
 
 // 刷新数据
@@ -297,11 +376,14 @@ watch(
       :height="height"
       :loading="loading"
       :error="error"
-      :show-time-range="showControls"
-      :show-refresh="showControls"
-      :show-export="showControls"
+      :show-time-range="showControls && !hideControls"
+      :show-refresh="showControls && !hideControls"
+      :show-export="showControls && !hideControls"
+      :hide-title="hideTitle"
+      :hide-controls="hideControls"
       :time-range="currentTimeRange"
       :chart-type="chartType"
+      :style-config="styleConfig"
       @time-range-change="handleTimeRangeChange"
       @refresh="refreshData"
       @chart-ready="handleChartReady"

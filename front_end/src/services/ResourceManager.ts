@@ -213,7 +213,21 @@ export class ResourceManager {
     
     if (method !== 'get' || !useCache) {
       const config: AxiosRequestConfig = { params };
-      const response = await effectiveApi[method](url, data, config);
+      
+      // 根据请求方法正确传递参数
+      let response;
+      if (method === 'get') {
+        response = await effectiveApi.get(url, config);
+      } else if (method === 'post') {
+        response = await effectiveApi.post(url, data, config);
+      } else if (method === 'put') {
+        response = await effectiveApi.put(url, data, config);
+      } else if (method === 'patch') {
+        response = await effectiveApi.patch(url, data, config);
+      } else if (method === 'delete') {
+        response = await effectiveApi.delete(url, config);
+      }
+      
       return response.data;
     }
     
