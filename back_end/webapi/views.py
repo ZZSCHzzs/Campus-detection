@@ -350,14 +350,14 @@ class AreaViewSet(viewsets.ModelViewSet):
         cache.set(cache_key, serializer.data, timeout=300)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['get'])
     def historical(self, request, pk=None):
         area = self.get_object()
         historical_data = HistoricalData.objects.filter(area=area)
         serializer = HistoricalDataSerializer(historical_data, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['get'])
     def temperature_humidity(self, request, pk=None):
         area = self.get_object()
         hours = int(request.query_params.get('hours', 24))
@@ -404,6 +404,7 @@ class HistoricalDataViewSet(viewsets.ModelViewSet):
 class TemperatureHumidityDataViewSet(viewsets.ModelViewSet):
     queryset = TemperatureHumidityData.objects.all()
     serializer_class = TemperatureHumidityDataSerializer
+    permission_classes = [StaffEditSelected]
     allow_staff_edit = False
 
     @action(detail=False, methods=['get'])
@@ -439,6 +440,7 @@ class TemperatureHumidityDataViewSet(viewsets.ModelViewSet):
 class CO2DataViewSet(viewsets.ModelViewSet):
     queryset = CO2Data.objects.all()
     serializer_class = CO2DataSerializer
+    permission_classes = [StaffEditSelected]
     allow_staff_edit = False
 
     @action(detail=False, methods=['get'])
