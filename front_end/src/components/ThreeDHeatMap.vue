@@ -58,7 +58,7 @@ const heatmapPoints = [
   { x: -4, y: 2, z: -3, intensity: 40 }, // 高强度点
   { x: -3.7, y: 2, z: -2.1, intensity: 35 },
   { x: 3, y: 3, z: 0, intensity: 30 }, // 中心点，最高强度
-  { x: -6, y: 1, z: -6, intensity: 0 },
+  { x: -4, y: 2, z: -2, intensity: 20 },
   { x: 6, y: 0.8, z: -5.5, intensity: 0 },
   { x: 5.5, y: 0.2, z: 5, intensity: 0 },
   { x: -1, y: 4, z: 2, intensity: 40 },
@@ -76,6 +76,35 @@ const initThreeScene = () => {
   // 创建场景
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x141c2f)
+  // 添加地图贴图地面
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load('./public/ground.png', (texture) => {
+    // 设置贴图重复（缩放效果），如2倍缩放
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(5.5, 5.5); // X和Y方向缩放2倍
+
+    // 设置贴图旋转（单位为弧度），如旋转45度
+    texture.center.set(0.5, 0.5); // 以中心为旋转点
+    texture.rotation = Math.PI/4*5 - Math.PI/180*4; // 旋转45度
+
+    // 设置贴图偏移（如需要移动贴图）
+    texture.offset.set(0.02, 0.04);
+
+    // 创建平面几何体，大小可根据实际场景调整
+    const planeSize = 200;
+    const geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.4
+    });
+    const plane = new THREE.Mesh(geometry, material);
+    plane.rotation.x = -Math.PI / 2; // 使平面水平
+    plane.position.y = 0.01; // 稍微高于0，避免与模型重叠
+    scene.add(plane);
+  });
 
   // 设置相机
   const { clientWidth, clientHeight } = heatmapRef.value
@@ -100,9 +129,9 @@ const initThreeScene = () => {
   controls.autoRotateSpeed = 3.0  // 设置旋转速度，可以根据需要调整
     
 
-  // 添加坐标轴辅助工具
-  const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
-  scene.add(axesHelper)
+  // // 添加坐标轴辅助工具
+  // const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
+  // scene.add(axesHelper)
   
 
   // 加载OBJ建筑模型
@@ -802,8 +831,8 @@ const createHeatmapPointCloud = () => {
       size: 0.01, // 粒子大小
       vertexColors: true,
       transparent: true,
-      opacity: 0.3,
-      blending: THREE.AdditiveBlending,
+      opacity: 1,
+      blending: THREE.NormalBlending,
       sizeAttenuation: true,
     });
     
@@ -858,8 +887,8 @@ const createParticlesFromDensityField = (densityField) => {
     const normalizedDensity = cellDensity / maxDensity;
     
     // 添加基础概率确保低密度区域也能生成粒子
-    const baseProbability = 0.0005;  // 基础概率，即使密度为0也有10%概率生成粒子
-    const densityWeight = 0.8;    // 密度权重
+    const baseProbability = 0.001;  // 基础概率，即使密度为0也有10%概率生成粒子
+    const densityWeight = 0.999;    // 密度权重
     
     // 计算综合概率
     const generationProbability = baseProbability + normalizedDensity * densityWeight;
@@ -1281,10 +1310,10 @@ function easeInOutCubic(t) {
       {{ loadingError }}
     </div>
     
-    <div class="heatmap-title">
+    <!-- <div class="heatmap-title">
       <h2 class="title-text">3D热力分布图</h2>
       <div class="subtitle-text">3D Heat Distribution</div>
-    </div>
+    </div> -->
     
     <div class="tech-decoration top-right"></div>
     <div class="tech-decoration bottom-left"></div>
@@ -1298,13 +1327,13 @@ function easeInOutCubic(t) {
     <button @click="toggleAutoRotate" class="auto-rotate-btn">
       {{ autoRotateEnabled ? '停止环视' : '自动环视' }}
     </button>
-    <!-- 调试按钮 -->
+    <!-- 调试按钮
     <button @click="showDebugInfo = !showDebugInfo" class="debug-toggle">
       {{ showDebugInfo ? '隐藏结构' : '查看模型结构' }}
     </button>
     
-    <!-- 调试面板 -->
-    <div v-if="showDebugInfo" class="debug-panel">
+    调试面板 -->
+    <!-- <div v-if="showDebugInfo" class="debug-panel">
       <h3>模型结构</h3>
       <div class="structure-tree">
         <div 
@@ -1321,8 +1350,8 @@ function easeInOutCubic(t) {
           @mouseenter="handleItemMouseEnter(item.id)"
           @mouseleave="handleItemMouseLeave"
           @dblclick.stop="startEditName(item)"
-        >
-          <!-- 可见性切换按钮 -->
+        > -->
+          <!-- 可见性切换按钮
           <button 
             class="visibility-toggle"
             @click.stop="toggleVisibility(item.id)"
@@ -1332,7 +1361,7 @@ function easeInOutCubic(t) {
             <span v-else>👁️‍🗨️</span>
           </button>
           
-          <!-- 编辑状态 -->
+          编辑状态
           <div v-if="item.id === editingItemId" class="edit-name-container" @click.stop>
             <input 
               v-model="newItemName" 
@@ -1342,15 +1371,15 @@ function easeInOutCubic(t) {
               v-focus
             />
           </div>
-          
+           -->
           <!-- 显示状态 -->
-          <template v-else>
+          <!-- <template v-else>
             <span class="item-name">{{ item.name || '未命名' }}</span>
             <span class="item-type">{{ item.type }}</span>
           </template>
         </div>
       </div>
-    </div>
+    </div> -->
     
     <!-- 坐标显示面板 -->
     <div v-if="showCoordinates" class="coordinates-panel">
@@ -1740,7 +1769,9 @@ function easeInOutCubic(t) {
 .auto-rotate-btn {
   position: absolute;
   bottom: 20px;
-  left: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(56, 189, 248, 0.5);
   color: #38bdf8;
@@ -1795,7 +1826,7 @@ function easeInOutCubic(t) {
 /* 聚焦模式提示样式 */
 .focus-mode-indicator {
   position: absolute;
-  top: 15px;
+  top: 50px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(56, 189, 248, 0.2);
