@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, reactive } from 'vue'
 import { nodeService } from '../services'
 import type { HardwareNode } from '../types'
 
@@ -11,6 +11,15 @@ const nodes = ref<HardwareNode[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 let updateInterval: number | null = null
+
+// 添加节点动画状态控制对象
+const nodeAnimationState = reactive({
+  isMoving: false,
+  currentPosition: 0,
+  currentIndex: 0,
+  cardHeights: [] as number[],
+  animationTimer: null as any
+})
 
 // 获取节点数据
 const fetchNodeData = async () => {
@@ -64,6 +73,63 @@ const formatTime = (value: string) => {
   }
 }
 
+// 计算卡片高度函数
+const calculateNodeCardHeights = () => {
+  const cards = document.querySelectorAll('.node-card')
+  
+  nodeAnimationState.cardHeights = []
+
+  // 只计算原始节点的卡片，不包括重复的卡片
+  const uniqueCards = Array.from(cards).slice(0, nodes.value.length)
+  
+  uniqueCards.forEach((card) => {
+    const cardElement = card as HTMLElement
+    // 计算卡片高度加上gap值
+    const cardHeight = cardElement.offsetHeight + 12
+    nodeAnimationState.cardHeights.push(cardHeight)
+  })
+}
+
+// 动画函数
+const animateNodeCards = () => {
+  const container = document.querySelector('.node-card-container') as HTMLElement
+  if (!container || !nodes.value.length) return
+
+  const cards = document.querySelectorAll('.node-card')
+  const uniqueNodesCount = nodes.value.length
+  if (cards.length <= 0) return
+
+  nodeAnimationState.isMoving = true
+
+  // 使用当前卡片的实际高度作为步长
+  const currentCardIndex = nodeAnimationState.currentIndex % uniqueNodesCount
+  const currentCardHeight = nodeAnimationState.cardHeights[currentCardIndex] || 130
+  
+  // 修改为垂直方向移动当前卡片的高度
+  nodeAnimationState.currentPosition -= currentCardHeight
+  container.style.transform = `translateY(${nodeAnimationState.currentPosition}px)`
+
+  nodeAnimationState.currentIndex = (nodeAnimationState.currentIndex + 1) % cards.length
+
+  if (nodeAnimationState.currentIndex >= uniqueNodesCount) {
+    setTimeout(() => {
+      container.style.transition = 'none'
+      nodeAnimationState.currentPosition = 0
+      nodeAnimationState.currentIndex = 0
+      container.style.transform = `translateY(0px)`
+
+      setTimeout(() => {
+        container.style.transition = 'transform 0.5s ease-in-out'
+        nodeAnimationState.isMoving = false
+      }, 50)
+    }, 500)
+  } else {
+    setTimeout(() => {
+      nodeAnimationState.isMoving = false
+    }, 500)
+  }
+}
+
 // 当areaId变化时获取新数据
 watch(() => props.areaId, (newAreaId) => {
   if (newAreaId) {
@@ -79,6 +145,19 @@ onMounted(() => {
   
   // 每10秒刷新一次数据
   updateInterval = window.setInterval(fetchNodeData, 10000)
+  
+  // 添加计算卡片高度和启动动画
+  setTimeout(calculateNodeCardHeights, 500)
+  
+  // 启动动画
+  nodeAnimationState.animationTimer = setInterval(() => {
+    if (!nodeAnimationState.isMoving && nodes.value.length > 0) {
+      animateNodeCards()
+    }
+  }, 3000)
+  
+  // 监听窗口大小变化
+  window.addEventListener('resize', calculateNodeCardHeights)
 })
 
 // 组件卸载时清除定时器
@@ -86,6 +165,12 @@ onUnmounted(() => {
   if (updateInterval) {
     clearInterval(updateInterval)
   }
+  
+  if (nodeAnimationState.animationTimer) {
+    clearInterval(nodeAnimationState.animationTimer)
+  }
+  
+  window.removeEventListener('resize', calculateNodeCardHeights)
 })
 </script>
 
@@ -109,35 +194,68 @@ onUnmounted(() => {
       <span>暂无节点数据</span>
     </div>
     
-    <!-- 节点卡片群 -->
-    <div v-else class="nodes-grid">
-      <div 
-        v-for="node in nodes" 
-        :key="node.id" 
-        class="node-card"
-        :class="{ 'node-active': node.status, 'node-inactive': !node.status }"
-      >
-        <div class="node-header">
-          <span class="node-name">{{ node.name }}</span>
-          <span class="node-status-badge" :class="{ 'status-active': node.status }">
-            {{ node.status ? '在线' : '离线' }}
-          </span>
-        </div>
-        
-        <div class="node-body">
-          <div class="node-stat">
-            <div class="stat-label">检测人数</div>
-            <div class="stat-value">{{ node.detected_count }}</div>
+    <!-- 修改为垂直滚动布局 -->
+    <div v-else class="node-content">
+      <div class="node-card-container" :class="{ 'moving': nodeAnimationState.isMoving }">
+        <!-- 原始节点卡片 -->
+        <div 
+          v-for="node in nodes" 
+          :key="node.id" 
+          class="node-card"
+          :class="{ 'node-active': node.status, 'node-inactive': !node.status }"
+        >
+          <div class="node-header">
+            <span class="node-name">{{ node.name }}</span>
+            <span class="node-status-badge" :class="{ 'status-active': node.status }">
+              {{ node.status ? '在线' : '离线' }}
+            </span>
           </div>
           
-          <div class="node-stat">
-            <div class="stat-label">更新时间</div>
-            <div class="stat-time">{{ formatTime(node.updated_at) }}</div>
+          <div class="node-body">
+            <div class="node-stat">
+              <div class="stat-label">检测人数</div>
+              <div class="stat-value">{{ node.detected_count }}</div>
+            </div>
+            
+            <div class="node-stat">
+              <div class="stat-label">更新时间</div>
+              <div class="stat-time">{{ formatTime(node.updated_at) }}</div>
+            </div>
           </div>
+          
+          <!-- 状态指示器 -->
+          <div class="tech-indicator" :class="{ 'active': node.status }"></div>
         </div>
         
-        <!-- 状态指示器 -->
-        <div class="tech-indicator" :class="{ 'active': node.status }"></div>
+        <!-- 重复的节点卡片，用于无缝滚动 -->
+        <div 
+          v-for="node in nodes" 
+          :key="`dup-${node.id}`" 
+          class="node-card"
+          :class="{ 'node-active': node.status, 'node-inactive': !node.status }"
+        >
+          <div class="node-header">
+            <span class="node-name">{{ node.name }}</span>
+            <span class="node-status-badge" :class="{ 'status-active': node.status }">
+              {{ node.status ? '在线' : '离线' }}
+            </span>
+          </div>
+          
+          <div class="node-body">
+            <div class="node-stat">
+              <div class="stat-label">检测人数</div>
+              <div class="stat-value">{{ node.detected_count }}</div>
+            </div>
+            
+            <div class="node-stat">
+              <div class="stat-label">更新时间</div>
+              <div class="stat-time">{{ formatTime(node.updated_at) }}</div>
+            </div>
+          </div>
+          
+          <!-- 状态指示器 -->
+          <div class="tech-indicator" :class="{ 'active': node.status }"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -151,6 +269,14 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.node-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
 .nodes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -158,6 +284,13 @@ onUnmounted(() => {
   padding: 5px;
   overflow-y: auto;
   max-height: 100%;
+}
+
+.node-card-container {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s ease-in-out;
+  will-change: transform;
 }
 
 .node-card {
@@ -169,6 +302,11 @@ onUnmounted(() => {
   overflow: hidden;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
   transition: all 0.3s ease;
+  min-height: 100px; /* 设置最小高度 */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin-bottom: 12px
 }
 
 .node-card:hover {
