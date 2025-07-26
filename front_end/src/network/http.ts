@@ -5,14 +5,14 @@ import type { AxiosInstance, AxiosRequestConfig } from 'axios';
  * HTTP GET请求
  */
 export async function httpGet<T>(
-  url: string, 
-  params = {}, 
+  url: string,
+  params = {},
   api: AxiosInstance = defaultApi,
   config: AxiosRequestConfig = {}
 ): Promise<T> {
-  const response = await api.get(url, { 
+  const response = await api.get(url, {
     ...config,
-    params 
+    params
   });
   return response.data;
 }
@@ -21,8 +21,8 @@ export async function httpGet<T>(
  * HTTP POST请求
  */
 export async function httpPost<T>(
-  url: string, 
-  data: any, 
+  url: string,
+  data: any,
   api: AxiosInstance = defaultApi,
   config: AxiosRequestConfig = {}
 ): Promise<T> {
@@ -34,8 +34,8 @@ export async function httpPost<T>(
  * HTTP PUT请求
  */
 export async function httpPut<T>(
-  url: string, 
-  data: any, 
+  url: string,
+  data: any,
   api: AxiosInstance = defaultApi,
   config: AxiosRequestConfig = {}
 ): Promise<T> {
@@ -47,8 +47,8 @@ export async function httpPut<T>(
  * HTTP PATCH请求
  */
 export async function httpPatch<T>(
-  url: string, 
-  data: any, 
+  url: string,
+  data: any,
   api: AxiosInstance = defaultApi,
   config: AxiosRequestConfig = {}
 ): Promise<T> {
@@ -60,7 +60,7 @@ export async function httpPatch<T>(
  * HTTP DELETE请求
  */
 export async function httpDelete<T>(
-  url: string, 
+  url: string,
   api: AxiosInstance = defaultApi,
   config: AxiosRequestConfig = {}
 ): Promise<T> {
@@ -72,7 +72,12 @@ export async function httpDelete<T>(
  * 本地服务HTTP GET请求
  */
 export async function localHttpGet<T>(url: string, params = {}, config: AxiosRequestConfig = {}): Promise<T> {
-  return httpGet(url, params, localApi, config);
+  try {
+    return httpGet(url, params, localApi, config);
+  }
+  catch (error) {
+    throw error;
+  }
 }
 
 /**
@@ -89,7 +94,7 @@ export const http = {
   put: httpPut,
   patch: httpPatch,
   delete: httpDelete,
-  
+
   // 本地API快捷方法
   local: {
     get: localHttpGet,

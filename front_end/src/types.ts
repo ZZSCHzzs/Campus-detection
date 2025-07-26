@@ -19,6 +19,21 @@ export interface HistoricalData {
     timestamp: string
 }
 
+export interface TemperatureHumidityData {
+    id: number
+    area: number
+    temperature?: number
+    humidity?: number
+    timestamp: string
+}
+
+export interface CO2Data {
+    id: number
+    terminal: number
+    co2_level: number
+    timestamp: string
+}
+
 export interface HardwareNode {
     id: number
     name: string
@@ -26,6 +41,8 @@ export interface HardwareNode {
     status: boolean
     terminal: number
     updated_at: string
+    temperature?: number
+    humidity?: number
 }
 
 export interface ProcessTerminal {
@@ -36,16 +53,33 @@ export interface ProcessTerminal {
     last_active?: string
     cpu_usage?: number
     memory_usage?: number
+    disk_usage?: number
+    disk_free?: number
+    disk_total?: number
+    memory_available?: number
+    memory_total?: number
     model_loaded?: boolean
     push_running?: boolean
     pull_running?: boolean
     mode?: 'pull' | 'push' | 'both'
     interval?: number
-    camera_config?: Record<string, any>
+    node_config?: Record<string, any>
     save_image?: boolean
     preload_model?: boolean
-    cameras?: Record<string, string>
+    nodes?: Record<string, string>
     version?: string
+    co2_level?: number
+    co2_status?: string
+    system_uptime?: number
+    frame_rate?: number
+    total_frames?: number
+    terminal_id?: number
+    last_detection?: {
+        camera_id?: number
+        count?: number
+        time?: string
+        [key: string]: any
+    }
 }
 
 export interface Building {
@@ -94,6 +128,9 @@ export interface SummaryData {
     people_count: number
     notice_count: number
     alerts_count: number
+    users_count: number
+    nodes_online_count: number
+    terminals_online_count: number
 }
 
 /**
@@ -118,14 +155,32 @@ export interface TerminalCommand {
  * 终端状态接口
  */
 export interface TerminalStatus {
-  cameras: Record<string, string>;
+  nodes: Record<string, string | number | boolean>;
   cpu_usage: number;
   memory_usage: number;
+  disk_usage: number;
+  disk_free: number;
+  disk_total: number;
+  memory_available: number;
+  memory_total: number;
   push_running: boolean;
   pull_running: boolean;
   model_loaded: boolean;
   started_at?: string;
   mode?: string;
+  co2_level?: number;
+  co2_status?: string;
+  system_uptime?: number;
+  frame_rate?: number;
+  total_frames?: number;
+  terminal_id?: number;
+  last_detection?: {
+    camera_id?: number;
+    count?: number;
+    time?: string;
+    [key: string]: any;
+  };
+  terminal_online?: boolean;
   [key: string]: any;
 }
 
@@ -138,6 +193,8 @@ export interface TerminalConfig {
   cameras: Record<string, string>;
   save_image: boolean;
   preload_model: boolean;
+  co2_enabled?: boolean;
+  co2_read_interval?: number;
   [key: string]: any;
 }
 
@@ -167,5 +224,3 @@ export interface EnvironmentInfo {
   };
   terminal_mode?: 'local' | 'remote'; // 终端模式
 }
-
-// 注意：ProcessTerminal接口保持不变，因为它已经足够完整

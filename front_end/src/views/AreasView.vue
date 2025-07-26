@@ -1,12 +1,218 @@
 <script lang="ts" setup>
-import {ref, onMounted, onBeforeUnmount, computed, watch} from 'vue'
+import {ref, onMounted, onBeforeUnmount, computed, watch, nextTick} from 'vue'
 import {ElMessage} from 'element-plus'
-import {Search, HomeFilled, OfficeBuilding, Grid, List} from '@element-plus/icons-vue'
+import {Search, HomeFilled, OfficeBuilding, Grid, List, Loading} from '@element-plus/icons-vue'
 import type {AreaItem, Building} from '../types'
 import {buildingService} from '../services'
-import apiService from '../services'
-import AreaCard from '../components/AreaCard.vue'
+import {buildingCustomMethods} from '../services/ResourceServiceDefinitions'
+import AreaCard from '../components/data/AreaCard.vue'
 
+// 建筑数据管理类
+class BuildingDataManager {
+  private buildingAreas = new Map<number, {
+    areas: AreaItem[];
+    loaded: boolean;
+    loading: boolean;
+    hasMore: boolean;
+    page: number;
+  }>()
+  
+  private loadedBuildingIds = new Set<number>()
+  
+  // 初始化建筑数据
+  initBuilding(buildingId: number) {
+    this.buildingAreas.set(buildingId, {
+      areas: [],
+      loaded: false,
+      loading: false,
+      hasMore: true,
+      page: 1
+    })
+  }
+  
+  // 获取建筑数据
+  getBuildingData(buildingId: number) {
+    return this.buildingAreas.get(buildingId)
+  }
+  
+  // 更新建筑数据
+  updateBuildingData(buildingId: number, data: Partial<{
+    areas: AreaItem[];
+    loaded: boolean;
+    loading: boolean;
+    hasMore: boolean;
+    page: number;
+  }>) {
+    const existing = this.getBuildingData(buildingId)
+    if (existing) {
+      this.buildingAreas.set(buildingId, { ...existing, ...data })
+    }
+  }
+  
+  // 检查建筑状态
+  isLoaded(buildingId: number): boolean {
+    return this.getBuildingData(buildingId)?.loaded || false
+  }
+  
+  isLoading(buildingId: number): boolean {
+    return this.getBuildingData(buildingId)?.loading || false
+  }
+  
+  getAreas(buildingId: number): AreaItem[] {
+    return this.getBuildingData(buildingId)?.areas || []
+  }
+  
+  markAsLoaded(buildingId: number) {
+    this.loadedBuildingIds.add(buildingId)
+  }
+  
+  isMarkedAsLoaded(buildingId: number): boolean {
+    return this.loadedBuildingIds.has(buildingId)
+  }
+  
+  getAllData() {
+    return this.buildingAreas
+  }
+  
+  getLoadedIds() {
+    return Array.from(this.loadedBuildingIds)
+  }
+}
+
+// 可见性管理类
+class VisibilityManager {
+  private cardVisibilities = ref<Record<number, boolean>>({})
+  
+  // 设置区域可见性
+  setAreaVisibility(areaId: number, visible: boolean) {
+    this.cardVisibilities.value[areaId] = visible
+  }
+  
+  // 获取区域可见性
+  getAreaVisibility(areaId: number): boolean {
+    return this.cardVisibilities.value[areaId] !== false
+  }
+  
+  // 检查是否有可见性设置
+  hasVisibilitySettings(areaIds: number[]): boolean {
+    return areaIds.some(id => this.cardVisibilities.value.hasOwnProperty(id))
+  }
+  
+  // 初始化区域可见性
+  initAreasVisibility(areas: AreaItem[]) {
+    areas.forEach(area => {
+      if (!this.cardVisibilities.value.hasOwnProperty(area.id)) {
+        this.cardVisibilities.value[area.id] = true
+      }
+    })
+  }
+  
+  // 检查楼层是否可见
+  isFloorVisible(areas: AreaItem[], floor: number): boolean {
+    const areasInFloor = areas.filter(a => a.floor === floor)
+    
+    if (!this.hasVisibilitySettings(areasInFloor.map(a => a.id))) {
+      return areasInFloor.length > 0
+    }
+    
+    return areasInFloor.some(area => this.getAreaVisibility(area.id))
+  }
+  
+  // 检查建筑是否可见
+  isBuildingVisible(areas: AreaItem[]): boolean {
+    if (!areas || areas.length === 0) return false
+    
+    if (!this.hasVisibilitySettings(areas.map(a => a.id))) {
+      return true
+    }
+    
+    const floors = [...new Set(areas.map(a => a.floor))]
+    return floors.some(floor => this.isFloorVisible(areas, floor))
+  }
+  
+  getCardVisibilities() {
+    return this.cardVisibilities
+  }
+}
+
+// 数据加载管理类
+class DataLoadManager {
+  private isComponentMounted = ref(true)
+  
+  constructor(
+    private buildingManager: BuildingDataManager,
+    private visibilityManager: VisibilityManager
+  ) {}
+  
+  // 通用加载方法
+  async loadWithErrorHandling<T>(
+    loadFn: () => Promise<T>,
+    errorMessage: string,
+    onSuccess?: (data: T) => void
+  ): Promise<T | null> {
+    if (!this.isComponentMounted.value) return null
+    
+    try {
+      const result = await loadFn()
+      if (this.isComponentMounted.value && onSuccess) {
+        onSuccess(result)
+      }
+      return result
+    } catch (error) {
+      if (this.isComponentMounted.value) {
+        console.error(errorMessage, error)
+        ElMessage.error('数据加载失败')
+      }
+      return null
+    }
+  }
+  
+  // 加载建筑区域
+  async loadBuildingAreas(buildingId: number, loadMore = false) {
+    const buildingData = this.buildingManager.getBuildingData(buildingId)
+    if (!buildingData) return
+    
+    // 防止重复加载
+    if (buildingData.loading || (buildingData.loaded && !loadMore)) return
+    
+    this.buildingManager.updateBuildingData(buildingId, { loading: true })
+    
+    const page = loadMore ? buildingData.page + 1 : 1
+    
+    const response = await this.loadWithErrorHandling(
+      () => buildingCustomMethods.getBuildingAreasPaginated(buildingId, page, PAGE_SIZE),
+      `加载建筑 ${buildingId} 的区域失败`,
+      (data) => {
+        const updatedData = {
+          areas: loadMore ? [...buildingData.areas, ...data.areas] : data.areas,
+          loaded: true,
+          loading: false,
+          hasMore: data.has_next,
+          page: page
+        }
+        
+        this.buildingManager.updateBuildingData(buildingId, updatedData)
+        this.buildingManager.markAsLoaded(buildingId)
+        this.visibilityManager.initAreasVisibility(data.areas)
+      }
+    )
+    
+    if (!response) {
+      this.buildingManager.updateBuildingData(buildingId, { loading: false })
+    }
+  }
+  
+  setMountedStatus(mounted: boolean) {
+    this.isComponentMounted.value = mounted
+  }
+}
+
+// 实例化管理器
+const buildingManager = new BuildingDataManager()
+const visibilityManager = new VisibilityManager()
+const loadManager = new DataLoadManager(buildingManager, visibilityManager)
+
+// 原有的响应式数据
 const buildings = ref<Building[]>([])
 const loading = ref(false)
 const expectStatus = ref<string | "all">("all")
@@ -14,6 +220,17 @@ const buildingFilter = ref<number | "all">("all")
 const searchKeyword = ref("")
 
 const isFirstLoad = ref(true)
+const isComponentMounted = ref(true)
+let fetchInterval: number | null = null
+
+// 懒加载相关
+const INITIAL_LOAD_COUNT = 4 // 初始加载前4个建筑
+const PAGE_SIZE = 20 // 每页区域数量
+
+// 使用管理器的计算属性
+const buildingAreas = computed(() => buildingManager.getAllData())
+const cardVisibilities = computed(() => visibilityManager.getCardVisibilities().value)
+const loadedBuildingIds = computed(() => new Set(buildingManager.getLoadedIds()))
 
 watch(searchKeyword, (newVal) => {
   if (newVal) {
@@ -22,10 +239,17 @@ watch(searchKeyword, (newVal) => {
   }
 })
 
+// 获取已加载的区域（用于搜索）
+const loadedAreas = computed(() => {
+  const areas: AreaItem[] = []
+  buildingAreas.value.forEach((buildingData) => {
+    areas.push(...buildingData.areas)
+  })
+  return areas
+})
+
 const filteredAreas = computed(() => {
-  return buildings.value
-      .flatMap(b => b.areas || [])
-      .filter(a => a.name.includes(searchKeyword.value))
+  return loadedAreas.value.filter(a => a.name.includes(searchKeyword.value))
 })
 
 const filteredBuildings = computed(() => {
@@ -41,55 +265,77 @@ const getAreasByFloor = (areas: AreaItem[] | undefined, floor: number) => {
   return areas?.filter(a => a.floor === floor)
 }
 
-const fetchBuildings = async () => {
-  if (isFirstLoad.value) {
-    loading.value = true
+// 简化的辅助函数
+const getBuildingAreas = (buildingId: number) => buildingManager.getAreas(buildingId)
+const isBuildingLoaded = (buildingId: number) => buildingManager.isLoaded(buildingId)
+const isBuildingLoading = (buildingId: number) => buildingManager.isLoading(buildingId)
+
+// 初始化建筑基本信息
+const fetchBuildingsBasic = async () => {
+  loading.value = true
+  
+  const buildingsData = await loadManager.loadWithErrorHandling(
+    () => buildingCustomMethods.getBuildingsBasic(),
+    '建筑数据加载失败',
+    (data) => {
+      buildings.value = data
+      data.forEach(building => buildingManager.initBuilding(building.id))
+    }
+  )
+  
+  if (buildingsData) {
+    await loadInitialBuildings()
   }
-  try {
-    const buildingsData = await buildingService.getAll()
-    buildings.value = await Promise.all(
-        buildingsData.map(async (b: Building) => {
-          const areas = await buildingService.getBuildingAreas(b.id)
-          return {...b, areas}
-        })
-    )
-    console.log('建筑及区域数据加载成功:', buildings.value)
-  } catch (error) {
-    ElMessage.error('数据加载失败')
-  } finally {
-    loading.value = false
-  }
+  
+  loading.value = false
 }
 
-const cardVisibilities = ref<Record<number, boolean>>({})
+// 加载初始建筑区域
+const loadInitialBuildings = async () => {
+  const initialBuildings = buildings.value.slice(0, INITIAL_LOAD_COUNT)
+  await Promise.all(
+    initialBuildings.map(building => loadManager.loadBuildingAreas(building.id))
+  )
+}
 
+// 简化的可见性函数
 const handleCardVisibility = (areaId: number, visible: boolean) => {
-  cardVisibilities.value[areaId] = visible
+  visibilityManager.setAreaVisibility(areaId, visible)
 }
 
 const isFloorVisible = (buildingId: number, floor: number) => {
-
-  const currentBuilding = buildings.value.find(b => b.id === buildingId)
-  const areasInFloor = currentBuilding?.areas?.filter(a => a.floor === floor) || []
-
-  return areasInFloor.some(area =>
-      cardVisibilities.value[area.id]
-  )
+  const areas = getBuildingAreas(buildingId)
+  return visibilityManager.isFloorVisible(areas, floor)
 }
 
 const isBuildingVisible = computed(() => (buildingId: number) => {
   const building = filteredBuildings.value.find(b => b.id === buildingId)
   if (!building) return false
-  return getFloors(building.areas).some(floor =>
-      isFloorVisible(buildingId, floor)
-  )
+  
+  const areas = getBuildingAreas(buildingId)
+  return visibilityManager.isBuildingVisible(areas)
 })
+
+// 简化的加载函数
+const loadBuildingAreas = (buildingId: number, loadMore = false) => {
+  return loadManager.loadBuildingAreas(buildingId, loadMore)
+}
+
+const handleBuildingVisible = async (buildingId: number) => {
+  if (!buildingManager.isMarkedAsLoaded(buildingId)) {
+    await loadBuildingAreas(buildingId)
+  }
+}
+
+const loadMoreAreas = async (buildingId: number) => {
+  await loadBuildingAreas(buildingId, true)
+}
 
 const isMobile = ref(false)
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
-
+  
   if (isFirstLoad.value) {
     isCompactView.value = isMobile.value
   }
@@ -101,19 +347,125 @@ const toggleLayoutMode = () => {
   isCompactView.value = !isCompactView.value
 }
 
+// 定期刷新已加载的建筑数据
+const refreshLoadedBuildings = async () => {
+  if (!isComponentMounted.value) return
+  
+  const loadedIds = buildingManager.getLoadedIds()
+  await Promise.all(
+    loadedIds.map(id => {
+      // 重置页码，重新加载第一页
+      buildingManager.updateBuildingData(id, {
+        page: 1,
+        loaded: false
+      })
+      return loadBuildingAreas(id)
+    })
+  )
+}
+
+// 添加 Intersection Observer 相关代码
+const observer = ref<IntersectionObserver | null>(null)
+const buildingRefs = ref<Map<number, HTMLElement>>(new Map())
+
+// 设置建筑元素引用
+const setBuildingRef = (el: HTMLElement | null, buildingId: number) => {
+  if (el) {
+    buildingRefs.value.set(buildingId, el)
+  } else {
+    buildingRefs.value.delete(buildingId)
+  }
+}
+
+// 初始化 Intersection Observer
+const initIntersectionObserver = () => {
+  if (observer.value) {
+    observer.value.disconnect()
+  }
+  
+  observer.value = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const buildingId = parseInt(entry.target.getAttribute('data-building-id') || '0')
+          if (buildingId && !buildingManager.isMarkedAsLoaded(buildingId)) {
+            handleBuildingVisible(buildingId)
+          }
+        }
+      })
+    },
+    {
+      root: null,
+      rootMargin: '100px',
+      threshold: 0.1
+    }
+  )
+}
+
+// 观察建筑元素
+const observeBuildings = () => {
+  if (!observer.value) return
+  
+  buildingRefs.value.forEach((el, buildingId) => {
+    if (!buildingManager.isMarkedAsLoaded(buildingId)) {
+      observer.value!.observe(el)
+    }
+  })
+}
+
 onMounted(() => {
-  fetchBuildings()
+  isComponentMounted.value = true
+  loadManager.setMountedStatus(true)
+  
+  // 初始化 Intersection Observer
+  initIntersectionObserver()
+  
+  fetchBuildingsBasic()
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
-
+  
+  // 设置定期刷新数据的间隔
+  fetchInterval = window.setInterval(() => {
+    refreshLoadedBuildings()
+  }, 30000) // 每30秒刷新一次
+  
   isFirstLoad.value = false
-
+  
+  // 在下一个 tick 观察建筑元素
+  nextTick(() => {
+    observeBuildings()
+  })
 })
+
+onBeforeUnmount(() => {
+  isComponentMounted.value = false
+  loadManager.setMountedStatus(false)
+  window.removeEventListener('resize', checkScreenSize)
+  
+  // 清理 Intersection Observer
+  if (observer.value) {
+    observer.value.disconnect()
+    observer.value = null
+  }
+  
+  if (fetchInterval !== null) {
+    clearInterval(fetchInterval)
+    fetchInterval = null
+  }
+})
+
+// 监听建筑数据变化，重新观察元素
+watch(buildings, () => {
+  nextTick(() => {
+    observeBuildings()
+  })
+}, { deep: true })
 </script>
 
 <template>
   <div class="areas-container">
-    <div class="page-header">
+    <!-- 顶部标题卡片 -->
+    <div class="page-header-card">
       <div class="header-content">
         <h1 class="main-title">校园区域监测</h1>
         <p class="subtitle">实时查看各区域人流情况</p>
@@ -121,6 +473,7 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 搜索栏卡片 -->
     <div class="search-bar-container">
       <div class="search-bar">
         <el-row :gutter="15">
@@ -187,111 +540,159 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-skeleton v-loading="loading" :loading="loading" animated>
-      <div v-if="searchKeyword" class="search-results">
-        <div class="search-header">
-          <el-icon>
-            <Search/>
-          </el-icon>
-          <span>搜索结果: "{{ searchKeyword }}"</span>
-        </div>
-        <el-row :gutter="20" class="card-row">
-          <el-col
-              v-for="area in filteredAreas"
-              :key="area.id"
-              :lg="6"
-              :md="isCompactView ? 6 : 8"
-              :sm="isCompactView ? 8 : 12"
-              :xs="isCompactView ? 12 : 24"
-              class="card-animation"
-          >
-            <AreaCard
-                :area="area"
-                :compact="isCompactView"
-                :expectStatus="expectStatus"
-                @visible-change="(v) => handleCardVisibility(area.id, v)"
-            />
-          </el-col>
-        </el-row>
-      </div>
-      <div v-else>
-        <div v-for="building in filteredBuildings" :key="building.id" class="building-section">
-          <div class="building-header">
-            <div class="header-icon-wrapper">
+    <!-- 内容区域 -->
+    <div v-loading="loading" class="content-area">
+      <el-skeleton :loading="loading" animated>
+        <template #default>
+          <div v-if="searchKeyword" class="search-results">
+            <div class="search-header">
               <el-icon>
-                <OfficeBuilding/>
+                <Search/>
               </el-icon>
+              <span>搜索结果: "{{ searchKeyword }}"</span>
             </div>
-            <h2 class="building-title">{{ building.name }}</h2>
-          </div>
-
-          <div v-show="!isBuildingVisible(building.id)" class="empty-state">
-            <el-empty description="该建筑暂无可见区域"/>
-          </div>
-
-          <div v-show="isBuildingVisible(building.id)">
-            <el-row v-for="floor in getFloors(building.areas)" v-show="isFloorVisible(building.id, floor)" :key="floor"
-                    :gutter="10"
-            >
-              <el-col :span="isMobile ? 24 : 2" class="floor-header">
-                <div class="floor-header">
-                  <div class="floor-icon-wrapper">
-                    <el-icon>
-                      <HomeFilled/>
-                    </el-icon>
-                  </div>
-                  <h3 class="floor-title">{{ floor }}F</h3>
-                </div>
-              </el-col>
-              <el-col :span='isMobile ? 24 : 22'>
-                <el-row :gutter="20" class="card-row">
-                  <el-col
-                      v-for="area in getAreasByFloor(building.areas, floor)"
-                      :key="area.id"
-                      :class="{ 'floor-card-indent': !isCompactView }"
-                      :lg="6"
-                      :md="isCompactView ? 6 : 8"
-                      :offset="isCompactView ? 0 : 0"
-                      :sm="isCompactView ? 8 : 12"
-                      :xs="isCompactView ? 12 : 24"
-                      class="card-animation"
-                      v-show="cardVisibilities[area.id] !== false"
-                  >
-
-                      <AreaCard
-
-                          :area="area"
-                          :compact="isCompactView"
-                          :expectStatus="expectStatus"
-                          @visible-change="(v) => handleCardVisibility(area.id, v)"
-                      />
-
-
-                  </el-col>
-                </el-row>
-
+            <el-row :gutter="20" class="card-row">
+              <el-col
+                  v-for="area in filteredAreas"
+                  :key="area.id"
+                  :lg="6"
+                  :md="isCompactView ? 6 : 8"
+                  :sm="isCompactView ? 8 : 12"
+                  :xs="isCompactView ? 12 : 24"
+                  class="card-animation"
+              >
+                <AreaCard
+                    :area="area"
+                    :compact="isCompactView"
+                    :expectStatus="expectStatus"
+                    @visible-change="(v) => handleCardVisibility(area.id, v)"
+                />
               </el-col>
             </el-row>
           </div>
-        </div>
-      </div>
-    </el-skeleton>
+          <div v-else>
+            <div 
+              v-for="building in filteredBuildings" 
+              :key="building.id" 
+              :ref="(el) => setBuildingRef(el as HTMLElement, building.id)"
+              :data-building-id="building.id"
+              class="building-section"
+            >
+              <div class="building-header">
+                <div class="header-icon-wrapper">
+                  <el-icon>
+                    <OfficeBuilding/>
+                  </el-icon>
+                </div>
+                <h2 class="building-title">{{ building.name }}</h2>
+                <div v-if="isBuildingLoading(building.id)" class="loading-indicator">
+                  <el-icon class="is-loading">
+                    <Loading/>
+                  </el-icon>
+                  <span>加载中...</span>
+                </div>
+              </div>
+
+              <div v-if="!isBuildingLoaded(building.id) && !isBuildingLoading(building.id)" class="lazy-load-placeholder">
+                <el-button 
+                  type="primary" 
+                  plain 
+                  @click="handleBuildingVisible(building.id)"
+                >
+                  点击加载区域数据
+                </el-button>
+              </div>
+
+              <div v-else-if="isBuildingLoaded(building.id) && getBuildingAreas(building.id).length === 0" class="empty-state">
+                <el-empty description="该建筑暂无区域数据"/>
+              </div>
+
+              <div v-else-if="isBuildingLoaded(building.id)">
+                <el-row 
+                  v-for="floor in getFloors(getBuildingAreas(building.id))" 
+                  v-show="isFloorVisible(building.id, floor)" 
+                  :key="floor"
+                  :gutter="10"
+                >
+                  <el-col :span="isMobile ? 24 : 2" class="floor-header">
+                    <div class="floor-header">
+                      <div class="floor-icon-wrapper">
+                        <el-icon>
+                          <HomeFilled/>
+                        </el-icon>
+                      </div>
+                      <h3 class="floor-title">{{ floor }}F</h3>
+                    </div>
+                  </el-col>
+                  <el-col :span='isMobile ? 24 : 22'>
+                    <el-row :gutter="20" class="card-row">
+                      <el-col
+                          v-for="area in getAreasByFloor(getBuildingAreas(building.id), floor)"
+                          :key="area.id"
+                          :class="{ 'floor-card-indent': !isCompactView }"
+                          :lg="6"
+                          :md="isCompactView ? 6 : 8"
+                          :offset="isCompactView ? 0 : 0"
+                          :sm="isCompactView ? 8 : 12"
+                          :xs="isCompactView ? 12 : 24"
+                          class="card-animation"
+                          v-show="cardVisibilities[area.id] !== false"
+                      >
+                          <AreaCard
+                              :area="area"
+                              :compact="isCompactView"
+                              :expectStatus="expectStatus"
+                              @visible-change="(v) => handleCardVisibility(area.id, v)"
+                          />
+                      </el-col>
+                    </el-row>
+                  </el-col>
+                </el-row>
+                
+                <!-- 加载更多按钮 -->
+                <div 
+                  v-if="buildingAreas.get(building.id)?.hasMore" 
+                  class="load-more-container"
+                >
+                  <el-button 
+                    type="primary" 
+                    plain 
+                    :loading="isBuildingLoading(building.id)"
+                    @click="loadMoreAreas(building.id)"
+                  >
+                    加载更多区域
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </el-skeleton>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .areas-container {
-  max-width: 1200px;
-  margin: 10px auto;
-  padding: 25px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-radius: 0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+/* 顶部标题卡片样式 */
+.page-header-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+  padding: 30px;
+  text-align: center;
   position: relative;
   overflow: hidden;
 }
 
-.areas-container::before {
+.page-header-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -299,15 +700,7 @@ onMounted(() => {
   right: 0;
   height: 4px;
   background: linear-gradient(90deg, #3498db, #1abc9c, #9b59b6);
-  border-radius: 16px 16px 0 0;
-}
-
-.page-header {
-  text-align: center;
-  margin-bottom: 35px;
-  padding-bottom: 25px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  position: relative;
+  border-radius: 12px 12px 0 0;
 }
 
 .header-content {
@@ -344,33 +737,16 @@ onMounted(() => {
   border-radius: 4px;
 }
 
+/* 搜索栏样式 */
+.search-bar-container {
+  margin-bottom: 20px;
+}
+
 .search-bar {
   background: white;
   padding: 20px;
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-}
-
-.building-filter,
-.status-filter {
-  flex: 1;
-  min-width: 150px;
-}
-
-.search-input {
-  flex: 2;
-  min-width: 200px;
-}
-
-.layout-toggle {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.toggle-button {
-  width: 100%;
-  white-space: nowrap;
 }
 
 .custom-select,
@@ -388,47 +764,34 @@ onMounted(() => {
   color: #64748b;
 }
 
-.search-bar {
-  gap: 20px;
-  margin-bottom: 35px;
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  align-items: center;
-}
-
-.custom-select, .custom-input {
+.toggle-button {
   width: 100%;
-  transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
-.custom-select:hover, .custom-input:hover {
-  transform: translateY(-2px);
+.toggle-icon {
+  margin-right: 6px;
 }
 
-.search-input-wrapper {
-  position: relative;
-}
-
-.search-icon {
-  color: #64748b;
+/* 内容区域 */
+.content-area {
+  background: transparent;
 }
 
 .building-section {
-  margin-bottom: 40px;
+  margin-bottom: 20px;
   transition: all 0.4s ease;
   background: white;
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   transform: translateY(0);
   animation: fadeIn 0.5s ease-out;
 }
 
 .building-section:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes fadeIn {
@@ -519,7 +882,7 @@ onMounted(() => {
   padding: 20px;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   animation: fadeIn 0.5s ease;
 }
 
@@ -553,57 +916,47 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
+.search-item {
+  margin: 4px 0;
+}
+
+.layout-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+/* 响应式设计 */
 @media (max-width: 768px) {
   .areas-container {
     padding: 15px;
-    margin: 10px;
+  }
+
+  .page-header-card {
+    padding: 20px;
+    margin-bottom: 15px;
   }
 
   .main-title {
     font-size: 24px;
   }
 
+  .subtitle {
+    font-size: 14px;
+  }
+
   .building-section {
     padding: 15px;
-    margin-bottom: 20px;
-  }
-
-  .search-bar {
-    padding: 10px;
-    gap: 12px;
-    flex-direction: column;
-  }
-
-  .search-item {
-    width: 100%;
-  }
-
-  .building-filter,
-  .status-filter,
-  .search-input,
-  .layout-toggle {
-    flex: 1 1 100%;
-  }
-
-  .toggle-button {
-    width: 100%;
-  }
-
-  .card-row {
     margin-bottom: 15px;
   }
 
-  .building-header {
-    margin-bottom: 10px;
+  .search-bar {
+    padding: 15px;
   }
 
   .building-title {
     font-size: 20px;
     margin: 10px 0;
-  }
-
-  .floor-header {
-    margin-bottom: 5px;
   }
 
   .floor-title {
@@ -615,25 +968,8 @@ onMounted(() => {
     margin-bottom: 15px;
   }
 
-  .header-content {
-    padding: 0 10px;
-  }
-
-  .subtitle {
-    font-size: 14px;
-  }
-
-  .layout-toggle {
-    justify-content: center;
-    margin: 0;
-  }
-
-  .floor-card-indent {
-    margin-left: 0;
-  }
-
-  .card-row {
-    margin-bottom: 15px;
+  .toggle-button {
+    width: 100%;
   }
 }
 
@@ -667,29 +1003,14 @@ onMounted(() => {
     font-size: 18px;
   }
 
-  .page-header {
-    margin-bottom: 20px;
-    padding-bottom: 15px;
+  .page-header-card {
+    padding: 15px;
+    margin-bottom: 10px;
   }
 
   .search-bar {
     padding: 12px;
-    gap: 10px;
   }
-}
-
-.search-item {
-  margin: 4px 0;
-}
-
-.layout-toggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-left: auto;
-}
-
-.toggle-icon {
-  margin-right: 6px;
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

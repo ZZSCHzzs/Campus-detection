@@ -19,6 +19,20 @@
     </div>
     </template>
     
+    <template #column-temperature="{ row }">
+      <span v-if="row.temperature !== undefined && row.temperature !== null">
+        {{ row.temperature.toFixed(1) }}°C
+      </span>
+      <span v-else>-</span>
+    </template>
+    
+    <template #column-humidity="{ row }">
+      <span v-if="row.humidity !== undefined && row.humidity !== null">
+        {{ row.humidity.toFixed(0) }}%
+      </span>
+      <span v-else>-</span>
+    </template>
+    
     <template #form="{ form }">
       <el-form :model="form" label-width="100px">
         <el-form-item label="节点名称" required>
@@ -62,6 +76,30 @@
             rows="3"
           />
         </el-form-item>
+        
+        <el-form-item label="温度">
+          <el-input-number 
+            v-model="form.temperature" 
+            :precision="1" 
+            :step="0.1"
+            :min="0"
+            :max="50"
+            placeholder="请输入温度值"
+          />
+          <span class="form-input-suffix">°C</span>
+        </el-form-item>
+        
+        <el-form-item label="湿度">
+          <el-input-number 
+            v-model="form.humidity" 
+            :precision="0" 
+            :step="1"
+            :min="0"
+            :max="100"
+            placeholder="请输入湿度值"
+          />
+          <span class="form-input-suffix">%</span>
+        </el-form-item>
       </el-form>
     </template>
   </base-manager>
@@ -83,11 +121,13 @@ const props = defineProps({
 const dataLink = ref()
 
 const columns = [
-  { prop: 'name', label: '节点名称', width: '200', mobileWidth: '130' },
-  { prop: 'detected_count', label: '检测人数', width: '150', mobileWidth: '80' },
+  { prop: 'name', label: '节点名称', width: '180', mobileWidth: '130' },
+  { prop: 'detected_count', label: '检测人数', width: '120', mobileWidth: '80' },
   { prop: 'terminal', label: '所属终端', width: '150', mobileWidth: '150', slot: true },
   { prop: 'status', label: '状态', width: '100', mobileWidth: '65', slot: true },
-  { prop: 'updated_at', label: '更新时间', width: '200', 
+  { prop: 'temperature', label: '温度', width: '100', mobileWidth: '80', slot: true },
+  { prop: 'humidity', label: '湿度', width: '100', mobileWidth: '80', slot: true },
+  { prop: 'updated_at', label: '更新时间', width: '180', 
     formatter: (row) => new Date(row.updated_at).toLocaleString() },
   { prop: 'description', label: '描述', hideOnMobile: true }
 ]
@@ -97,7 +137,9 @@ const defaultFormData = {
   status: 'online',
   terminal: null,
   description: '',
-  detected_count: 0
+  detected_count: 0,
+  temperature: undefined,
+  humidity: undefined
 }
 
 const terminals = ref([])
@@ -121,3 +163,10 @@ const getTerminalName = (id) => {
 }
 
 </script>
+
+<style scoped>
+.form-input-suffix {
+  margin-left: 8px;
+  color: #606266;
+}
+</style>

@@ -109,7 +109,7 @@ const handleLogin = async () => {
                 
                 const encryptedPassword = encryptPassword(loginForm.value.password)
 
-                console.log('尝试登录...')
+
                 const response = await AuthService.login(
                     loginForm.value.username, 
                     encryptedPassword
@@ -119,7 +119,7 @@ const handleLogin = async () => {
 
                 const { access, refresh } = response
                 
-                console.log('登录成功，设置token')
+
                 
                 localStorage.removeItem('access')
                 localStorage.removeItem('refresh')
@@ -137,7 +137,7 @@ const handleLogin = async () => {
                 }
 
                 try {
-                    console.log('获取用户信息中...')
+
                     
                     const userInfo = await AuthService.getUserInfo()
                     
@@ -333,7 +333,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     // 设置标志，防止异步操作在组件卸载后继续执行
     isComponentMounted.value = false
-    console.log('AuthView组件已卸载，清理异步操作')
+
 })
 </script>
 
@@ -425,14 +425,13 @@ onBeforeUnmount(() => {
 .user-container {
     display: flex;
     justify-content: center;
-    
-    height: 100%;
+    min-height: calc(100vh - 160px); /* 减去footer高度和上下间距 */
     overflow: hidden;
-    padding: 0 40px;
-    position: fixed;
+    padding: 0 40px 60px; /* 增加底部间距给footer留空间 */
     box-sizing: border-box;
-    background-color: #f5f7fa;
     width: 100%;
+    /* 移除 position: fixed，改为相对定位 */
+    position: relative;
 }
 
 .auth-card {
@@ -573,7 +572,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
     .user-container {
-        padding: 20px;
+        padding: 20px 20px 80px; /* 调整底部间距 */
+        min-height: calc(100vh - 180px);
     }
     
     .auth-card {

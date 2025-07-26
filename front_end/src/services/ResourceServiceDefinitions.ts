@@ -2,7 +2,7 @@ import { defaultApi, localApi, ApiMode, http } from '../network';
 import type { ResourceConfig } from './ResourceManager';
 import type { 
   AreaItem, Building, HardwareNode, ProcessTerminal, 
-  User, Alert, Notice, HistoricalData, LogEntry, TerminalConfig, EnvironmentInfo
+  User, Alert, Notice, HistoricalData, TemperatureHumidityData, CO2Data, LogEntry, TerminalConfig, EnvironmentInfo
 } from '../types';
 import { ElMessage } from 'element-plus';
 
@@ -17,6 +17,10 @@ export const areaCustomMethods = {
     
   getAreaHistorical: (id: number, params?: any) => 
     customApiCall<HistoricalData[]>(`/api/areas/${id}/historical/`, 'get', undefined, params),
+
+  // 获取区域温湿度数据
+  getAreaTemperatureHumidity: (id: number, hours = 24) => 
+    customApiCall<TemperatureHumidityData[]>(`/api/areas/${id}/temperature_humidity/`, 'get', undefined, { hours }),
 
   getFavoriteAreas: async () => {
     try {
@@ -55,6 +59,37 @@ export const areaCustomMethods = {
 export const buildingCustomMethods = {
   getBuildingAreas: (id: number) => 
     customApiCall<AreaItem[]>(`/api/buildings/${id}/areas/`),
+  
+  // 新增：分页获取建筑区域
+  getBuildingAreasPaginated: (id: number, page = 1, pageSize = 20) => 
+    customApiCall<{
+      areas: AreaItem[];
+      total_count: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      has_previous: boolean;
+    }>(`/api/buildings/${id}/areas_paginated/`, 'get', undefined, { page, page_size: pageSize }),
+  
+  // 新增：获取建筑基本信息
+  getBuildingsBasic: () => 
+    customApiCall<Building[]>('/api/buildings/list_basic/', 'get', undefined, {}, true, 5 * 60 * 1000),
+  
+  // 新增：批量加载多个建筑的区域
+  loadBuildingsWithAreas: async (buildingIds: number[], pageSize = 20) => {
+    const results = await Promise.all(
+      buildingIds.map(async (id) => {
+        try {
+          const response = await buildingCustomMethods.getBuildingAreasPaginated(id, 1, pageSize);
+          return { buildingId: id, ...response };
+        } catch (error) {
+          console.error(`加载建筑 ${id} 的区域失败:`, error);
+          return { buildingId: id, areas: [], total_count: 0, has_next: false };
+        }
+      })
+    );
+    return results;
+  }
 };
 
 // 节点服务自定义方法
@@ -71,11 +106,15 @@ export const terminalCustomMethods = {
   getTerminalStatus: (id: number) => 
     customApiCall(`/api/terminals/${id}/status/`, 'get', undefined, {}, false),
     
-  getTerminalLogs: (id: number) => 
-    customApiCall<LogEntry[]>(`/api/terminals/${id}/logs/`, 'get', undefined, {}, false),
+  getTerminalLogs: (id: number, params = {}) => 
+    customApiCall<LogEntry[]>(`/api/terminals/${id}/logs/`, 'get', undefined, params, false),
     
   getTerminalConfig: (id: number) => 
     customApiCall<TerminalConfig>(`/api/terminals/${id}/config/`, 'get', undefined, {}, false),
+  
+  // 获取终端CO2数据
+  getTerminalCO2Data: (id: number, hours = 24) => 
+    customApiCall<CO2Data[]>(`/api/terminals/${id}/co2_data/`, 'get', undefined, { hours }),
     
   sendTerminalCommand: (id: number, command: any) => 
     customApiCall(`/api/terminals/${id}/command/`, 'post', command),
@@ -115,7 +154,59 @@ export const historicalCustomMethods = {
       { ...params, start_date: startDate, end_date: endDate }),
 
   getLatestHistorical: (count = 10) => 
-    customApiCall<HistoricalData[]>(`/api/historical/latest/`, 'get', undefined, { count }),
+    customApiCall<HistoricalData>(`/api/historical/latest/`, 'get', undefined, { count }),
+};
+
+// 温湿度数据服务自定义方法
+export const temperatureHumidityCustomMethods = {
+  // 获取最新温湿度数据
+  getLatest: (count = 10) => 
+    customApiCall<TemperatureHumidityData[]>('/api/temperature-humidity/latest/', 'get', undefined, { count }, true, 30000),
+  
+  // 根据区域获取温湿度数据
+  getByArea: (areaId: number, hours = 24) => 
+    customApiCall<TemperatureHumidityData[]>('/api/temperature-humidity/by_area/', 'get', undefined, { area_id: areaId, hours }),
+  
+  // 获取区域的温湿度数据（通过区域API）
+  getAreaTemperatureHumidity: (areaId: number, hours = 24) => 
+    customApiCall<TemperatureHumidityData[]>(`/api/areas/${areaId}/temperature_humidity/`, 'get', undefined, { hours }),
+  
+  // 上传温湿度数据
+  upload: (data: { area_id: number; temperature?: number; humidity?: number; timestamp: string }) => 
+    customApiCall('/api/upload/temperature-humidity/', 'post', data),
+  
+  // 根据时间范围获取温湿度数据
+  getByDateRange: (startDate: string, endDate: string, areaId?: number) => {
+    const params: any = { start_date: startDate, end_date: endDate };
+    if (areaId) params.area_id = areaId;
+    return customApiCall<TemperatureHumidityData[]>('/api/temperature-humidity/', 'get', undefined, params);
+  }
+};
+
+// CO2数据服务自定义方法
+export const co2CustomMethods = {
+  // 获取最新CO2数据
+  getLatest: (count = 10) => 
+    customApiCall<CO2Data[]>('/api/co2/latest/', 'get', undefined, { count }, true, 30000),
+  
+  // 根据终端获取CO2数据
+  getByTerminal: (terminalId: number, hours = 24) => 
+    customApiCall<CO2Data[]>('/api/co2/by_terminal/', 'get', undefined, { terminal_id: terminalId, hours }),
+  
+  // 获取终端的CO2数据（通过终端API）
+  getTerminalCO2Data: (terminalId: number, hours = 24) => 
+    customApiCall<CO2Data[]>(`/api/terminals/${terminalId}/co2_data/`, 'get', undefined, { hours }),
+  
+  // 上传CO2数据
+  upload: (data: { terminal_id: number; co2_level: number; timestamp: string }) => 
+    customApiCall('/api/upload/co2/', 'post', data),
+  
+  // 根据时间范围获取CO2数据
+  getByDateRange: (startDate: string, endDate: string, terminalId?: number) => {
+    const params: any = { start_date: startDate, end_date: endDate };
+    if (terminalId) params.terminal_id = terminalId;
+    return customApiCall<CO2Data[]>('/api/co2/', 'get', undefined, params);
+  }
 };
 
 // 用户服务自定义方法
@@ -204,7 +295,7 @@ export const localTerminalCustomMethods = {
     try {
       return await http.local.get<EnvironmentInfo>('/api/environment');
     } catch (error) {
-      console.error('获取环境信息失败:', error);
+      ElMessage.warning('未检测到本地终端服务');
       return {
         type: 'unknown',
         version: 'unknown',
@@ -226,6 +317,7 @@ export const localTerminalCustomMethods = {
       await http.local.get('/api/heartbeat', { timeout: 3000 });
       return true;
     } catch (error) {
+      console.error('本地终端不可用:', error);
       return false;
     }
   },
@@ -310,6 +402,14 @@ export const serviceConfigs: Record<string, ResourceConfig> = {
   historical: {
     basePath: '/api',
     cacheDuration: 5 * 60 * 1000, // 5分钟
+  },
+  'temperature-humidity': {
+    basePath: '/api',
+    cacheDuration: 2 * 60 * 1000, // 2分钟
+  },
+  co2: {
+    basePath: '/api',
+    cacheDuration: 2 * 60 * 1000, // 2分钟
   }
 };
 
@@ -337,5 +437,7 @@ export const DEFAULT_CACHE_DURATIONS = {
   notice: 60 * 1000, // 1分钟
   users: 5 * 60 * 1000, // 5分钟
   historical: 5 * 60 * 1000, // 5分钟
+  'temperature-humidity': 2 * 60 * 1000, // 2分钟
+  co2: 2 * 60 * 1000, // 2分钟
   global: 2 * 60 * 1000, // 全局默认2分钟
 };

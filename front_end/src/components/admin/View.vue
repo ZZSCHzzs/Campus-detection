@@ -7,7 +7,7 @@ import {View} from "@element-plus/icons-vue";
 const props = defineProps<{
   resource: string
   data: string
-  id: number
+  id: number | undefined
 }>()
 const router = useRouter()
 const handleJump = () => {

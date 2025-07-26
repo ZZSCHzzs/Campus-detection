@@ -1,12 +1,13 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import type { AreaItem, Alert, Notice, SummaryData } from '../types'
+import type { AreaItem, Alert, Notice, SummaryData, Building } from '../types'
 import { useAuthStore } from '../stores/auth'
-import { areaService, noticeService, alertService, summaryService } from '../services'
+import { areaService, noticeService, alertService, summaryService, buildingService } from '../services'
 import apiService from '../services'
-import AreaList from '../components/AreaList.vue'
+import AreaList from '../components/data/AreaList.vue'
+import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue'
+import TrendChart from '../components/chart/TrendChart.vue'
 
 import {
   User, Monitor, OfficeBuilding, Connection, MapLocation,
@@ -32,6 +33,17 @@ const loading = ref(false)
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
 
+// 添加温湿度图表相关状态
+const selectedAreaForEnvironmental = ref<number | null>(null)
+const allAreas = ref<AreaItem[]>([])
+const loadingAllAreas = ref(false)
+
+// 添加新的响应式数据
+const selectedBuildingForEnvironmental = ref<number | null>(null)
+const buildingAreas = ref<AreaItem[]>([])
+const loadingBuildingAreas = ref(false)
+const buildings = ref<Building[]>([])
+
 const isFirstLoad = ref(true)
 
 const userStore = useAuthStore()
@@ -44,9 +56,12 @@ const STATS_LABELS = {
   buildings_count: '楼宇数量',
   areas_count: '监测区域',
   historical_data_count: '历史记录',
-  people_count: '系统总人数',
+  people_count: '当前总人数',
   notice_count: '系统通知',
-  alerts_count: '安全告警'
+  alerts_count: '安全告警',
+  users_count: '注册用户',
+  nodes_online_count: '在线节点',
+  terminals_online_count: '在线终端'
 } as const
 
 const fetchHotAreas = async () => {
@@ -83,95 +98,75 @@ const fetchFavoriteAreas = async () => {
   }
 }
 
-const chartLoading = ref(false)
-const chartInitFailed = ref(false)
-
-let chart: echarts.ECharts | null = null
-let resizeHandler: (() => void) | null = null
-let intervalTimer1: number | null = null 
-let intervalTimer2: number | null = null
-
-const initChart = async () => {
-  chartLoading.value = false
-  chartInitFailed.value = false
+// 获取所有区域用于环境数据图表选择
+const fetchAllAreas = async () => {
   try {
-    const chartDom = document.getElementById('trend-chart')
-    if (!chartDom) {
-      chartInitFailed.value = true
-      return
+    if (isFirstLoad.value) {
+      loadingAllAreas.value = true
     }
-
-    if (chart) {
-      chart.dispose()
+    
+    // 先获取所有建筑
+    const buildingsData = await buildingService.getAll()
+    const areasList: AreaItem[] = []
+    
+    // 遍历每个建筑，获取其区域
+    for (const building of buildingsData) {
+      try {
+        const areas = await buildingService.getBuildingAreas(building.id)
+        areasList.push(...areas)
+      } catch (error) {
+        console.error(`获取建筑 ${building.id} 的区域失败`, error)
+      }
     }
-
-    chart = echarts.init(chartDom)
-    const hours = Array.from({ length: 18 }, (_, i) => `${i + 6}:00`)
-    const peopleData = [
-      10,   // 6:00
-      20,   // 7:00
-      180,  // 8:00 早高峰
-      195,  // 9:00
-      320,  // 10:00
-      325,  // 11:00
-      250,  // 12:00 午餐高峰
-      180,  // 13:00
-      280,  // 14:00
-      285,  // 15:00
-      160,   // 16:00
-      130,  // 17:00 晚餐高峰
-      180,  // 18:00
-      310,  // 19:00 晚自习高峰
-      330,  // 20:00
-      340,  // 21:00
-      120,   // 22:00
-      20    // 23:00
-    ]
-    const option = {
-      title: { text: '今日人流趋势' },
-      tooltip: { trigger: 'axis' },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: { type: 'category', data: hours },
-      yAxis: { type: 'value' },
-      series: [{
-        data: peopleData,
-        type: 'line',
-        smooth: true,
-        symbolSize: 8,
-        lineStyle: {
-          width: 3,
-          shadowColor: 'rgba(64, 158, 255, 0.2)',
-          shadowBlur: 12,
-          shadowOffsetY: 6
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.4)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.02)' }
-          ])
-        },
-        label: {
-          show: true,
-          position: 'top',
-          color: '#36b5ff',
-          fontSize: 12
-        }
-      }]
+    
+    allAreas.value = areasList
+    // 默认选择第一个区域
+    if (allAreas.value.length > 0 && !selectedAreaForEnvironmental.value) {
+      selectedAreaForEnvironmental.value = allAreas.value[0].id
     }
-
-    chart.setOption(option)
-    chartLoading.value = false
   } catch (error) {
-    chartLoading.value = false
-    chartInitFailed.value = true
+    console.error('获取区域列表失败:', error)
+    ElMessage.error('获取区域列表失败')
+  } finally {
+    if (isFirstLoad.value) {
+      loadingAllAreas.value = false
+    }
   }
 }
 
+// 获取建筑列表
+const fetchBuildings = async () => {
+  try {
+    buildings.value = await buildingService.getBuildingsBasic()
+  } catch (error) {
+    console.error('获取建筑列表失败:', error)
+  }
+}
+
+// 建筑选择变化处理
+const onBuildingChange = async (buildingId: number | null) => {
+  selectedAreaForEnvironmental.value = null
+  buildingAreas.value = []
+  
+  if (!buildingId) return
+  
+  try {
+    loadingBuildingAreas.value = true
+    const areas = await buildingService.getBuildingAreas(buildingId)
+    buildingAreas.value = areas
+  } catch (error) {
+    ElMessage.error('获取建筑区域失败')
+    buildingAreas.value = []
+  } finally {
+    loadingBuildingAreas.value = false
+  }
+}
+
+let intervalTimer1: number | null = null 
+let intervalTimer2: number | null = null
+
+// 添加缺失的状态变量
+const isMobile = ref(false)
 const summary = ref<SummaryData>({
   nodes_count: 0,
   terminals_count: 0,
@@ -180,10 +175,18 @@ const summary = ref<SummaryData>({
   historical_data_count: 0,
   people_count: 0,
   notice_count: 0,
-  alerts_count: 0
+  alerts_count: 0,
+  users_count: 0,
+  nodes_online_count: 0,
+  terminals_online_count: 0
 })
 const loadingSummary = ref(false)
+const alerts = ref<Alert[]>([])
+const notices = ref<Notice[]>([])
+const loadingAlerts = ref(false)
+const loadingNotices = ref(false)
 
+// 获取统计数据
 const fetchSummary = async () => {
   try {
     if (isFirstLoad.value) {
@@ -191,7 +194,6 @@ const fetchSummary = async () => {
     }
     const data = await summaryService.getSummary()
     summary.value = data as SummaryData
-
   } catch (error) {
     ElMessage.error('统计信息获取失败')
   } finally {
@@ -203,18 +205,12 @@ const fetchSummary = async () => {
   }
 }
 
-const alerts = ref<Alert[]>([])
-const notices = ref<Notice[]>([])
-const loadingAlerts = ref(false)
-const loadingNotices = ref(false)
-
+// 获取公开告警
 const fetchPublicAlerts = async () => {
   try {
-
     if (isFirstLoad.value) {
       loadingAlerts.value = true
     }
-
     alerts.value = await alertService.getPublicAlerts()
   } catch (error) {
     ElMessage.error('获取告警信息失败')
@@ -228,13 +224,12 @@ const fetchPublicAlerts = async () => {
   }
 }
 
+// 获取最新通知
 const fetchLatestNotices = async () => {
   try {
-
     if (isFirstLoad.value) {
       loadingNotices.value = true
     }
-
     notices.value = await noticeService.getLatestNotices()
   } catch (error) {
     ElMessage.error('获取通知信息失败')
@@ -248,6 +243,7 @@ const fetchLatestNotices = async () => {
   }
 }
 
+// 获取告警类型
 const getAlertType = (grade: number) => {
   switch (grade) {
     case 3: return 'error'
@@ -256,8 +252,6 @@ const getAlertType = (grade: number) => {
     default: return 'success'
   }
 }
-
-const isMobile = ref(false)
 
 const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
@@ -271,22 +265,12 @@ onMounted(async () => {
     fetchSummary(),
     fetchFavoriteAreas(),
     fetchPublicAlerts(),
-    fetchLatestNotices()
+    fetchLatestNotices(),
+    fetchAllAreas(),
+    fetchBuildings()
   ]).catch(() => ElMessage.error('数据获取出错'))
   isFirstLoad.value = false
-  setTimeout(async () => {
-    await initChart()
-    resizeHandler = () => {
-      if (chart) {
-        try {
-          chart.resize()
-        } catch (e) {
-
-        }
-      }
-    }
-    window.addEventListener('resize', resizeHandler)
-  })
+  
   intervalTimer1 = setInterval(() => {
     fetchHotAreas();
     fetchPublicAlerts();
@@ -306,12 +290,6 @@ onBeforeUnmount(() => {
   if (intervalTimer2) clearInterval(intervalTimer2)
 
   window.removeEventListener('resize', checkScreenSize)
-  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-
-  if (chart) {
-    chart.dispose()
-    chart = null
-  }
 })
 </script>
 
@@ -324,48 +302,59 @@ onBeforeUnmount(() => {
       </div>
     </el-card>
     <el-card class="stats-card mb-20 mt-20">
-      <el-skeleton :rows="1" animated :loading="loadingSummary">
-        <template #default>
-          <div v-if="Object.values(summary).some(value => value > 0)">
-            <el-row :gutter="20">
-              <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
-                :lg="3">
-                <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
-                  <template #suffix>
-                    <el-icon v-if="key === 'people_count'" class="stat-icon">
-                      <User />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'nodes_count'" class="stat-icon">
-                      <Monitor />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'buildings_count'" class="stat-icon">
-                      <OfficeBuilding />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'terminals_count'" class="stat-icon">
-                      <Connection />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'areas_count'" class="stat-icon">
-                      <MapLocation />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
-                      <DataAnalysis />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
-                      <Bell />
-                    </el-icon>
-                    <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
-                      <Warning />
-                    </el-icon>
-                  </template>
-                </el-statistic>
-              </el-col>
-            </el-row>
-          </div>
-          <div v-else class="no-data-message">
-            <el-empty description="暂无统计数据" />
-          </div>
-        </template>
-      </el-skeleton>
+      <div v-loading="loadingSummary">
+        <el-skeleton :rows="1" animated :loading="loadingSummary">
+          <template #default>
+            <div v-if="Object.values(summary).some(value => value > 0)">
+              <el-row :gutter="20">
+                <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
+                  :lg="3">
+                  <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
+                    <template #suffix>
+                      <el-icon v-if="key === 'people_count'" class="stat-icon">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'nodes_count'" class="stat-icon">
+                        <Monitor />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'buildings_count'" class="stat-icon">
+                        <OfficeBuilding />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'terminals_count'" class="stat-icon">
+                        <Connection />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'areas_count'" class="stat-icon">
+                        <MapLocation />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
+                        <DataAnalysis />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
+                        <Bell />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'alerts_count'" class="stat-icon">
+                        <Warning />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'users_count'" class="stat-icon">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'nodes_online_count'" class="stat-icon">
+                        <Monitor />
+                      </el-icon>
+                      <el-icon v-else-if="key === 'terminals_online_count'" class="stat-icon">
+                        <Connection />
+                      </el-icon>
+                    </template>
+                  </el-statistic>
+                </el-col>
+              </el-row>
+            </div>
+            <div v-else class="no-data-message">
+              <el-empty description="暂无统计数据" />
+            </div>
+          </template>
+        </el-skeleton>
+      </div>
     </el-card>
 
     <el-row :gutter="20" class="mt-20">
@@ -386,25 +375,59 @@ onBeforeUnmount(() => {
         </el-card>
         <el-card class="dashboard-card">
           <template #header>
-            <div class="chart-header">
               <span class="card-title">📈 人员变化趋势</span>
-              <el-button v-if="chartInitFailed" size="small" type="primary" @click="initChart">
-                重新加载图表
-              </el-button>
+          </template>
+          <TrendChart height="320px" />
+        </el-card>
+        
+        <!-- 温湿度图表 -->
+        <el-card class="dashboard-card">
+          <template #header>
+            <div class="chart-header">
+              <span class="card-title">🌡️ 环境数据监测</span>
+              <div class="chart-controls">
+                <el-select 
+                  v-model="selectedBuildingForEnvironmental" 
+                  placeholder="选择建筑" 
+                  size="small" 
+                  style="width: 120px; margin-right: 8px;"
+                  @change="onBuildingChange"
+                  clearable
+                >
+                  <el-option
+                    v-for="building in buildings"
+                    :key="building.id"
+                    :label="building.name"
+                    :value="building.id"
+                  />
+                </el-select>
+                <el-select 
+                  v-model="selectedAreaForEnvironmental" 
+                  placeholder="选择区域" 
+                  size="small" 
+                  style="width: 180px;"
+                  :loading="loadingBuildingAreas"
+                  :disabled="!selectedBuildingForEnvironmental"
+                >
+                  <el-option
+                    v-for="area in buildingAreas"
+                    :key="area.id"
+                    :label="area.name"
+                    :value="area.id"
+                  />
+                </el-select>
+              </div>
             </div>
           </template>
-          <el-skeleton :rows="8" animated :loading="chartLoading">
-            <template #default>
-              <div v-if="!chartInitFailed" id="trend-chart" style="height:320px; width:100%;"></div>
-              <div v-else class="chart-error">
-                <el-empty description="图表加载失败" :image-size="100">
-                  <template #description>
-                    <p>趋势图加载失败，请点击"重新加载图表"按钮重试</p>
-                  </template>
-                </el-empty>
-              </div>
-            </template>
-          </el-skeleton>
+          <EnvironmentalChart 
+            v-if="selectedAreaForEnvironmental"
+            :area-id="selectedAreaForEnvironmental" 
+            data-type="temperature-humidity" 
+            height="280px" 
+          />
+          <div v-else class="empty-chart">
+            <el-empty description="请先选择建筑和区域" :image-size="80" />
+          </div>
         </el-card>
       </el-col>
       <el-col :span="isMobile ? 24 : 8" :xs="24" :sm="24" :md="8" :lg="8">
@@ -412,70 +435,74 @@ onBeforeUnmount(() => {
           <template #header>
             <span class="card-title">⚠️ 公开告警</span>
           </template>
-          <el-skeleton :rows="2" animated :loading="loadingAlerts">
-            <template #default>
-              <div v-if="alerts.length > 0">
-                <el-alert v-for="alert in alerts" :key="alert.id" :type="getAlertType(alert.grade)" show-icon
-                  class="animated-alert mb-10">
-                  <template #icon>
-                    <el-icon v-if="alert.alert_type === 'fire'">
-                      <Warning />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'guard'">
-                      <Bell />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'crowd'">
-                      <User />
-                    </el-icon>
-                    <el-icon v-else-if="alert.alert_type === 'health'">
-                      <FirstAidKit />
-                    </el-icon>
-                    <el-icon v-else>
-                      <Warning />
-                    </el-icon>
-                  </template>
-                  <template #default>
-                    <div class="alert-content">
-                      <span class="alert-message">{{ alert.message }}</span>
-                      <router-link :to="`/alerts?tab=alerts&alertId=${alert.id}`" class="alert-link">查看详情</router-link>
-                    </div>
-                  </template>
-                </el-alert>
-              </div>
-              <div v-else class="no-data-text">
-                暂无安全提醒
-              </div>
-            </template>
-          </el-skeleton>
+          <div v-loading="loadingAlerts">
+            <el-skeleton :rows="2" animated :loading="loadingAlerts">
+              <template #default>
+                <div v-if="alerts.length > 0">
+                  <el-alert v-for="alert in alerts" :key="alert.id" :type="getAlertType(alert.grade)" show-icon
+                    class="animated-alert mb-10">
+                    <template #icon>
+                      <el-icon v-if="alert.alert_type === 'fire'">
+                        <Warning />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'guard'">
+                        <Bell />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'crowd'">
+                        <User />
+                      </el-icon>
+                      <el-icon v-else-if="alert.alert_type === 'health'">
+                        <FirstAidKit />
+                      </el-icon>
+                      <el-icon v-else>
+                        <Warning />
+                      </el-icon>
+                    </template>
+                    <template #default>
+                      <div class="alert-content">
+                        <span class="alert-message">{{ alert.message }}</span>
+                        <router-link :to="`/alerts?tab=alerts&alertId=${alert.id}`" class="alert-link">查看详情</router-link>
+                      </div>
+                    </template>
+                  </el-alert>
+                </div>
+                <div v-else class="no-data-text">
+                  暂无安全提醒
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
         </el-card>
         <el-card class="dashboard-card">
           <template #header>
             <span class="card-title">📢 近期通知</span>
           </template>
-          <el-skeleton :rows="2" animated :loading="loadingNotices">
-            <template #default>
-              <div v-if="notices.length > 0">
-                <el-alert v-for="notice in notices" :key="notice.id" type="info" show-icon class="animated-alert mt-10">
-                  <template #icon>
-                    <el-icon>
-                      <Bell />
-                    </el-icon>
-                  </template>
-                  <template #default>
-                    <div class="alert-content">
-                      <span class="alert-message">{{ notice.content }}</span>
-                      <router-link :to="`/alerts?tab=notices&noticeId=${notice.id}`"
-                        class="alert-link">查看详情</router-link>
-                    </div>
+          <div v-loading="loadingNotices">
+            <el-skeleton :rows="2" animated :loading="loadingNotices">
+              <template #default>
+                <div v-if="notices.length > 0">
+                  <el-alert v-for="notice in notices" :key="notice.id" type="info" show-icon class="animated-alert mt-10">
+                    <template #icon>
+                      <el-icon>
+                        <Bell />
+                      </el-icon>
+                    </template>
+                    <template #default>
+                      <div class="alert-content">
+                        <span class="alert-message">{{ notice.content }}</span>
+                        <router-link :to="`/alerts?tab=notices&noticeId=${notice.id}`"
+                          class="alert-link">查看详情</router-link>
+                      </div>
 
-                  </template>
-                </el-alert>
-              </div>
-              <div v-else class="no-data-text">
-                暂无重要通知
-              </div>
-            </template>
-          </el-skeleton>
+                    </template>
+                  </el-alert>
+                </div>
+                <div v-else class="no-data-text">
+                  暂无重要通知
+                </div>
+              </template>
+            </el-skeleton>
+          </div>
         </el-card>
 
         <el-card class="dashboard-card">
@@ -753,6 +780,21 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-chart {
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chart-error {
@@ -924,6 +966,16 @@ onBeforeUnmount(() => {
 
   .navigation-links {
     grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .chart-controls {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

@@ -57,7 +57,7 @@ const fetchAreas = async () => {
   try {
     
     areas.value = await areaService.getAll()
-    console.log('区域数据加载完成，共加载:', areas.value.length, '个区域')
+
     return true
   } catch (error) {
     console.error('获取区域列表失败:', error)
@@ -78,9 +78,6 @@ const processAlertData = (alertsData: ExtendedAlert[]) => {
   alertsData.forEach(alert => {
     if (alert.area) {
       alert.area_name = getAreaName(alert.area)
-      console.log(`处理告警 ID: ${alert.id}, 区域ID: ${alert.area}, 区域名称: ${alert.area_name}`)
-    } else {
-      console.log(`告警 ID: ${alert.id} 没有关联区域`)
     }
   })
   alerts.value = alertsData
@@ -103,7 +100,7 @@ const fetchAlerts = async () => {
       }
     }
     
-    console.log(`获取到 ${alertsData.length} 条告警数据`)
+
     processAlertData(alertsData)
 
     checkUrlForDetails()
@@ -1226,7 +1223,6 @@ const drawerSize = ref('70%')
   max-width: 1400px;
   margin: 20px auto;
   padding: 0 20px;
-  background: #f8f9fb;
   min-height: calc(100vh - 40px);
   border-radius: 16px;
 }
@@ -1399,24 +1395,9 @@ const drawerSize = ref('70%')
   width: 300px;
 }
 
-.search-input :deep(.el-input__inner) {
-  border-radius: 8px;
-  border: 1px solid #c0d8ff;
-  padding-left: 40px;
-  background-color: rgba(255, 255, 255, 0.8);
-  transition: all 0.3s;
-}
 
-.search-input :deep(.el-input__inner:focus) {
-  border-color: #4facfe;
-  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
-  background-color: white;
-}
 
-.search-input :deep(.el-input__prefix) {
-  left: 12px;
-  color: #4facfe;
-}
+
 
 .table-container {
   background-color: #fff;
@@ -1431,7 +1412,6 @@ const drawerSize = ref('70%')
 
 .table-container:hover {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
 }
 
 .data-table {

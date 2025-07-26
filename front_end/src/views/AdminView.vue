@@ -179,7 +179,7 @@ const updateCurrentComponent = (moduleName) => {
 }
 
 const handleMobileModuleChange = (value) => {
-  console.log('Mobile module changed to:', value);
+
   
   if (!value || activeModule.value === value) return;
 
@@ -187,12 +187,12 @@ const handleMobileModuleChange = (value) => {
   updateCurrentComponent(value);
 
   setTimeout(() => {
-    console.log('Updating route to module:', value);
+
     router.replace({
       path: '/admin',
       query: { module: value }
     }).then(() => {
-      console.log('Route updated successfully');
+
 
       nextTick(() => {
 
@@ -206,7 +206,7 @@ const handleMobileModuleChange = (value) => {
 }
 
 const handleModuleChange = (name) => {
-  console.log('Module change triggered with:', name);
+
   
   if (activeModule.value === name) return;
 
