@@ -420,7 +420,7 @@ class DetectionManager:
                             
                             # 上传结果
                             for node_id, detected_count in results.items():
-                                logger.detection(f"检测到人数: {detected_count}", f"摄像头 {node_id}")
+                                logger.info(f"检测到人数: {detected_count}", f"节点 {node_id}")
                                 
                                 # 获取节点的环境数据（如果有）
                                 env_data = {}

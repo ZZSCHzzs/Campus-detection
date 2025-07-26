@@ -12,12 +12,45 @@ interface Props {
   dataType: 'temperature' | 'humidity' | 'co2' | 'temperature-humidity'
   height?: string
   showControls?: boolean
+  hideTitle?: boolean
+  hideControls?: boolean
+  // 新增样式配置
+  styleConfig?: {
+    gridLineColor?: string
+    gridLineType?: 'solid' | 'dashed' | 'dotted'
+    showGridLine?: boolean
+    axisLineColor?: string
+    axisLabelColor?: string
+    axisLabelFontSize?: number
+    seriesColors?: string[]
+    backgroundColor?: string
+    textColor?: string
+    fontSize?: number
+    padding?: {
+      top?: string
+      right?: string
+      bottom?: string
+      left?: string
+    }
+    legendPosition?: 'top' | 'bottom' | 'left' | 'right'
+    showLegend?: boolean
+    tooltipBackgroundColor?: string
+    tooltipTextColor?: string
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: '400px',
-  showControls: true
+  showControls: true,
+  hideTitle: false,
+  hideControls: false,
+  styleConfig: () => ({})
 })
+
+// 新增emit定义
+const emit = defineEmits<{
+  timeRangeChange: [value: number]
+}>()
 
 // 状态管理
 const loading = ref(false)
@@ -459,9 +492,12 @@ const updateChart = () => {
   }
 };
 
-// 时间范围变化处理
+// 时间范围变化处理 - 修改为同时触发内部逻辑和向父组件传递
 const handleTimeRangeChange = (hours: number) => {
   currentTimeRange.value = hours
+  // 向父组件传递时间范围变化事件
+  emit('timeRangeChange', hours)
+  // 刷新当前组件数据
   refreshData()
 }
 
@@ -486,18 +522,18 @@ watch(
 
 <template>
   <BaseChart
-    ref="baseChart"
     :title="chartTitle"
     :height="height"
     :loading="loading"
     :error="error"
     :show-time-range="showControls"
     :show-refresh="showControls"
-    :show-export="showControls"
-    :time-range="currentTimeRange"
+    :hide-title="hideTitle"
+    :hide-controls="hideControls"
+    :style-config="styleConfig"
     @time-range-change="handleTimeRangeChange"
     @refresh="refreshData"
-    @chart-ready="handleChartReady"
+    ref="baseChart"
   />
 </template>
 

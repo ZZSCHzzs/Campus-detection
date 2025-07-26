@@ -2,15 +2,13 @@
     "mode": "push",
     "interval": 3,
     "nodes": {
-        "3": "192.168.43.200:81"
+        "2": "192.168.1.102:81"
     },
     "save_image": true,
     "preload_model": true,
-    "terminal_id": 2,
+    "terminal_id": 3,
     "server_url": "https://smarthit.top",
     "api_url": "https://smarthit.top/api/upload/",
-    "co2_enabled": true,
-    "co2_read_interval": 30,
     "node_config": {
         "framesize": 8,
         "quality": 10,
@@ -20,5 +18,7 @@
         "special_effect": 0,
         "hmirror": false,
         "vflip": false
-    }
+    },
+    "co2_enabled": true,
+    "co2_read_interval": 30
 }
