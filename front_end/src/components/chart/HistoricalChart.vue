@@ -15,7 +15,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  height: '400px',
+  height: '100%', // 修改默认高度为100%而不是固定的400px
   showControls: true,
   chartType: 'line'
 })
@@ -191,15 +191,16 @@ const generateChartOption = () => {
   }
 
   return {
+    // 在 generateChartOption 函数中调整标题配置
     title: {
-      text: `当前: ${currentCount}人 | 峰值: ${maxCount}人 | 平均: ${avgCount}人`,
+      text: `当前:${currentCount} | 峰值:${maxCount} | 平均:${avgCount}`,
       textStyle: {
-        fontSize: 14,
+        fontSize: 12, // 减小字体
         fontWeight: 'normal',
         color: '#666'
       },
       right: '5%',
-      top: '2%'
+      top: '0%' // 调整位置
     },
     tooltip: {
       trigger: 'axis',
@@ -289,23 +290,38 @@ watch(
 </script>
 
 <template>
-  <BaseChart
-    ref="baseChart"
-    :title="chartTitle"
-    :height="height"
-    :loading="loading"
-    :error="error"
-    :show-time-range="showControls"
-    :show-refresh="showControls"
-    :show-export="showControls"
-    :time-range="currentTimeRange"
-    :chart-type="chartType"
-    @time-range-change="handleTimeRangeChange"
-    @refresh="refreshData"
-    @chart-ready="handleChartReady"
-  />
+  <div class="historical-chart-wrapper">
+    <BaseChart
+      ref="baseChart"
+      :title="chartTitle"
+      :height="height"
+      :loading="loading"
+      :error="error"
+      :show-time-range="showControls"
+      :show-refresh="showControls"
+      :show-export="showControls"
+      :time-range="currentTimeRange"
+      :chart-type="chartType"
+      @time-range-change="handleTimeRangeChange"
+      @refresh="refreshData"
+      @chart-ready="handleChartReady"
+    />
+  </div>
 </template>
 
 <style scoped>
+.historical-chart-wrapper {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
 
+:deep(.chart-container) {
+  flex: 1;
+  min-height: 0; /* 重要：防止flex项目超出容器 */
+}
+
+:deep(.echarts-container) {
+  height: 100% !important;
+}
 </style>

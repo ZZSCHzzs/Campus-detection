@@ -77,10 +77,11 @@ const internalLoading = ref(false)
 
 // 计算属性
 const containerStyle = computed(() => ({
-  height: props.height,
   width: '100%',
-  position: 'relative' as const
-}))
+  height: '100%',
+  minHeight: '180px', // 与 chart-inner-container 保持一致
+  position: 'relative'
+}));
 
 const loadingState = computed(() => props.loading || internalLoading.value)
 
@@ -493,36 +494,31 @@ onUnmounted(() => {
 <template>
   <div class="base-chart" :class="{ 'fullscreen': isFullscreen }">
     <!-- 图表头部 -->
-    <div v-if="title || showTimeRange || showRefresh || showExport || showFullscreen" class="chart-header">
-      <div class="chart-title">
+    <div v-if="title || showTimeRange || showRefresh || showExport || showFullscreen" class="section-header">
+      <div class="subtitle">
         <span v-if="title">{{ title }}</span>
       </div>
-
-      <div class="chart-controls">
-        <!-- 时间范围选择 -->
-        <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" style="width: 120px;"
-          @change="handleTimeRangeChange">
-          <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
-        </el-select>
-
-        <!-- 控制按钮 -->
-        <div class="chart-buttons">
-          <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" />
-
-          <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" />
-
-          <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" />
-        </div>
-      </div>
     </div>
+    <!-- 控制按钮 -->
+    <div class="chart-buttons">
+      <!-- 时间范围选择 -->
+      <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" style="width: 120px;"
+        @change="handleTimeRangeChange">
+        <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
+      </el-select>
+      <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" />
 
+      <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" />
+
+      <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" />
+    </div>
     <!-- 图表容器 -->
     <div class="chart-content">
-      <div ref="chartContainer" :style="containerStyle" class="chart-container" />
+      <div ref="chartContainer" :style="containerStyle" class="chart-container"></div>
 
       <!-- 错误状态 -->
       <div v-if="error" class="chart-error">
-        <el-empty :description="error" :image-size="100">
+        <el-empty :description="error || '未知错误'" :image-size="100">
           <el-button type="primary" @click="refreshChart">
             <el-icon>
               <Refresh />
@@ -548,53 +544,51 @@ onUnmounted(() => {
   overflow: hidden;
   transition: all 0.3s ease;
 }
-
 .chart-header {
+  padding: 10px 15px;  /* 减小内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  /* 增加左右内边距 */
   border-bottom: none;
   background: transparent;
+  flex-wrap: wrap; /* 允许在小屏幕上换行 */
 }
-
 .chart-title {
-  font-size: 18px;
+  font-size: 8px;
   font-weight: 600;
-  margin: 0 0 8px 12px;
+  margin: 0 0 0px 0px;
   /* 增加下边距 */
   padding-left: 4px;
   border-left: 4px solid var(--el-color-primary);
 }
-
-.chart-header {
-  padding: 16px 20px 16px 28px;
-  /* 增大左侧内边距 */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: none;
-  background: transparent;
-}
-
 .chart-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .chart-buttons {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .chart-content {
   position: relative;
+  width: 100%;
+  height: 100%; /* 确保内容填满容器 */
+  display: flex;
+  flex-direction: column; /* 垂直布局 */
+  justify-content: center; /* 垂直居中内容 */
+  align-items: center; /* 水平居中内容 */
+  box-sizing: border-box; /* 包含内边距 */
 }
 
 .chart-container {
   width: 100%;
+  height: 100%; /* 确保图表容器填满内容区域 */
+  display: flex;
+  flex: 1; /* 使图表容器扩展到父容器的剩余空间 */
+  overflow: hidden; /* 防止内容溢出 */
 }
 
 .chart-error,
@@ -626,5 +620,42 @@ onUnmounted(() => {
   .chart-buttons {
     flex-shrink: 0;
   }
+}
+.section-header {
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  display: flex;
+  
+  align-items: center;
+  
+  gap: 10px;
+  
+}
+
+.section-header h2 {
+  font-size: 0.95rem;
+  margin: 0;
+  white-space: nowrap;
+  
+}
+
+.subtitle {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  position: relative;
+  padding-left: 10px;
+  
+}
+
+
+.subtitle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 12px;
+  width: 1px;
+  background: rgba(56, 189, 248, 0.5);
 }
 </style>

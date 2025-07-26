@@ -6,12 +6,6 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js'
 import type { AreaItem } from '../types'
 
-// 在组件顶部添加帧率控制变量
-let lastFrameTime = 0;
-const targetFPS = 30; // 目标30帧每秒
-const frameInterval = 1000 / targetFPS;
-
-
 // 聚焦相关（脚本开头部分）
 const focusModeActive = ref(false);
 const focusedObjectId = ref<string | null>(null);
@@ -375,14 +369,9 @@ const meshLabelPosition = reactive({
   y: 0
 });
 const meshLabelContent = ref('');
-// 添加射线检测节流
-let lastRaycastTime = 0;
-const raycastInterval = 100; // 每100毫秒检测一次
+
 // 添加射线检测和悬停高亮功能
 const handleCanvasMouseMove = (event) => {
-  const now = Date.now();
-  if (now - lastRaycastTime < raycastInterval) return;
-  lastRaycastTime = now;
   if (!heatmapRef.value || !camera || !scene || !renderer) return;
   
   // 计算鼠标在canvas中的归一化坐标（-1到1之间）
@@ -477,14 +466,6 @@ const onWindowResize = () => {
 // 更新动画
 const animate = () => {
   animationFrameId = requestAnimationFrame(animate)
-  const now = Date.now();
-  const elapsed = now - lastFrameTime;
-  
-  // 帧率控制 - 确保不超过目标帧率
-  if (elapsed < frameInterval) return;
-  
-  // 更新时间戳，考虑实际消耗的时间
-  lastFrameTime = now - (elapsed % frameInterval);
   
   // 更新控制器 - 仅在摄像机动画未进行时允许用户控制
   if (controls && !cameraAnimationInProgress.value) {
@@ -502,15 +483,8 @@ const animate = () => {
     const phaseAttribute = geometry.getAttribute('phase')
     const originalPositions = geometry.userData.originalPositions
     
-    // 选择性粒子更新 - 每帧只更新10%的粒子
-    const particleCount = positionAttribute.count;
-    const updateCount = Math.ceil(particleCount * 0.1); // 每帧更新10%
-    const startIndex = Math.floor(Math.random() * (particleCount - updateCount));
-    
-    // 仅更新一部分粒子
-    for (let i = startIndex; i < startIndex + updateCount; i++) {
-      if (i >= particleCount) break;
-      
+    // 更新每个点的位置
+    for (let i = 0; i < positionAttribute.count; i++) {
       const index = i * 3
       const phase = phaseAttribute.getX(i)
       
@@ -528,25 +502,17 @@ const animate = () => {
       const originalY = originalPositions[index + 1]
       const originalZ = originalPositions[index + 2]
       
-      // 简化三角函数计算
-      const t1 = time * 1.7 + phase
-      const t2 = time * 0.7 + i
+      // 计算杂乱运动 - 使用不同频率的正弦波叠加
+      const noiseX = Math.sin(time * 1.7 + phase) * rx  
+      const noiseY = Math.sin(time * 2.3 + phase * 2) * ry 
+      const noiseZ = Math.sin(time * 1.5 + phase * 3) * rz 
       
-      // 预计算sin值
-      const sin1 = Math.sin(t1)
-      const sin2 = Math.sin(t2 * 0.5)
+      // 随机漂移运动
+      const driftX = vx * Math.sin(time * 0.7 + i * 1) 
+      const driftY = vy * Math.sin(time * 0.9 + i * 0.5) 
+      const driftZ = vz * Math.sin(time * 0.8 + i * 1.5) 
       
-      // 计算杂乱运动和漂移
-      const noiseX = sin1 * rx
-      const driftX = vx * sin2
-      
-      const noiseY = Math.sin(t1 * 1.2) * ry
-      const driftY = vy * Math.sin(t2 * 0.9)
-      
-      const noiseZ = Math.sin(t1 * 0.8) * rz
-      const driftZ = vz * sin2
-      
-      // 更新位置
+      // 更新位置 - 围绕原始位置进行杂乱运动
       positionAttribute.setXYZ(
         i,
         originalX + noiseX + driftX,
@@ -564,6 +530,7 @@ const animate = () => {
     renderer.render(scene, camera)
   }
 }
+
 
 
 // 组件卸载前清理资源
@@ -761,7 +728,7 @@ onBeforeUnmount(() => {
 })
 
 // 创建一个体素网格表示整个空间的密度分布
-const createDensityField = (points, resolution = 24) => { // 降低分辨率提高性能
+const createDensityField = (points, resolution = 48) => { // 降低分辨率提高性能
   if (!points || points.length === 0) {
     console.warn('没有热点数据，使用默认空密度场');
     return { 
@@ -835,7 +802,7 @@ const createHeatmapPointCloud = () => {
       size: 0.01, // 粒子大小
       vertexColors: true,
       transparent: true,
-      opacity: 0.6, // 透明度
+      opacity: 0.3,
       blending: THREE.AdditiveBlending,
       sizeAttenuation: true,
     });
@@ -864,7 +831,7 @@ const createParticlesFromDensityField = (densityField) => {
   console.log(`最大密度值: ${maxDensity}`);
   
   // 根据总密度估计粒子数量，限制最大数量
-  const desiredParticleCount = 10000000 
+  const desiredParticleCount = 100000000 
   console.log(`目标粒子数量: ${desiredParticleCount}`);
   
   // 预分配数组
@@ -877,7 +844,7 @@ const createParticlesFromDensityField = (densityField) => {
   let particleIndex = 0;
   
   // 使用接受-拒绝采样法基于密度分布生成粒子
-  const attempts = desiredParticleCount;
+  const attempts = Math.min(desiredParticleCount * 3, 10000000); // 限制尝试次数
   for (let i = 0; i < attempts; i++) {
     // 随机选择一个网格点
     const x = Math.floor(Math.random() * resolution);
@@ -891,7 +858,7 @@ const createParticlesFromDensityField = (densityField) => {
     const normalizedDensity = cellDensity / maxDensity;
     
     // 添加基础概率确保低密度区域也能生成粒子
-    const baseProbability = 0.00005;  // 基础概率，即使密度为0也有10%概率生成粒子
+    const baseProbability = 0.0005;  // 基础概率，即使密度为0也有10%概率生成粒子
     const densityWeight = 0.8;    // 密度权重
     
     // 计算综合概率
@@ -1109,12 +1076,16 @@ const toggleFocusMode = (objectId) => {
       }
     });
     
+    // 隐藏所有热力图点云
+    pointCloudObjects.forEach(cloud => {
+      cloud.visible = false;
+    });
+    
     // 然后递归地将聚焦对象及其所有子对象标记为可见
     function makeObjectAndChildrenVisible(obj) {
       if (!obj) return;
       
       obj.visible = true;
-      
       // 更新结构树状态
       const itemIndex = modelStructure.value.findIndex(item => item.id === obj.uuid);
       if (itemIndex >= 0) {
@@ -1214,7 +1185,7 @@ const toggleFocusMode = (objectId) => {
   }
 };
 
-// 替换原有的 exitFocusMode 函数
+// 修改exitFocusMode函数
 const exitFocusMode = () => {
   if (!focusModeActive.value) return;
   
@@ -1227,6 +1198,11 @@ const exitFocusMode = () => {
     if (itemIndex >= 0) {
       modelStructure.value[itemIndex].visible = true;
     }
+  });
+  
+  // 恢复所有热力图点云的可见性
+  pointCloudObjects.forEach(cloud => {
+    cloud.visible = true;
   });
   
   // 如果有保存的原始摄像头位置和目标点，则执行返回动画

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, reactive } from 'vue'
-import { nodeService } from '../services'
-import type { HardwareNode } from '../types'
+import { nodeService } from '../../services'
+import type { HardwareNode } from '../../types'
 
 const props = defineProps<{
   areaId: number | null

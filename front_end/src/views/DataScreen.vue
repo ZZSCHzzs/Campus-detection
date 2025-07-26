@@ -3,8 +3,9 @@ import { ref, onMounted, reactive, watch } from 'vue'
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService } from '../services'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
-import AreaHistoryChart from '../components/AreaHistoryChart.vue'
-import HardwareNodeStatus from '../components/HardwareNodeStatus.vue'
+import HistoricalChart  from '../components/chart/HistoricalChart.vue'
+import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
+import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue'
 
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -14,7 +15,10 @@ const summary = ref<SummaryData>({
   historical_data_count: 0,
   people_count: 0,
   notice_count: 0,
-  alerts_count: 0
+  alerts_count: 0,
+  users_count: 0,
+  nodes_online_count: 0,
+  terminals_online_count: 0
 })
 
 const pageState = reactive({
@@ -320,7 +324,12 @@ function formatTime(value: string) {
         </div>
         <div class="overview-item">
           <h3>在线节点数</h3>
-          <div class="number">{{ summary.nodes_count }}</div>
+          <div class="number">{{ summary.nodes_online_count }}</div>
+          <div class="label">总量: {{ summary.nodes_count }}</div>
+        </div>
+        <div class="overview-item">
+          <h3>在线终端数</h3>
+          <div class="number">{{ summary.terminals_online_count }}</div>
           <div class="label">总量: {{ summary.terminals_count }}</div>
         </div>
         <div class="overview-item">
@@ -336,6 +345,26 @@ function formatTime(value: string) {
           <div class="label">今日新增: {{ Math.floor(summary.notice_count * 0.3) }}</div>
         </div>
         <div class="overview-item">
+          <h3>建筑数量</h3>
+          <div class="number">{{ summary.buildings_count }}</div>
+          <div class="label">覆盖区域: {{ summary.areas_count }}</div>
+        </div>
+        <div class="overview-item">
+          <h3>区域总数</h3>
+          <div class="number">{{ summary.areas_count }}</div>
+          <div class="trend up">+{{ Math.max(1, Math.floor(summary.areas_count * 0.05)) }}</div>
+        </div>
+        <div class="overview-item">
+          <h3>历史数据量</h3>
+          <div class="number info">{{ summary.historical_data_count }}</div>
+          <div class="label">持续增长中</div>
+        </div>
+        <div class="overview-item">
+          <h3>系统用户数</h3>
+          <div class="number">{{ summary.users_count }}</div>
+          <div class="trend up">+{{ Math.max(1, Math.floor(summary.users_count * 0.08)) }}</div>
+        </div>
+        <div class="overview-item">
           <h3>当前时间</h3>
           <div class="time">{{ currentTime }}</div>
         </div>
@@ -344,86 +373,96 @@ function formatTime(value: string) {
       <div class="main-content">
         <div class="lower-content">
           <!-- 移动区域状态监控到热力图左侧 -->
-          <div class="areas-container">
-            <div class="tech-corners"></div>
-            <div class="section-header">
-              <h2>区域状态监控</h2>
-              <div class="subtitle">Area Status Monitor</div>
-            </div>
-            <div class="status-grid" ref="statusGridRef">
-              <div class="card-container" :class="{ 'moving': cardAnimationState.isMoving }">
-                <el-card v-for="(area, index) in areas" :key="area.id" class="area-card">
-                  <!-- 区域卡片内容 -->
-                  <div class="area-header">
-                    <h4>
-                      {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                      <span class="status-badge" :class="{ 'status-active': area.status }">
-                        {{ area.status ? '正常' : '异常' }}
-                      </span>
-                    </h4>
-                  </div>
+          <div class="left-column-1"> 
+            <div class="areas-container">
+              <div class="tech-corners"></div>
+              <div class="section-header">
+                <h2>区域状态监控</h2>
+                <div class="subtitle">Area Status Monitor</div>
+              </div>
+              <div class="status-grid" ref="statusGridRef">
+                <div class="card-container" :class="{ 'moving': cardAnimationState.isMoving }">
+                  <el-card v-for="(area, index) in areas" :key="area.id" class="area-card">
+                    <!-- 区域卡片内容 -->
+                    <div class="area-header">
+                      <h4>
+                        {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                        <span class="status-badge" :class="{ 'status-active': area.status }">
+                          {{ area.status ? '正常' : '异常' }}
+                        </span>
+                      </h4>
+                    </div>
 
-                  <div class="area-stats">
-                    <div class="stat-item">
-                      <div class="stat-top">
-                        <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                        <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                      </div>
-                      <div class="usage-bar">
-                        <div class="usage-fill"
-                          :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
-                          :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
+                    <div class="area-stats">
+                      <div class="stat-item">
+                        <div class="stat-top">
+                          <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                          <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                        </div>
+                        <div class="usage-bar">
+                          <div class="usage-fill"
+                            :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
+                            :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </el-card>
-                <!-- 重复一次卡片以实现连续轮播 -->
-                <el-card v-for="(area, index) in areas" :key="`dup-${area.id}`" class="area-card">
-                  <!-- 复制的区域卡片内容 -->
-                  <div class="area-header">
-                    <h4>
-                      {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                      <span class="status-badge" :class="{ 'status-active': area.status }">
-                        {{ area.status ? '正常' : '异常' }}
-                      </span>
-                    </h4>
-                  </div>
+                  </el-card>
+                  <!-- 重复一次卡片以实现连续轮播 -->
+                  <el-card v-for="(area, index) in areas" :key="`dup-${area.id}`" class="area-card">
+                    <!-- 复制的区域卡片内容 -->
+                    <div class="area-header">
+                      <h4>
+                        {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
+                        <span class="status-badge" :class="{ 'status-active': area.status }">
+                          {{ area.status ? '正常' : '异常' }}
+                        </span>
+                      </h4>
+                    </div>
 
-                  <div class="area-stats">
-                    <div class="stat-item">
-                      <div class="stat-top">
-                        <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                        <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                      </div>
-                      <div class="usage-bar">
-                        <div class="usage-fill"
-                          :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
-                          :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
+                    <div class="area-stats">
+                      <div class="stat-item">
+                        <div class="stat-top">
+                          <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
+                          <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
+                        </div>
+                        <div class="usage-bar">
+                          <div class="usage-fill"
+                            :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
+                            :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </el-card>
+                  </el-card>
+                </div>
               </div>
             </div>
           </div>
-
+          <div class="left-column-2"> 
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'co2'" />
+              </div>
+            </div>
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'temperature-humidity'" />
+              </div>
+            </div>
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <HistoricalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+              </div>
+            </div>
+          </div>
+          
           <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
 
           <div class="right-column">
-            
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="section-header">
-                <h2>区域趋势分析</h2>
-                <div class="subtitle">Area Trend Analysis</div>
-              </div>
-              <div class="chart-inner-container">
-                <AreaHistoryChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
-              </div>
-            </div>
-
             <div class="node-status-container">
               <div class="tech-corners"></div>
               <div class="section-header">
@@ -437,7 +476,10 @@ function formatTime(value: string) {
           </div>
         </div>
         
-        <div class="message-river">
+        
+      </div>
+    </template>
+    <div class="message-river">
           <div class="message-container">
             <div v-for="msg in messages" :key="`${msg.sourceType}-${msg.sourceId}`" class="message-bubble"
               :class="[`type-${msg.type}`]">
@@ -446,8 +488,6 @@ function formatTime(value: string) {
             </div>
           </div>
         </div>
-      </div>
-    </template>
   </div>
 </template>
 
@@ -664,11 +704,18 @@ function formatTime(value: string) {
 
 .overview {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* 调整为10个卡片，每行显示5个 */
+  grid-template-columns: repeat(10, 1fr);
   gap: 15px;
-  margin-bottom: 30px;
+  margin-bottom: 15px;
   position: relative;
   z-index: 1;
+}
+
+@media (max-width: 1600px) {
+  .overview {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 @media (max-width: 1200px) {
@@ -680,6 +727,12 @@ function formatTime(value: string) {
 @media (max-width: 768px) {
   .overview {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .overview {
+    grid-template-columns: repeat(1, 1fr);
   }
 }
 
@@ -800,7 +853,7 @@ function formatTime(value: string) {
 
 
 .time {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: bold;
   margin-top: 8px;
   background: linear-gradient(90deg, #38bdf8, #818cf8);
@@ -815,7 +868,7 @@ function formatTime(value: string) {
   flex-direction: column;
   gap: 20px;
   height: calc(100vh - 160px - 60px);
-  margin-bottom: 60px;
+  margin-bottom: 0px;
   position: relative;
   z-index: 1;
 }
@@ -828,8 +881,8 @@ function formatTime(value: string) {
 }
 
 .chart-container {
-  flex: 0.4;
-  
+  flex: 1;
+  min-width: 300px; /* 设置最小宽度 */
   border-radius: 15px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -926,7 +979,10 @@ function formatTime(value: string) {
 
 
 .areas-container {
-  flex: 0.35;
+  flex: 1;
+  max-width: 250px;
+  flex-direction: column;
+  display: flex;
   background: rgba(30, 41, 59, 0.7);
   border-radius: 12px;
   padding: 10px;
@@ -935,15 +991,8 @@ function formatTime(value: string) {
   overflow: hidden;
   backdrop-filter: blur(8px);
   position: relative;
-  
-  /* 移除最大高度限制，使容器可以与热力图对齐 */
-  /* max-height: 180px; 增加最大高度 */
-  
-  /* 修改flex值与热力图保持适当比例 */
-  flex: 0.3;
-  
   display: flex;
-  flex-direction: column;
+  flex-direction: column;;
 }
 
 /* 确保status-grid可以在容器内滚动 */
@@ -1399,7 +1448,7 @@ function formatTime(value: string) {
   min-height: 0;
   
   margin-top: 10px;
-  margin-bottom: 70px;
+  margin-bottom: 45px;
 }
 
 @media (max-width: 1200px) {
@@ -1410,6 +1459,22 @@ function formatTime(value: string) {
 
 
 .right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  flex: 0.4;
+  min-height: 0;
+  
+}
+.left-column-1 {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  flex: 0.4;
+  min-height: 0;
+  
+}
+.left-column-2 {
   display: flex;
   flex-direction: column;
   gap: 15px;
@@ -1551,7 +1616,7 @@ function formatTime(value: string) {
 }
 
 .node-status-container {
-  flex: 0.8;
+  flex: 1;
   
   background: rgba(30, 41, 59, 0.7);
   border-radius: 15px;
