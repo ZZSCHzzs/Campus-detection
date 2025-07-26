@@ -2,48 +2,61 @@
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { debounce } from 'lodash';
+import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue';
+
 import apiService from '../services';
 
 // 导入所需的图标组件
 import {
-  Cpu, 
-  Connection, 
-  Monitor, 
-  WarningFilled, 
-  DataAnalysis, 
-  Refresh, 
-  Timer, 
-  VideoCamera, 
-  Picture, 
-  InfoFilled, 
-  Location, 
-  Opportunity, 
-  Calendar, 
-  Setting, 
-  Download, 
-  Upload, 
-  Open, 
-  TurnOff, 
-  RefreshRight, 
-  RefreshLeft, 
-  Tools, 
-  Check, 
-  Notebook, 
-  Delete, 
-  Plus, 
-  VideoPlay, 
+  Cpu,
+  Connection,
+  Monitor,
+  WarningFilled,
+  DataAnalysis,
+  Refresh,
+  Timer,
+  VideoCamera,
+  Picture,
+  InfoFilled,
+  Location,
+  Opportunity,
+  Calendar,
+  Setting,
+  Download,
+  Upload,
+  Open,
+  TurnOff,
+  RefreshRight,
+  RefreshLeft,
+  Tools,
+  Check,
+  Notebook,
+  Delete,
+  Plus,
+  VideoPlay,
   VideoPause
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
 
+const frameSizes = {
+  10: { size: [1600, 1200], label: 'UXGA (1600x1200)' },
+  9: { size: [1280, 1024], label: 'SXGA (1280x1024)' },
+  8: { size: [1024, 768], label: 'XGA (1024x768)' },
+  7: { size: [800, 600], label: 'SVGA (800x600)' },
+  6: { size: [640, 480], label: 'VGA (640x480)' },
+  5: { size: [400, 296], label: 'CIF (400x296)' },
+  4: { size: [320, 240], label: 'QVGA (320x240)' },
+  3: { size: [240, 176], label: 'HQVGA (240x176)' },
+  0: { size: [160, 120], label: 'QQVGA (160x120)' }
+};
+
 // 连接模式（只使用一种模式简化逻辑）
 const connectionMode = ref('remote');
 const loading = ref(true);
 const pollTimer = ref(null);
-
+const isActive = ref(true);
 // 终端信息
 const terminal = reactive({
   id: null,
@@ -53,28 +66,59 @@ const terminal = reactive({
 
 // 终端状态
 const status = reactive({
-  cameras: {},
+  nodes: {},
   cpu_usage: 0,
   memory_usage: 0,
+  disk_usage: 0,
+  disk_free: 0,
+  disk_total: 0,
+  memory_available: 0,
+  memory_total: 0,
   push_running: false,
   pull_running: false,
-  model_loaded: false
+  model_loaded: false,
+  co2_level: -1,
+  co2_status: '未连接',
+  system_uptime: null,
+  frame_rate: null,
+  total_frames: null,
+  terminal_online: false,
+  last_detection: null,
+  mode: 'both',
+  terminal_id: null
 });
 
 // 终端配置
 const config = reactive({
   mode: 'both',
   interval: 5,
-  cameras: [],
+  nodes: [],
   save_image: true,
-  preload_model: true
+  preload_model: true,
+  co2_enabled: true,
+  co2_read_interval: 30,
+  camera_config: {
+    frame_size: 6, // 默认使用VGA
+    frame_rate: 30,
+    exposure: 0,
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    sharpness: 0,
+    gain: 0,
+    white_balance: 'auto',
+    auto_exposure: true,
+    special_effect: 0,
+    hmirror: false,
+    vflip: false
+  }
 });
 
 // 原始配置（用于重置）
 const originalConfig = reactive({});
 
-// 新摄像头信息
-const newCamera = reactive({
+// 新节点信息
+const newNode = reactive({
   id: '',
   url: ''
 });
@@ -122,8 +166,8 @@ const loadTerminalList = async () => {
 
 // 获取当前使用的服务，根据连接模式决定
 const terminalService = computed(() => {
-  return connectionMode.value === 'local' ? 
-    apiService.localTerminal : 
+  return connectionMode.value === 'local' ?
+    apiService.localTerminal :
     apiService.terminals;
 });
 
@@ -139,12 +183,12 @@ const loadTerminalDetails = async () => {
       const details = await apiService.terminals.getById(terminal.id);
       Object.assign(terminalDetails, details);
     }
-    
+
     // 更新终端基本信息
     terminal.id = terminalDetails.id;
     terminal.name = terminalDetails.name;
     terminal.status = terminalDetails.status;
-    
+
     return terminalDetails;
   } catch (error) {
     console.error('加载终端详细信息失败:', error);
@@ -162,25 +206,31 @@ const loadTerminalStatus = async () => {
     } else {
       data = await apiService.terminals.getTerminalStatus(terminal.id);
     }
-    
     // 标准化数据格式
     const statusData = {
-      cameras: data.cameras || {},
+      nodes: data.nodes || {},
       cpu_usage: data.cpu_usage || 0,
       memory_usage: data.memory_usage || 0,
+      disk_usage: data.disk_usage || 0,
+      disk_free: data.disk_free || 0,
+      disk_total: data.disk_total || 0,
+      memory_available: data.memory_available || 0,
+      memory_total: data.memory_total || 0,
       push_running: data.push_running || false,
       pull_running: data.pull_running || false,
       model_loaded: data.model_loaded || false,
-      system_uptime: data.system_uptime,
-      frame_rate: data.frame_rate,
-      total_frames: data.total_frames
+      co2_level: data.co2_level ?? -1,
+      co2_status: data.co2_status ?? '未连接',
+      system_uptime: data.system_uptime ?? null,
+      frame_rate: data.frame_rate ?? null,
+      total_frames: data.total_frames ?? null,
+      terminal_online: data.terminal_online ?? false,
+      last_detection: data.last_detection ?? null,
+      mode: data.mode ?? 'both',
+      terminal_id: data.terminal_id ?? null
     };
-    
     Object.assign(status, statusData);
-    
-    // 更新终端状态
     terminal.status = status.model_loaded || status.push_running || status.pull_running;
-    
     return data;
   } catch (error) {
     console.error('加载终端状态失败:', error);
@@ -198,22 +248,29 @@ const loadTerminalConfig = async () => {
     } else {
       configData = await apiService.terminals.getTerminalConfig(terminal.id);
     }
-    
+
     // 更新配置数据
     config.mode = configData.mode || 'both';
     config.interval = configData.interval || 5;
     config.save_image = configData.save_image !== undefined ? configData.save_image : true;
     config.preload_model = configData.preload_model !== undefined ? configData.preload_model : true;
-    
-    // 转换摄像头数据格式
-    config.cameras = Object.entries(configData.cameras || {}).map(([id, url]) => ({
+    config.co2_enabled = configData.co2_enabled !== undefined ? configData.co2_enabled : true;
+    config.co2_read_interval = configData.co2_read_interval !== undefined ? configData.co2_read_interval : 30;
+
+    // 转换节点数据格式
+    config.nodes = Object.entries(configData.nodes || {}).map(([id, url]) => ({
       id: parseInt(id),
       url
     }));
-    
+
+    // 处理摄像头配置
+    if (configData.camera_config) {
+      Object.assign(config.camera_config, configData.camera_config);
+    }
+
     // 保存原始配置用于重置
     Object.assign(originalConfig, JSON.parse(JSON.stringify(config)));
-    
+
     return configData;
   } catch (error) {
     console.error('加载终端配置失败:', error);
@@ -229,9 +286,10 @@ const loadLogs = async () => {
     if (connectionMode.value === 'local') {
       logsData = await apiService.localTerminal.getLogs();
     } else {
-      logsData = await apiService.terminals.getTerminalLogs(terminal.id);
+      // 添加日志限制参数，确保获取较多的日志记录
+      logsData = await apiService.terminals.getTerminalLogs(terminal.id, { limit: 200 });
     }
-    
+
     // 标准化日志格式
     logs.value = Array.isArray(logsData) ? logsData.map(log => ({
       timestamp: log.timestamp || new Date().toISOString(),
@@ -239,7 +297,7 @@ const loadLogs = async () => {
       message: log.message || '未知消息',
       source: log.source || '系统'
     })) : [];
-    
+
     return logsData;
   } catch (error) {
     console.error('加载日志失败:', error);
@@ -254,12 +312,15 @@ const setupPolling = () => {
   if (pollTimer.value) {
     clearInterval(pollTimer.value);
   }
-  
-  // 设置新的轮询间隔 (每10秒更新一次状态)
+
+  // 设置新的轮询间隔 (每10秒更新一次状态和日志)
   pollTimer.value = setInterval(async () => {
     try {
       await loadTerminalStatus();
-      await loadLogs();
+      // 确保在远程模式下也能定时获取日志
+      if (connectionMode.value === 'remote') {
+        await loadLogs();
+      }
     } catch (error) {
       console.error('状态轮询失败:', error);
     }
@@ -271,15 +332,15 @@ const sendCommand = async (command, params = {}) => {
   try {
     loading.value = true;
     let result;
-    
+
     if (connectionMode.value === 'local') {
       result = await apiService.localTerminal.sendCommand(command, params);
     } else {
       result = await apiService.terminals.sendTerminalCommand(terminal.id, { command, params });
     }
-    
+
     ElMessage.success(`命令 ${command} 发送成功`);
-    
+
     // 刷新状态
     await loadTerminalStatus();
     loading.value = false;
@@ -304,83 +365,85 @@ const refreshStatus = async () => {
   }
 };
 
-// 添加摄像头
-const addCamera = () => {
-  if (!newCamera.id || !newCamera.url) {
-    ElMessage.warning('请输入完整的摄像头信息');
+// 添加节点
+const addNode = () => {
+  if (!newNode.id || !newNode.url) {
+    ElMessage.warning('请输入完整的节点信息');
     return;
   }
-  
-  const camId = parseInt(newCamera.id);
-  
+
+  const camId = parseInt(newNode.id);
+
   // 检查ID是否已存在
-  if (config.cameras.some(cam => cam.id === camId)) {
+  if (config.nodes.some(cam => cam.id === camId)) {
     ElMessage.warning(`ID ${camId} 已存在`);
     return;
   }
-  
-  config.cameras.push({
+
+  config.nodes.push({
     id: camId,
-    url: newCamera.url
+    url: newNode.url
   });
-  
+
   // 清空输入
-  newCamera.id = '';
-  newCamera.url = '';
+  newNode.id = '';
+  newNode.url = '';
 };
 
-// 移除摄像头
-const removeCamera = (index) => {
-  config.cameras.splice(index, 1);
+// 移除节点
+const removeNode = (index) => {
+  config.nodes.splice(index, 1);
 };
 
 // 保存配置
 const saveConfig = async () => {
   try {
     loading.value = true;
-    
-    // 转换摄像头格式为对象
-    const camerasObj = {};
-    config.cameras.forEach(cam => {
-      camerasObj[cam.id] = cam.url;
+
+    // 转换节点格式为对象
+    const nodesObj = {};
+    config.nodes.forEach(cam => {
+      nodesObj[cam.id] = cam.url;
     });
-    
+
     const configToSave = {
       mode: config.mode,
       interval: parseFloat(config.interval),
-      cameras: camerasObj,
+      nodes: nodesObj,
       save_image: config.save_image,
-      preload_model: config.preload_model
+      preload_model: config.preload_model,
+      co2_enabled: config.co2_enabled,
+      co2_read_interval: config.co2_read_interval
     };
-    
+
     // 保存原始配置用于比较
     const oldMode = originalConfig.mode;
     const oldInterval = originalConfig.interval;
-    
+
     let result;
     if (connectionMode.value === 'local') {
       result = await apiService.localTerminal.updateConfig(configToSave);
     } else {
       result = await apiService.terminals.updateTerminalConfig(terminal.id, configToSave);
     }
-    
+
     // 检查是否需要手动应用变更
     if (oldMode !== config.mode) {
       // 模式已变更，通知用户
       ElMessage.success(`配置已保存，检测模式已更改为: ${config.mode}`);
-      
+
       // 刷新状态
       await loadTerminalStatus();
     } else if (oldInterval !== config.interval) {
       // 间隔已变更
       ElMessage.success(`配置已保存，拉取间隔已更新为: ${config.interval}秒`);
-      
+
       // 刷新状态
       await loadTerminalStatus();
     } else {
       ElMessage.success('配置已保存');
     }
-    
+
     // 如果配置要求重启，提示用户
     if (result && result.restart_required) {
       ElMessageBox.confirm(
@@ -397,7 +460,7 @@ const saveConfig = async () => {
         // 用户取消重启
       });
     }
-    
+
     // 更新原始配置
     Object.assign(originalConfig, JSON.parse(JSON.stringify(config)));
   } catch (error) {
@@ -414,6 +477,49 @@ const resetConfig = () => {
   ElMessage.info('配置已重置');
 };
 
+// 保存摄像头配置
+const saveCameraConfig = async () => {
+  try {
+    loading.value = true;
+    
+    // 只保存摄像头相关配置
+    const cameraConfigToSave = {
+      camera_config: config.camera_config
+    };
+
+    let result;
+    if (connectionMode.value === 'local') {
+      result = await apiService.localTerminal.updateConfig(cameraConfigToSave);
+    } else {
+      result = await apiService.terminals.updateTerminalConfig(terminal.id, cameraConfigToSave);
+    }
+
+    ElMessage.success('摄像头参数已保存');
+
+    // 如果需要重启才能生效，提示用户
+    if (result && result.restart_required) {
+      ElMessageBox.confirm(
+        '摄像头参数已保存，但需要重启终端才能生效，是否立即重启？',
+        '参数需要重启',
+        {
+          confirmButtonText: '重启',
+          cancelButtonText: '稍后手动重启',
+          type: 'warning',
+        }
+      ).then(async () => {
+        await sendCommand('restart');
+      }).catch(() => {
+        // 用户取消重启
+      });
+    }
+  } catch (error) {
+    console.error('保存摄像头参数失败:', error);
+    ElMessage.error('保存摄像头参数失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
 // 获取日志级别对应的标签类型
 const getLogLevelType = (level) => {
   const types = {
@@ -423,6 +529,16 @@ const getLogLevelType = (level) => {
     'detection': 'success'
   };
   return types[level] || 'info';
+};
+
+// 获取CO2状态对应的标签类型
+const getCO2StatusType = (status) => {
+  const types = {
+    '正常': 'success',
+    '异常': 'danger',
+    '未连接': 'info'
+  };
+  return types[status] || 'info';
 };
 
 // 重启终端
@@ -466,25 +582,28 @@ const customColorMethod = (percentage) => {
 // 状态更新定时器
 const statusRefreshTimer = ref(null);
 
+// 配置标签页状态
+const activeConfigTab = ref('basic');
 
-// 简化初始化流程
+
 onMounted(async () => {
   loading.value = true;
-  
+
   try {
     // 检查本地终端是否可用
     localAvailable.value = await apiService.localTerminal.checkLocalAvailable();
-    
+    if (!isActive.value) return;
+
     // 加载终端列表（用于远程模式）并确定远程可用性
     await loadTerminalList();
     remoteAvailable.value = terminalList.value.length > 0;
-    
+
     // 根据环境可用性决定初始模式
     if (localAvailable.value) {
       // 1. 获取环境信息
       environmentInfo.value = await apiService.localTerminal.getEnvironmentInfo();
-      console.log('检测到环境:', environmentInfo.value);
-      
+
+
       // 如果是检测端环境，默认使用本地模式
       if (environmentInfo.value.type === 'detector') {
         connectionMode.value = 'local';
@@ -495,8 +614,11 @@ onMounted(async () => {
       // 如果本地和远程都不可用，显示提示
       ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
     }
-    
     // 根据选定的模式加载相应数据
+    if (!isActive.value) return;
+    if (!localAvailable.value) {
+      ElMessage.warning('未检测到本地终端服务，使用远程模式');
+    }
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
       if (route.params.id) {
@@ -506,11 +628,12 @@ onMounted(async () => {
         // 否则使用列表中第一个终端
         terminal.id = terminalList.value[0].id;
         selectedTerminalId.value = terminal.id;
-        // 修正路由路径
-        router.replace(`/terminal/${terminal.id}`);
+        if (isActive.value) {
+          router.replace(`/terminal/${terminal.id}`);
+        }
       }
     }
-    
+
     // 尝试加载数据，如果失败则显示空数据
     try {
       await Promise.all([
@@ -519,10 +642,10 @@ onMounted(async () => {
         loadTerminalConfig(),
         loadLogs()
       ]);
-      
+
       // 设置轮询
       setupPolling();
-      
+
       // 设置定时刷新状态 (每60秒刷新一次)
       statusRefreshTimer.value = setInterval(async () => {
         try {
@@ -534,7 +657,7 @@ onMounted(async () => {
     } catch (error) {
       console.error('加载终端数据失败:', error);
       ElMessage.warning('加载终端数据失败，显示空数据');
-      
+
       // 确保显示空数据
       if (connectionMode.value === 'local' && !localAvailable.value) {
         ElMessage.error('本地终端不可用');
@@ -544,7 +667,7 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('初始化失败:', error);
-    ElMessage.error('加载终端数据失败');
+    ElMessage.error('初始化失败:', error.message);
   } finally {
     loading.value = false;
   }
@@ -556,10 +679,10 @@ const switchTerminal = async (id) => {
     loading.value = true;
     try {
       terminal.id = id;
-      
+
       // 修正路由路径
       router.push(`/terminal/${id}`);
-      
+
       // 重新加载数据
       await Promise.all([
         loadTerminalDetails(),
@@ -567,7 +690,7 @@ const switchTerminal = async (id) => {
         loadTerminalConfig(),
         loadLogs()
       ]);
-      
+
       // 重置轮询
       setupPolling();
     } catch (error) {
@@ -590,7 +713,7 @@ const handleModeChange = async () => {
 
   if (connectionMode.value === 'remote' && !remoteAvailable.value) {
     ElMessage.error('远程终端不可用，无法切换到远程模式');
-    
+
     if (localAvailable.value) {
       // 如果本地可用，则回退到本地模式
       connectionMode.value = 'local';
@@ -602,7 +725,7 @@ const handleModeChange = async () => {
   }
 
   loading.value = true;
-  
+
   try {
     // 根据新模式处理
     if (connectionMode.value === 'remote') {
@@ -622,7 +745,7 @@ const handleModeChange = async () => {
         router.push('/terminal');
       }
     }
-    
+
     // 重新加载数据
     await Promise.all([
       loadTerminalDetails(),
@@ -633,13 +756,13 @@ const handleModeChange = async () => {
       console.error('加载终端数据失败:', error);
       ElMessage.error('加载终端数据失败');
     });
-    
+
     // 重置轮询
     setupPolling();
   } catch (error) {
     console.error('切换模式失败:', error);
     ElMessage.error(`切换连接模式失败: ${error.message}`);
-    
+
     // 如果失败，回退到之前的模式
     connectionMode.value = connectionMode.value === 'remote' ? 'local' : 'remote';
   } finally {
@@ -654,7 +777,7 @@ const applyConfig = async () => {
     await sendCommand('change_mode', { mode: config.mode });
     await sendCommand('set_interval', { interval: parseFloat(config.interval) });
     ElMessage.success('配置已立即应用');
-    
+
     // 刷新状态
     await loadTerminalStatus();
   } catch (error) {
@@ -668,27 +791,28 @@ const applyConfig = async () => {
 // 格式化运行时间显示
 const formatUptime = (seconds) => {
   if (!seconds) return '未知';
-  
+
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  
+
   let result = '';
   if (days > 0) result += `${days}天 `;
   if (hours > 0 || days > 0) result += `${hours}小时 `;
   result += `${minutes}分钟`;
-  
+
   return result;
 };
 
 // 组件卸载时的清理
 onUnmounted(() => {
+  isActive.value = false;
   // 清除轮询
   if (pollTimer.value) {
     clearInterval(pollTimer.value);
     pollTimer.value = null;
   }
-  
+
   // 清除状态刷新定时器
   if (statusRefreshTimer.value) {
     clearInterval(statusRefreshTimer.value);
@@ -707,7 +831,9 @@ watch(connectionMode, handleModeChange);
       <div class="terminal-header">
         <div class="title-area">
           <div class="terminal-icon">
-            <el-icon><Cpu /></el-icon>
+            <el-icon>
+              <Cpu />
+            </el-icon>
           </div>
           <div class="terminal-info">
             <h2>{{ terminal.name }}</h2>
@@ -715,70 +841,71 @@ watch(connectionMode, handleModeChange);
               <el-tag :type="terminal.status ? 'success' : 'danger'" class="status-tag" size="small">
                 {{ terminal.status ? '在线' : '离线' }}
               </el-tag>
-              
-              <el-tag v-if="environmentInfo" :type="environmentInfo.type === 'detector' ? 'warning' : 'info'" class="env-tag" size="small">
+
+              <el-tag v-if="environmentInfo" :type="environmentInfo.type === 'detector' ? 'warning' : 'info'"
+                class="env-tag" size="small">
                 {{ environmentInfo.type === 'detector' ? '检测端' : '服务端' }}
               </el-tag>
             </div>
           </div>
         </div>
-        
+
         <div class="connection-controls">
-          <el-select 
-            v-if="connectionMode === 'remote' && terminalList.length > 0" 
-            v-model="selectedTerminalId" 
-            placeholder="选择终端" 
-            size="small"
-            @change="switchTerminal"
-            style="width: 140px;"
-          >
-            <el-option 
-              v-for="item in terminalList" 
-              :key="item.id" 
-              :label="item.name || `终端 #${item.id}`" 
-              :value="item.id"
-            />
+          <el-select v-if="connectionMode === 'remote' && terminalList.length > 0" v-model="selectedTerminalId"
+            placeholder="选择终端" size="small" @change="switchTerminal" style="width: 140px;">
+            <el-option v-for="item in terminalList" :key="item.id" :label="item.name || `终端 #${item.id}`"
+              :value="item.id" />
           </el-select>
-          
-          <el-radio-group 
-            v-model="connectionMode" 
-            size="small"
-            class="mode-switcher"
-          >
-            <el-radio-button label="remote" :disabled="!remoteAvailable && localAvailable">
-              <el-icon><Connection /></el-icon> 远程
+
+          <el-radio-group v-model="connectionMode" size="small" class="mode-switcher">
+            <el-radio-button value="remote" :disabled="!remoteAvailable && localAvailable">
+              <el-icon>
+                <Connection />
+              </el-icon> 远程
             </el-radio-button>
-            <el-radio-button label="local" :disabled="!localAvailable">
-              <el-icon><Monitor /></el-icon> 本地
+            <el-radio-button value="local" :disabled="!localAvailable">
+              <el-icon>
+                <Monitor />
+              </el-icon> 本地
             </el-radio-button>
           </el-radio-group>
         </div>
       </div>
-      
+
       <!-- 无可用终端时显示空状态 -->
       <div v-if="!localAvailable && !remoteAvailable" class="empty-state">
         <el-empty description="无法连接到任何终端">
           <template #image>
             <div class="iot-empty-image">
-              <el-icon><WarningFilled /></el-icon>
+              <el-icon>
+                <WarningFilled />
+              </el-icon>
             </div>
           </template>
           <template #description>
             <div class="empty-content">
               <p>未检测到可用的终端设备，请检查：</p>
               <ul>
-                <li><el-icon><Cpu /></el-icon> 本地终端是否运行</li>
-                <li><el-icon><Connection /></el-icon> 网络连接是否正常</li>
-                <li><el-icon><Monitor /></el-icon> 远程服务器是否可用</li>
+                <li><el-icon>
+                    <Cpu />
+                  </el-icon> 本地终端是否运行</li>
+                <li><el-icon>
+                    <Connection />
+                  </el-icon> 网络连接是否正常</li>
+                <li><el-icon>
+                    <Monitor />
+                  </el-icon> 远程服务器是否可用</li>
               </ul>
             </div>
           </template>
           <el-button type="primary" @click="localAvailable = false; remoteAvailable = false; handleModeChange()">
-            <el-icon><Refresh /></el-icon> 重试连接
+            <el-icon>
+              <Refresh />
+            </el-icon> 重试连接
           </el-button>
         </el-empty>
       </div>
-      
+
       <!-- 正常显示终端内容 -->
       <div v-else class="dashboard-container">
         <!-- 左侧：系统状态和服务控制 -->
@@ -786,47 +913,85 @@ watch(connectionMode, handleModeChange);
           <!-- 系统资源监控 -->
           <div class="panel-section resource-panel">
             <div class="section-header">
-              <h3><el-icon><DataAnalysis /></el-icon> 系统资源</h3>
-              <el-button type="text" @click="refreshStatus" class="icon-button">
-                <el-icon><Refresh /></el-icon>
+              <h3><el-icon>
+                  <DataAnalysis />
+                </el-icon> 系统资源</h3>
+              <el-button type="primary" @click="refreshStatus" class="icon-button">
+                <el-icon>
+                  <Refresh />
+                </el-icon>
               </el-button>
             </div>
-            
+
             <div class="resource-metrics">
               <div class="metric-item">
                 <div class="metric-header">
                   <span class="metric-label">CPU 使用率</span>
                   <span class="metric-value">{{ status.cpu_usage.toFixed(1) }}%</span>
                 </div>
-                <el-progress :percentage="status.cpu_usage" :color="customColorMethod" :stroke-width="10" :show-text="false" />
+                <el-progress :percentage="status.cpu_usage" :color="customColorMethod" :stroke-width="10"
+                  :show-text="false" />
               </div>
-              
+
               <div class="metric-item">
                 <div class="metric-header">
                   <span class="metric-label">内存使用率</span>
                   <span class="metric-value">{{ status.memory_usage.toFixed(1) }}%</span>
                 </div>
-                <el-progress :percentage="status.memory_usage" :color="customColorMethod" :stroke-width="10" :show-text="false" />
+                <el-progress :percentage="status.memory_usage" :color="customColorMethod" :stroke-width="10"
+                  :show-text="false" />
               </div>
-              
+
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">磁盘使用率</span>
+                  <span class="metric-value">{{ status.disk_usage.toFixed(1) }}%</span>
+                </div>
+                <el-progress :percentage="status.disk_usage" :color="customColorMethod" :stroke-width="10"
+                  :show-text="false" />
+              </div>
+
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">可用内存 / 总内存</span>
+                  <span class="metric-value">{{ (status.memory_available / 1024 / 1024 / 1024).toFixed(2) }} / {{
+                    (status.memory_total / 1024 / 1024 / 1024).toFixed(2) }} GB</span>
+                </div>
+              </div>
+
+              <div class="metric-item">
+                <div class="metric-header">
+                  <span class="metric-label">可用磁盘 / 总磁盘</span>
+                  <span class="metric-value">{{ (status.disk_free / 1024 / 1024 / 1024).toFixed(2) }} / {{
+                    (status.disk_total / 1024 / 1024 / 1024).toFixed(2) }} GB</span>
+                </div>
+              </div>
+
+
               <!-- 添加额外系统信息显示 -->
               <div class="system-metrics">
                 <div class="metric-box" v-if="status.system_uptime">
-                  <div class="metric-icon"><el-icon><Timer /></el-icon></div>
+                  <div class="metric-icon"><el-icon>
+                      <Timer />
+                    </el-icon></div>
                   <div class="metric-data">
                     <div class="metric-title">运行时间</div>
                     <div class="metric-number">{{ formatUptime(status.system_uptime) }}</div>
                   </div>
                 </div>
                 <div class="metric-box" v-if="status.frame_rate !== undefined">
-                  <div class="metric-icon"><el-icon><VideoCamera /></el-icon></div>
+                  <div class="metric-icon"><el-icon>
+                      <VideoCamera />
+                    </el-icon></div>
                   <div class="metric-data">
                     <div class="metric-title">帧率</div>
                     <div class="metric-number">{{ status.frame_rate?.toFixed(1) || 0 }} fps</div>
                   </div>
                 </div>
                 <div class="metric-box" v-if="status.total_frames !== undefined">
-                  <div class="metric-icon"><el-icon><Picture /></el-icon></div>
+                  <div class="metric-icon"><el-icon>
+                      <Picture />
+                    </el-icon></div>
                   <div class="metric-data">
                     <div class="metric-title">总帧数</div>
                     <div class="metric-number">{{ status.total_frames }}</div>
@@ -835,24 +1000,30 @@ watch(connectionMode, handleModeChange);
               </div>
             </div>
           </div>
-          
+
           <!-- 系统信息 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><InfoFilled /></el-icon> 系统信息</h3>
+              <h3><el-icon>
+                  <InfoFilled />
+                </el-icon> 系统信息</h3>
             </div>
-            
+
             <div class="info-grid">
               <div class="info-item">
-                <div class="info-icon"><el-icon><Location /></el-icon></div>
+                <div class="info-icon"><el-icon>
+                    <Location />
+                  </el-icon></div>
                 <div class="info-content">
                   <span class="info-label">终端ID</span>
-                  <span class="info-value chip">{{ terminal.id || '本地终端' }}</span>
+                  <span class="info-value chip">{{ status.terminal_id || terminal.id || '本地终端' }}</span>
                 </div>
               </div>
-              
+
               <div class="info-item">
-                <div class="info-icon"><el-icon><Opportunity /></el-icon></div>
+                <div class="info-icon"><el-icon>
+                    <Opportunity />
+                  </el-icon></div>
                 <div class="info-content">
                   <span class="info-label">模型状态</span>
                   <el-tag :type="status.model_loaded ? 'success' : 'warning'" size="small" class="status-chip">
@@ -860,212 +1031,251 @@ watch(connectionMode, handleModeChange);
                   </el-tag>
                 </div>
               </div>
-              
+
+              <div class="info-item">
+                <div class="info-icon"><el-icon>
+                    <Setting />
+                  </el-icon></div>
+                <div class="info-content">
+                  <span class="info-label">工作模式</span>
+                  <span class="info-value">{{ status.mode }}</span>
+                </div>
+              </div>
+
               <div class="info-item" v-if="terminalDetails.last_active">
-                <div class="info-icon"><el-icon><Calendar /></el-icon></div>
+                <div class="info-icon"><el-icon>
+                    <Calendar />
+                  </el-icon></div>
                 <div class="info-content">
                   <span class="info-label">最后活动</span>
                   <span class="info-value time-value">{{ terminalDetails.last_active }}</span>
                 </div>
               </div>
+
+              <div class="info-item" v-if="status.last_detection && status.last_detection.count !== undefined">
+                <div class="info-icon"><el-icon>
+                    <DataAnalysis />
+                  </el-icon></div>
+                <div class="info-content">
+                  <span class="info-label">最后检测</span>
+                  <span class="info-value">{{ status.last_detection.count }} 人</span>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-icon"><el-icon>
+                    <WarningFilled />
+                  </el-icon></div>
+                <div class="info-content">
+                  <span class="info-label">CO2浓度</span>
+                  <span class="info-value">{{ status.co2_level }} ppm</span>
+                  <el-tag :type="getCO2StatusType(status.co2_status)" size="small" class="status-chip">
+                    {{ status.co2_status }}
+                  </el-tag>
+                </div>
+              </div>
             </div>
           </div>
-          
+
           <!-- 服务控制 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><Setting /></el-icon> 服务控制</h3>
+              <h3><el-icon>
+                  <Setting />
+                </el-icon> 服务控制</h3>
             </div>
-            
+
             <div class="service-controls">
               <!-- 拉取模式 -->
               <div class="service-item" :class="{ 'active-service': status.pull_running }">
                 <div class="service-info">
                   <div class="service-icon">
-                    <el-icon><Download /></el-icon>
+                    <el-icon>
+                      <Download />
+                    </el-icon>
                   </div>
                   <div>
                     <span class="service-name">拉取模式</span>
-                    <el-tag :type="status.pull_running ? 'success' : 'info'" size="mini" class="service-status">
+                    <el-tag :type="status.pull_running ? 'success' : 'info'" size="small" class="service-status">
                       {{ status.pull_running ? '运行中' : '已停止' }}
                     </el-tag>
                   </div>
                 </div>
                 <div class="service-actions">
-                  <el-button 
-                    type="primary" 
-                    size="mini" 
-                    @click="startService('pull')" 
-                    :disabled="status.pull_running"
-                    class="control-button"
-                  >
-                    <el-icon><VideoPlay /></el-icon>启动
+                  <el-button type="primary" size="small" @click="startService('pull')" :disabled="status.pull_running"
+                    class="control-button">
+                    <el-icon>
+                      <VideoPlay />
+                    </el-icon>启动
                   </el-button>
-                  <el-button 
-                    type="danger" 
-                    size="mini" 
-                    @click="stopService('pull')"
-                    :disabled="!status.pull_running"
-                    class="control-button"
-                  >
-                    <el-icon><VideoPause /></el-icon>停止
+                  <el-button type="danger" size="small" @click="stopService('pull')" :disabled="!status.pull_running"
+                    class="control-button">
+                    <el-icon>
+                      <VideoPause />
+                    </el-icon>停止
                   </el-button>
                 </div>
               </div>
-              
+
               <!-- 接收模式 -->
               <div class="service-item" :class="{ 'active-service': status.push_running }">
                 <div class="service-info">
                   <div class="service-icon">
-                    <el-icon><Upload /></el-icon>
+                    <el-icon>
+                      <Upload />
+                    </el-icon>
                   </div>
                   <div>
                     <span class="service-name">接收模式</span>
-                    <el-tag :type="status.push_running ? 'success' : 'info'" size="mini" class="service-status">
+                    <el-tag :type="status.push_running ? 'success' : 'info'" size="small" class="service-status">
                       {{ status.push_running ? '运行中' : '已停止' }}
                     </el-tag>
                   </div>
                 </div>
                 <div class="service-actions">
-                  <el-button 
-                    type="primary" 
-                    size="mini" 
-                    @click="startService('push')"
-                    :disabled="status.push_running"
-                    class="control-button"
-                  >
-                    <el-icon><VideoPlay /></el-icon>启动
+                  <el-button type="primary" size="small" @click="startService('push')" :disabled="status.push_running"
+                    class="control-button">
+                    <el-icon>
+                      <VideoPlay />
+                    </el-icon>启动
                   </el-button>
-                  <el-button 
-                    type="danger" 
-                    size="mini" 
-                    @click="stopService('push')"
-                    :disabled="!status.push_running"
-                    class="control-button"
-                  >
-                    <el-icon><VideoPause /></el-icon>停止
+                  <el-button type="danger" size="small" @click="stopService('push')" :disabled="!status.push_running"
+                    class="control-button">
+                    <el-icon>
+                      <VideoPause />
+                    </el-icon>停止
                   </el-button>
                 </div>
               </div>
-              
+
               <!-- 系统操作 -->
               <div class="service-actions-panel">
                 <el-button-group>
-                  <el-button 
-                    type="primary" 
-                    size="small" 
-                    @click="startService('both')"
-                    :disabled="status.pull_running && status.push_running"
-                    class="action-button"
-                  >
-                    <el-icon><Open /></el-icon>全部启动
+                  <el-button type="primary" size="small" @click="startService('both')"
+                    :disabled="status.pull_running && status.push_running" class="action-button">
+                    <el-icon>
+                      <Open />
+                    </el-icon>全部启动
                   </el-button>
-                  <el-button 
-                    type="danger" 
-                    size="small" 
-                    @click="stopService('both')"
-                    :disabled="!status.pull_running && !status.push_running"
-                    class="action-button"
-                  >
-                    <el-icon><TurnOff /></el-icon>全部停止
+                  <el-button type="danger" size="small" @click="stopService('both')"
+                    :disabled="!status.pull_running && !status.push_running" class="action-button">
+                    <el-icon>
+                      <TurnOff />
+                    </el-icon>全部停止
                   </el-button>
-                  <el-button 
-                    type="warning" 
-                    @click="restartTerminal" 
-                    :disabled="!terminal.status"
-                    size="small"
-                    class="action-button"
-                  >
-                    <el-icon><RefreshRight /></el-icon>重启终端
+                  <el-button type="warning" @click="restartTerminal" :disabled="!terminal.status" size="small"
+                    class="action-button">
+                    <el-icon>
+                      <RefreshRight />
+                    </el-icon>重启终端
                   </el-button>
                 </el-button-group>
               </div>
             </div>
           </div>
-          
-          <!-- 摄像头状态 -->
+
+          <!-- 节点状态 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><VideoCamera /></el-icon> 摄像头状态</h3>
+              <h3><el-icon>
+                  <VideoCamera />
+                </el-icon> 节点状态</h3>
             </div>
-            
-            <el-empty v-if="Object.keys(status.cameras).length === 0" description="暂无摄像头数据" :image-size="80"></el-empty>
-            <div v-else class="camera-grid">
-              <div 
-                v-for="[id, cameraStatus] in Object.entries(status.cameras)" 
-                :key="id"
-                class="camera-item"
-                :class="{ 'camera-active': cameraStatus === '在线' }"
-              >
-                <div class="camera-icon">
-                  <el-icon><VideoCamera /></el-icon>
+
+            <el-empty v-if="Object.keys(status.nodes).length === 0" description="暂无节点数据" :image-size="80"></el-empty>
+            <div v-else class="node-grid">
+              <div v-for="[id, nodeStatus] in Object.entries(status.nodes)" :key="id" class="node-item"
+                :class="{ 'node-active': nodeStatus === '在线' }">
+                <div class="node-icon">
+                  <el-icon>
+                    <VideoCamera />
+                  </el-icon>
                 </div>
-                <div class="camera-info">
-                  <div class="camera-id">摄像头 #{{ id }}</div>
-                  <el-tag 
-                    :type="cameraStatus === '在线' ? 'success' : 'danger'"
-                    size="mini"
-                    class="camera-status"
-                  >
-                    {{ cameraStatus }}
+                <div class="node-info">
+                  <div class="node-id">节点 #{{ id }}</div>
+                  <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
+                    {{ nodeStatus }}
                   </el-tag>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        
+
         <!-- 右侧：配置管理和日志查看 -->
         <div class="right-panel">
-          <!-- 配置管理 -->
+          <!-- 统一配置面板 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><Tools /></el-icon> 配置管理</h3>
+              <h3><el-icon>
+                  <Tools />
+                </el-icon> 终端配置</h3>
               <div class="button-group">
                 <el-button type="primary" size="small" @click="saveConfig" class="action-button">
-                  <el-icon><Check /></el-icon>保存配置
+                  <el-icon>
+                    <Check />
+                  </el-icon>保存配置
                 </el-button>
                 <el-button type="success" size="small" @click="applyConfig" class="action-button">
-                  <el-icon><Connection /></el-icon>立即应用
+                  <el-icon>
+                    <Connection />
+                  </el-icon>立即应用
                 </el-button>
                 <el-button size="small" @click="resetConfig" class="action-button">
-                  <el-icon><RefreshLeft /></el-icon>重置
+                  <el-icon>
+                    <RefreshLeft />
+                  </el-icon>重置
                 </el-button>
               </div>
             </div>
-            
-            <el-form :model="config" label-width="90px" class="config-form" size="small">
-              <el-tabs type="border-card" class="config-tabs">
-                <el-tab-pane label="基本设置">
+
+            <el-tabs v-model="activeConfigTab" class="config-tabs">
+              <!-- 基本设置标签页 -->
+              <el-tab-pane label="基本设置" name="basic">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><Setting /></el-icon>
+                    基本设置
+                  </span>
+                </template>
+                
+                <el-form :model="config" label-width="90px" class="config-form" size="small">
                   <div class="form-grid">
                     <el-form-item label="工作模式" class="form-item">
                       <el-select v-model="config.mode" style="width: 100%">
                         <el-option label="拉取模式" value="pull">
                           <div class="option-content">
-                            <el-icon class="option-icon"><Download /></el-icon>
+                            <el-icon class="option-icon">
+                              <Download />
+                            </el-icon>
                             <span>拉取模式</span>
                           </div>
                         </el-option>
                         <el-option label="接收模式" value="push">
                           <div class="option-content">
-                            <el-icon class="option-icon"><Upload /></el-icon>
+                            <el-icon class="option-icon">
+                              <Upload />
+                            </el-icon>
                             <span>接收模式</span>
                           </div>
                         </el-option>
                         <el-option label="双模式" value="both">
                           <div class="option-content">
-                            <el-icon class="option-icon"><Refresh /></el-icon>
+                            <el-icon class="option-icon">
+                              <Refresh />
+                            </el-icon>
                             <span>双模式</span>
                           </div>
                         </el-option>
                       </el-select>
                     </el-form-item>
-                    
+
                     <el-form-item label="拉取间隔" class="form-item">
-                      <el-input-number v-model="config.interval" :min="1" :max="60" style="width: 100%"></el-input-number>
+                      <el-input-number v-model="config.interval" :min="1" :max="60"
+                        style="width: 100%"></el-input-number>
                     </el-form-item>
-                    
-                    <el-form-item label="高级选项" class="form-item">
+
+                    <el-form-item label="高级选项" class="form-item full-width">
                       <div class="switch-grid">
                         <div class="switch-item">
                           <span>保存图像</span>
@@ -1075,80 +1285,166 @@ watch(connectionMode, handleModeChange);
                           <span>预加载模型</span>
                           <el-switch v-model="config.preload_model" active-color="#13ce66"></el-switch>
                         </div>
+                        <div class="switch-item">
+                          <span>启用CO2传感器</span>
+                          <el-switch v-model="config.co2_enabled" active-color="#13ce66"></el-switch>
+                        </div>
                       </div>
                     </el-form-item>
+
+                    <el-form-item label="CO2读取间隔" class="form-item" v-if="config.co2_enabled">
+                      <el-input-number v-model="config.co2_read_interval" :min="10" :max="300"
+                        style="width: 100%"></el-input-number>
+                    </el-form-item>
                   </div>
-                </el-tab-pane>
+                </el-form>
+              </el-tab-pane>
+
+              <!-- 节点管理标签页 -->
+              <el-tab-pane label="节点管理" name="nodes">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><VideoCamera /></el-icon>
+                    节点管理
+                  </span>
+                </template>
                 
-                <el-tab-pane label="摄像头配置">
-                  <div class="camera-config">
-                    <div class="camera-list-container">
-                      <el-table 
-                        :data="config.cameras" 
-                        border 
-                        size="small"
-                        height="200px"
-                        class="camera-table"
-                      >
-                        <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
-                        <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
-                        <el-table-column label="操作" width="70" align="center">
-                          <template #default="scope">
-                            <el-button 
-                              type="danger" 
-                              size="mini"
-                              @click="removeCamera(scope.$index)"
-                              circle
-                            >
-                              <el-icon><Delete /></el-icon>
-                            </el-button>
-                          </template>
-                        </el-table-column>
-                      </el-table>
-                    </div>
-                    
-                    <div class="add-camera-form">
-                      <el-input v-model="newCamera.id" placeholder="ID" class="camera-id-input" size="small"></el-input>
-                      <el-input v-model="newCamera.url" placeholder="摄像头URL" class="camera-url-input" size="small"></el-input>
-                      <el-button type="primary" @click="addCamera" size="small" class="add-button">
-                        <el-icon><Plus /></el-icon>添加
-                      </el-button>
-                    </div>
+                <div class="node-config">
+                  <div class="node-list-container">
+                    <el-table :data="config.nodes" size="small" height="200px" class="node-table">
+                      <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
+                      <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
+                      <el-table-column label="操作" width="70" align="center">
+                        <template #default="scope">
+                          <el-button type="danger" size="small" @click="removeNode(scope.$index)" circle>
+                            <el-icon>
+                              <Delete />
+                            </el-icon>
+                          </el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
                   </div>
-                </el-tab-pane>
-              </el-tabs>
-            </el-form>
+                  <div class="add-node-form">
+                    <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
+                    <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input"
+                      size="small"></el-input>
+                    <el-button type="primary" @click="addNode" size="small" class="add-button">
+                      <el-icon>
+                        <Plus />
+                      </el-icon>添加
+                    </el-button>
+                  </div>
+                </div>
+              </el-tab-pane>
+
+              <!-- 摄像头参数标签页 -->
+              <el-tab-pane label="摄像头参数" name="camera">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><Picture /></el-icon>
+                    摄像头参数
+                  </span>
+                </template>
+                
+                <div class="camera-config-form">
+                  <el-form :model="config.camera_config" label-width="100px" size="small">
+                    <el-row :gutter="12">
+                      <el-col :span="8">
+                        <el-form-item label="分辨率">
+                          <el-select v-model="config.camera_config.frame_size">
+                            <el-option v-for="(size, key) in frameSizes" :key="key" :label="size.label"
+                              :value="parseInt(key)" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="亮度">
+                          <el-input-number v-model="config.camera_config.brightness" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="对比度">
+                          <el-input-number v-model="config.camera_config.contrast" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="12">
+                      <el-col :span="8">
+                        <el-form-item label="饱和度">
+                          <el-input-number v-model="config.camera_config.saturation" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="特效">
+                          <el-select v-model="config.camera_config.special_effect">
+                            <el-option label="无" :value="0" />
+                            <el-option label="黑白" :value="1" />
+                            <el-option label="负片" :value="2" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="镜像">
+                          <el-switch v-model="config.camera_config.hmirror" active-color="#13ce66" />
+                          <span style="margin-left:8px;">水平</span>
+                          <el-switch v-model="config.camera_config.vflip" active-color="#13ce66"
+                            style="margin-left:8px;" />
+                          <span style="margin-left:8px;">垂直</span>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                  </el-form>
+                  <el-button type="primary" size="small" style="margin-top:8px;" @click="saveCameraConfig">
+                    <el-icon>
+                      <Check />
+                    </el-icon>保存摄像头参数
+                  </el-button>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
           </div>
-          
+
+          <!-- CO2数据图表 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3><el-icon>
+                  <WarningFilled />
+                </el-icon> CO2浓度监测</h3>
+              <el-tag :type="getCO2StatusType(status.co2_status)" size="small" class="status-chip">
+                {{ status.co2_status }}
+              </el-tag>
+            </div>
+
+            <div class="co2-chart-container">
+              <EnvironmentalChart
+                :terminal-id="terminal.id"
+                data-type="co2"
+                height="400px"
+              />
+            </div>
+          </div>
+
           <!-- 日志查看 -->
           <div class="panel-section">
             <div class="section-header">
-              <h3><el-icon><Notebook /></el-icon> 系统日志</h3>
+              <h3><el-icon>
+                  <Notebook />
+                </el-icon> 系统日志</h3>
               <el-button size="small" type="primary" plain @click="loadLogs" class="refresh-button">
-                <el-icon><Refresh /></el-icon>刷新
+                <el-icon>
+                  <Refresh />
+                </el-icon>刷新
               </el-button>
             </div>
-            
+
             <div class="logs-container">
               <el-empty v-if="logs.length === 0" description="暂无日志数据" :image-size="80"></el-empty>
-              <el-table 
-                v-else
-                :data="logs" 
-                height="350px" 
-                border
-                stripe
-                size="small"
-                class="logs-table"
-              >
+              <el-table v-else :data="logs" height="350px" border stripe size="small" class="logs-table">
                 <el-table-column prop="timestamp" label="时间" width="160" show-overflow-tooltip></el-table-column>
                 <el-table-column prop="level" label="级别" width="80" align="center">
                   <template #default="scope">
-                    <el-tag 
-                      :type="getLogLevelType(scope.row.level)"
-                      size="mini"
-                      effect="dark"
-                      class="log-level"
-                    >
+                    <el-tag :type="getLogLevelType(scope.row.level)" size="small" effect="dark" class="log-level">
                       {{ scope.row.level }}
                     </el-tag>
                   </template>
@@ -1169,8 +1465,7 @@ watch(connectionMode, handleModeChange);
   padding: 12px;
   max-width: 1400px;
   margin: 0 auto;
-  background: #f7f9fc;
-  min-height: calc(100vh - 24px);
+  /* 删除 min-height 固定高度限制 */
 }
 
 .main-card {
@@ -1178,7 +1473,9 @@ watch(connectionMode, handleModeChange);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   background: #fff;
-  height: calc(100vh - 48px);
+  /* 修改为 auto 高度，确保卡片可以随内容扩展 */
+  height: auto;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
 }
@@ -1192,6 +1489,10 @@ watch(connectionMode, handleModeChange);
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #2c3e50;
+  /* 添加固定定位，确保头部始终可见 */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .title-area {
@@ -1239,21 +1540,27 @@ watch(connectionMode, handleModeChange);
 /* 主要仪表盘区域 */
 .dashboard-container {
   display: flex;
-  height: calc(100% - 70px);
-  overflow: hidden;
+  /* 删除固定高度限制 */
+  height: auto;
+  /* 允许内容溢出时滚动 */
+  overflow: visible;
+  padding-top: 1px;
+  /* 防止margin塌陷 */
 }
 
 .left-panel {
-  width: 38%;
+  width: 42%;
   background-color: #f4f6f9;
   border-right: 1px solid #e6e9ed;
-  overflow-y: auto;
+  /* 内容溢出时可滚动 */
+  overflow-y: visible;
   padding: 16px;
 }
 
 .right-panel {
-  width: 62%;
-  overflow-y: auto;
+  width: 58%;
+  /* 内容溢出时可滚动 */
+  overflow-y: visible;
   padding: 16px;
 }
 
@@ -1510,14 +1817,14 @@ watch(connectionMode, handleModeChange);
   min-width: 90px;
 }
 
-/* 摄像头显示 */
-.camera-grid {
+/* 节点显示 */
+.node-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
-.camera-item {
+.node-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1528,12 +1835,12 @@ watch(connectionMode, handleModeChange);
   transition: all 0.3s ease;
 }
 
-.camera-active {
+.node-active {
   background: linear-gradient(to right, rgba(19, 206, 102, 0.1), rgba(19, 206, 102, 0.05));
   border-color: rgba(19, 206, 102, 0.2);
 }
 
-.camera-icon {
+.node-icon {
   width: 32px;
   height: 32px;
   border-radius: 6px;
@@ -1545,23 +1852,23 @@ watch(connectionMode, handleModeChange);
   font-size: 16px;
 }
 
-.camera-active .camera-icon {
+.node-active .node-icon {
   background: rgba(19, 206, 102, 0.1);
   color: #13ce66;
 }
 
-.camera-info {
+.node-info {
   flex: 1;
 }
 
-.camera-id {
+.node-id {
   font-size: 0.85rem;
   font-weight: 500;
   color: #2c3e50;
   margin-bottom: 3px;
 }
 
-.camera-status {
+.node-status {
   font-size: 0.7rem;
 }
 
@@ -1570,9 +1877,52 @@ watch(connectionMode, handleModeChange);
   margin-top: 0;
 }
 
+/* 配置标签页样式 */
 .config-tabs {
-  border: none;
-  box-shadow: none;
+  margin-top: 16px;
+}
+
+.config-tabs .el-tabs__header {
+  margin-bottom: 20px;
+}
+
+.config-tabs .el-tabs__nav-wrap {
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.config-tabs .el-tabs__item {
+  border-radius: 6px;
+  margin: 0 2px;
+  transition: all 0.3s ease;
+}
+
+.config-tabs .el-tabs__item.is-active {
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.tab-label el-icon {
+  font-size: 16px;
+}
+
+.config-tabs .el-tabs__content {
+  padding: 0;
+}
+
+.config-tabs .el-tab-pane {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
 }
 
 .form-grid {
@@ -1586,9 +1936,13 @@ watch(connectionMode, handleModeChange);
   margin-bottom: 0;
 }
 
+.form-item.full-width {
+  grid-column: 1 / -1;
+}
+
 .switch-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
@@ -1600,18 +1954,18 @@ watch(connectionMode, handleModeChange);
   color: #606266;
 }
 
-.camera-config {
+.node-config {
   padding: 10px;
 }
 
-.camera-list-container {
+.node-list-container {
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #ebeef5;
   margin-bottom: 12px;
 }
 
-.add-camera-form {
+.add-node-form {
   display: flex;
   gap: 10px;
   padding: 12px;
@@ -1620,11 +1974,11 @@ watch(connectionMode, handleModeChange);
   border: 1px solid #ebeef5;
 }
 
-.camera-id-input {
+.node-id-input {
   width: 80px;
 }
 
-.camera-url-input {
+.node-url-input {
   flex-grow: 1;
 }
 
@@ -1646,6 +2000,24 @@ watch(connectionMode, handleModeChange);
 .log-level {
   padding: 2px 6px;
   font-size: 0.7rem;
+}
+
+/* CO2图表样式 */
+.co2-chart-container {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.no-co2-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 280px;
+  background-color: #f9fafc;
+  border-radius: 8px;
+  border: 1px dashed #dcdfe6;
 }
 
 /* 空状态样式 */
@@ -1738,16 +2110,19 @@ watch(connectionMode, handleModeChange);
     flex-direction: column;
     height: auto;
   }
-  
-  .left-panel, .right-panel {
+
+  .left-panel,
+  .right-panel {
     width: 100%;
     padding: 12px;
+    /* 确保在移动视图下内容可以滚动 */
+    overflow-y: visible;
   }
-  
+
   .system-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .form-grid {
     grid-template-columns: 1fr;
   }
@@ -1759,58 +2134,59 @@ watch(connectionMode, handleModeChange);
     align-items: flex-start;
     gap: 12px;
   }
-  
+
   .connection-controls {
     width: 100%;
     justify-content: space-between;
   }
-  
+
   .info-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .system-metrics {
     grid-template-columns: 1fr;
   }
-  
+
   .service-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
-  
+
   .service-actions {
     width: 100%;
     justify-content: space-between;
   }
-  
-  .camera-grid {
+
+  .node-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .switch-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
-  
-  .add-camera-form {
+
+  .add-node-form {
     flex-direction: column;
   }
-  
-  .camera-id-input, .camera-url-input {
+
+  .node-id-input,
+  .node-url-input {
     width: 100%;
   }
-  
+
   .service-actions-panel {
     flex-direction: column;
     gap: 8px;
   }
-  
+
   .service-actions-panel .el-button-group {
     display: flex;
     flex-direction: column;
     width: 100%;
   }
-  
+
   .service-actions-panel .el-button {
     margin-left: 0 !important;
     border-radius: 4px !important;

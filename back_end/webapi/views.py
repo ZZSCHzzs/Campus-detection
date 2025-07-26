@@ -81,19 +81,53 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
         
     @action(detail=True, methods=['get'])
+    def co2_data(self, request, pk=None):
+        terminal = self.get_object()
+        hours = int(request.query_params.get('hours', 24))
+        from_time = timezone.now() - timezone.timedelta(hours=hours)
+        
+        data = CO2Data.objects.filter(
+            terminal=terminal,
+            timestamp__gte=from_time
+        ).order_by('timestamp')
+        serializer = CO2DataSerializer(data, many=True)
+        return Response(serializer.data)
+        
+    @action(detail=True, methods=['get'])
     def status(self, request, pk=None):
         """获取终端状态"""
         terminal = self.get_object()
         
-        # 首先尝试从Redis缓存获取状态
         cache_key = f"terminal:{pk}:status"
         cached_status = cache.get(cache_key)
         
         if cached_status:
             logger.debug(f"从缓存获取终端{pk}状态")
+            # 确保摄像头数据存在且格式正确
+            if 'nodes' not in cached_status or cached_status['nodes'] is None:
+                cached_status['nodes'] = {}
+            # 补全所有可能的字段
+            cached_status.setdefault('cpu_usage', getattr(terminal, 'cpu_usage', 0))
+            cached_status.setdefault('memory_usage', getattr(terminal, 'memory_usage', 0))
+            cached_status.setdefault('disk_usage', getattr(terminal, 'disk_usage', 0))
+            cached_status.setdefault('disk_free', getattr(terminal, 'disk_free', 0))
+            cached_status.setdefault('disk_total', getattr(terminal, 'disk_total', 0))
+            cached_status.setdefault('memory_available', getattr(terminal, 'memory_available', 0))
+            cached_status.setdefault('memory_total', getattr(terminal, 'memory_total', 0))
+            cached_status.setdefault('co2_level', getattr(terminal, 'co2_level', -1))
+            cached_status.setdefault('co2_status', getattr(terminal, 'co2_status', '未连接'))
+            cached_status.setdefault('system_uptime', getattr(terminal, 'system_uptime', None))
+            cached_status.setdefault('frame_rate', getattr(terminal, 'frame_rate', None))
+            cached_status.setdefault('total_frames', getattr(terminal, 'total_frames', None))
+            cached_status.setdefault('terminal_online', getattr(terminal, 'status', False))
+            cached_status.setdefault('terminal_id', getattr(terminal, 'terminal_id', terminal.id))
+            cached_status.setdefault('mode', getattr(terminal, 'mode', 'both'))
+            cached_status.setdefault('last_detection', getattr(terminal, 'last_detection', {}))
+            cached_status.setdefault('model_loaded', getattr(terminal, 'model_loaded', False))
+            cached_status.setdefault('push_running', getattr(terminal, 'push_running', False))
+            cached_status.setdefault('pull_running', getattr(terminal, 'pull_running', False))
             return Response(cached_status)
         
-        # 检查终端是否在线
         if not terminal.status:
             default_status = {
                 "model_loaded": False,
@@ -101,28 +135,51 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
                 "pull_running": False,
                 "cpu_usage": 0,
                 "memory_usage": 0,
-                "co2_level": None,  # 添加CO2字段
-                "cameras": {}
+                "disk_usage": 0,
+                "disk_free": 0,
+                "disk_total": 0,
+                "memory_available": 0,
+                "memory_total": 0,
+                "co2_level": getattr(terminal, 'co2_level', -1),
+                "co2_status": getattr(terminal, 'co2_status', '未连接'),
+                "system_uptime": getattr(terminal, 'system_uptime', None),
+                "frame_rate": getattr(terminal, 'frame_rate', None),
+                "total_frames": getattr(terminal, 'total_frames', None),
+                "nodes": {},
+                "terminal_online": False,
+                "terminal_id": getattr(terminal, 'terminal_id', terminal.id),
+                "mode": getattr(terminal, 'mode', 'both'),
+                "last_detection": getattr(terminal, 'last_detection', {})
             }
-            # 缓存默认状态，设置短暂过期时间
             cache.set(cache_key, default_status, timeout=30)
             return Response(default_status)
         
-        # 从数据库获取基本状态
         try:
+            nodes_data = terminal.nodes or {}
             status_data = {
-                "model_loaded": terminal.model_loaded,
+                "model_loaded": terminal.model_loaded if hasattr(terminal, 'model_loaded') else False,
                 "push_running": terminal.push_running,
                 "pull_running": terminal.pull_running,
                 "cpu_usage": terminal.cpu_usage or 0,
                 "memory_usage": terminal.memory_usage or 0,
-                "co2_level": terminal.co2_level,  # 添加CO2字段
-                "cameras": terminal.cameras or {}
+                "disk_usage": getattr(terminal, 'disk_usage', 0),
+                "disk_free": getattr(terminal, 'disk_free', 0),
+                "disk_total": getattr(terminal, 'disk_total', 0),
+                "memory_available": getattr(terminal, 'memory_available', 0),
+                "memory_total": getattr(terminal, 'memory_total', 0),
+                "co2_level": getattr(terminal, 'co2_level', -1),
+                "co2_status": getattr(terminal, 'co2_status', '未连接'),
+                "system_uptime": getattr(terminal, 'system_uptime', None),
+                "frame_rate": getattr(terminal, 'frame_rate', None),
+                "total_frames": getattr(terminal, 'total_frames', None),
+                "nodes": nodes_data,
+                "terminal_online": terminal.status,
+                "terminal_id": getattr(terminal, 'terminal_id', terminal.id),
+                "mode": getattr(terminal, 'mode', 'both'),
+                "last_detection": getattr(terminal, 'last_detection', {})
             }
-            
-            # 缓存状态数据，设置适当的过期时间
-            cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
-            
+            cache.set(cache_key, status_data, timeout=60)
+            logger.debug(f"更新终端{pk}状态缓存，节点: {nodes_data}")
             return Response(status_data)
         except Exception as e:
             logger.error(f"获取终端{pk}状态失败: {str(e)}")
@@ -130,56 +187,46 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def logs(self, request, pk=None):
-        """获取终端日志"""
+        """获取终端日志（仅从Redis缓存，不从数据库字段）"""
         terminal = self.get_object()
-        
-        # 从Redis缓存获取日志
+        limit = int(request.query_params.get('limit', 100))
         cache_key = f"terminal:{pk}:logs"
         cached_logs = cache.get(cache_key)
-        
         if cached_logs:
             logger.debug(f"从缓存获取终端{pk}日志")
+            if limit and limit < len(cached_logs):
+                return Response(cached_logs[:limit])
             return Response(cached_logs)
-        
-        # 如果缓存中没有，返回空列表
-        # 在实际应用中，你可能需要从数据库或日志文件中获取
+        # 没有缓存则返回空列表并写入缓存
         empty_logs = []
-        cache.set(cache_key, empty_logs, timeout=30)  # 缓存30秒
+        cache.set(cache_key, empty_logs, timeout=120)
+        logger.debug(f"设置空日志缓存: {cache_key}")
         return Response(empty_logs)
-            
+
     @action(detail=True, methods=['get', 'post'])
     def config(self, request, pk=None):
-        """获取或更新终端配置"""
+        """获取或更新终端配置（节点配置只从Redis缓存，不从数据库字段nodes）"""
         terminal = self.get_object()
-        
+        cache_key = f"terminal:{pk}:config"
         if request.method == 'GET':
-            # 首先尝试从Redis缓存获取配置
-            cache_key = f"terminal:{pk}:config"
             cached_config = cache.get(cache_key)
-            
             if cached_config:
                 logger.debug(f"从缓存获取终端{pk}配置")
                 return Response(cached_config)
-                
-            # 如果缓存中没有，从数据库构建
-            try:
-                config_data = {
-                    "mode": terminal.mode or "both",
-                    "interval": terminal.interval or 5,
-                    "cameras": terminal.camera_config or {},
-                    "save_image": terminal.save_image if hasattr(terminal, 'save_image') else True,
-                    "preload_model": terminal.preload_model if hasattr(terminal, 'preload_model') else True
-                }
-                
-                # 缓存配置数据，设置较长的过期时间
-                cache.set(cache_key, config_data, timeout=300)  # 5分钟过期
-                
-                return Response(config_data)
-            except Exception as e:
-                logger.error(f"获取终端{pk}配置失败: {str(e)}")
-                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # 构建配置数据（节点配置只从Redis缓存）
+            config_data = {
+                "mode": terminal.mode or "both",
+                "interval": terminal.interval or 5,
+                "nodes": terminal.node_config or {},  # node_config为实际配置
+                "save_image": getattr(terminal, 'save_image', True),
+                "preload_model": getattr(terminal, 'preload_model', True),
+                "co2_enabled": getattr(terminal, 'co2_enabled', True),
+                "co2_read_interval": getattr(terminal, 'co2_read_interval', 30)
+            }
+            cache.set(cache_key, config_data, timeout=300)
+            return Response(config_data)
         else:
-            # 更新配置 - 通过命令接口发送
+            # 更新配置并同步到缓存
             try:
                 channel_layer = get_channel_layer()
                 message = {
@@ -188,37 +235,37 @@ class ProcessTerminalViewSet(viewsets.ModelViewSet):
                     'params': request.data,
                     'timestamp': timezone.now().isoformat()
                 }
-                
                 async_to_sync(channel_layer.group_send)(
                     f"terminal_{pk}",
                     message
                 )
-                
                 # 保存到数据库
                 if 'mode' in request.data:
                     terminal.mode = request.data['mode']
                 if 'interval' in request.data:
                     terminal.interval = request.data['interval']
-                if 'cameras' in request.data:
-                    terminal.camera_config = request.data['cameras']
+                if 'nodes' in request.data:
+                    terminal.node_config = request.data['nodes']
                 if 'save_image' in request.data:
                     terminal.save_image = request.data['save_image']
                 if 'preload_model' in request.data:
                     terminal.preload_model = request.data['preload_model']
-                    
+                if 'co2_enabled' in request.data:
+                    terminal.co2_enabled = request.data['co2_enabled']
+                if 'co2_read_interval' in request.data:
+                    terminal.co2_read_interval = request.data['co2_read_interval']
                 terminal.save()
-                
                 # 更新Redis缓存
-                cache_key = f"terminal:{pk}:config"
                 config_data = {
                     "mode": terminal.mode,
                     "interval": terminal.interval,
-                    "cameras": terminal.camera_config,
-                    "save_image": terminal.save_image if hasattr(terminal, 'save_image') else True,
-                    "preload_model": terminal.preload_model if hasattr(terminal, 'preload_model') else True
+                    "nodes": terminal.node_config,
+                    "save_image": getattr(terminal, 'save_image', True),
+                    "preload_model": getattr(terminal, 'preload_model', True),
+                    "co2_enabled": getattr(terminal, 'co2_enabled', True),
+                    "co2_read_interval": getattr(terminal, 'co2_read_interval', 30)
                 }
-                cache.set(cache_key, config_data, timeout=300)  # 5分钟过期
-                
+                cache.set(cache_key, config_data, timeout=300)
                 return Response({"status": "success", "message": "配置已更新"})
             except Exception as e:
                 logger.error(f"更新终端{pk}配置失败: {str(e)}")
@@ -229,12 +276,46 @@ class BuildingViewSet(viewsets.ModelViewSet):
     serializer_class = BuildingSerializer
     permission_classes = [StaffEditSelected]
     allow_staff_edit = False
+    
     @action(detail=True, methods=['get'])
     def areas(self, request, pk=None):
         building = self.get_object()
         areas = Area.objects.filter(type=building)
         serializer = AreaSerializer(areas, many=True, context={'request': request})
-        return Response(serializer.data)    
+        return Response(serializer.data)
+    
+    # 新增：分页获取建筑区域
+    @action(detail=True, methods=['get'])
+    def areas_paginated(self, request, pk=None):
+        building = self.get_object()
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        
+        areas = Area.objects.filter(type=building).select_related('bound_node')
+        
+        # 计算分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        total_count = areas.count()
+        paginated_areas = areas[start:end]
+        
+        serializer = AreaSerializer(paginated_areas, many=True, context={'request': request})
+        
+        return Response({
+            'areas': serializer.data,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total_count,
+            'has_previous': page > 1
+        })
+    
+    # 新增：获取建筑基本信息（不包含区域）
+    @action(detail=False, methods=['get'])
+    def list_basic(self, request):
+        buildings = Building.objects.all()
+        serializer = BuildingSerializer(buildings, many=True)
+        return Response(serializer.data)
 
 
 class AreaViewSet(viewsets.ModelViewSet):
@@ -253,16 +334,40 @@ class AreaViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def popular(self, request):
         count = int(request.query_params.get('count', 5))
-        areas = Area.objects.all()
-        areas = sorted(areas, key=lambda x: x.bound_node.detected_count, reverse=True)[:count]
+        cache_key = f"popular_areas_{count}"
+        
+        # 尝试从缓存获取
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
+        # 缓存未命中，查询数据库
+        areas = Area.objects.all().select_related('bound_node')
+        areas = sorted(areas, key=lambda x: x.bound_node.detected_count if x.bound_node else 0, reverse=True)[:count]
         serializer = AreaSerializer(areas, many=True)
+        
+        # 缓存结果（5分钟）
+        cache.set(cache_key, serializer.data, timeout=300)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'],permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['get'])
     def historical(self, request, pk=None):
         area = self.get_object()
         historical_data = HistoricalData.objects.filter(area=area)
         serializer = HistoricalDataSerializer(historical_data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def temperature_humidity(self, request, pk=None):
+        area = self.get_object()
+        hours = int(request.query_params.get('hours', 24))
+        from_time = timezone.now() - timezone.timedelta(hours=hours)
+        
+        data = TemperatureHumidityData.objects.filter(
+            area=area,
+            timestamp__gte=from_time
+        ).order_by('timestamp')
+        serializer = TemperatureHumidityDataSerializer(data, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
@@ -293,6 +398,78 @@ class HistoricalDataViewSet(viewsets.ModelViewSet):
         count = int(request.query_params.get('count', 5))
         historical_data = self.queryset.order_by('-timestamp')[:count]
         serializer = HistoricalDataSerializer(historical_data, many=True)
+        return Response(serializer.data)
+
+
+class TemperatureHumidityDataViewSet(viewsets.ModelViewSet):
+    queryset = TemperatureHumidityData.objects.all()
+    serializer_class = TemperatureHumidityDataSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        count = int(request.query_params.get('count', 10))
+        data = self.queryset.order_by('-timestamp')[:count]
+        serializer = TemperatureHumidityDataSerializer(data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_area(self, request):
+        area_id = request.query_params.get('area_id')
+        if not area_id:
+            return Response({"error": "需要提供area_id参数"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            area = Area.objects.get(id=area_id)
+        except Area.DoesNotExist:
+            return Response({"error": "区域不存在"}, status=status.HTTP_404_NOT_FOUND)
+        
+        hours = int(request.query_params.get('hours', 24))
+        from_time = timezone.now() - timezone.timedelta(hours=hours)
+        
+        data = self.queryset.filter(
+            area=area,
+            timestamp__gte=from_time
+        ).order_by('timestamp')
+        
+        serializer = TemperatureHumidityDataSerializer(data, many=True)
+        return Response(serializer.data)
+
+
+class CO2DataViewSet(viewsets.ModelViewSet):
+    queryset = CO2Data.objects.all()
+    serializer_class = CO2DataSerializer
+    permission_classes = [StaffEditSelected]
+    allow_staff_edit = False
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        count = int(request.query_params.get('count', 10))
+        data = self.queryset.order_by('-timestamp')[:count]
+        serializer = CO2DataSerializer(data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_terminal(self, request):
+        terminal_id = request.query_params.get('terminal_id')
+        if not terminal_id:
+            return Response({"error": "需要提供terminal_id参数"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+        except ProcessTerminal.DoesNotExist:
+            return Response({"error": "终端不存在"}, status=status.HTTP_404_NOT_FOUND)
+        
+        hours = int(request.query_params.get('hours', 24))
+        from_time = timezone.now() - timezone.timedelta(hours=hours)
+        
+        data = self.queryset.filter(
+            terminal=terminal,
+            timestamp__gte=from_time
+        ).order_by('timestamp')
+        
+        serializer = CO2DataSerializer(data, many=True)
         return Response(serializer.data)
 
 
@@ -386,10 +563,8 @@ class DataUploadView(APIView):
             hardware_node_id = serializer.validated_data['id']
             detected_count = serializer.validated_data['detected_count']
             timestamp = serializer.validated_data['timestamp']
-            # 新增获取环境数据
-            temperature = serializer.validated_data.get('temperature')
-            humidity = serializer.validated_data.get('humidity')
-            co2_level = serializer.validated_data.get('co2_level')
+            temperature = serializer.validated_data.get['temperature']
+            humidity = serializer.validated_data.get['humidity']
         except KeyError as e:
             return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -407,11 +582,6 @@ class DataUploadView(APIView):
                 
             hardware_node.save()
             
-            # 如果有CO2数据，更新终端
-            if co2_level is not None and hardware_node.terminal:
-                terminal = hardware_node.terminal
-                terminal.co2_level = co2_level
-                terminal.save(update_fields=['co2_level'])
         except HardwareNode.DoesNotExist:
             return Response({"error": "硬件节点不存在"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -431,18 +601,87 @@ class DataUploadView(APIView):
         return Response({"message": "检测结果上传成功"}, status=status.HTTP_201_CREATED)
 
 
-class SummaryView(APIView):
+class TemperatureHumidityUploadView(APIView):
+    def post(self, request):
+        serializer = TemperatureHumidityUploadSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            area_id = serializer.validated_data['area_id']
+            temperature = serializer.validated_data.get('temperature')
+            humidity = serializer.validated_data.get('humidity')
+            timestamp = serializer.validated_data['timestamp']
+        except KeyError as e:
+            return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            area = Area.objects.get(id=area_id)
+        except Area.DoesNotExist:
+            return Response({"error": "区域不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 保存温湿度数据记录
+        temp_humidity_data = TemperatureHumidityData(
+            area=area,
+            temperature=temperature,
+            humidity=humidity,
+            timestamp=timestamp
+        )
+        temp_humidity_data.save()
+        return Response({"message": "温湿度数据上传成功"}, status=status.HTTP_201_CREATED)
+
+
+class CO2UploadView(APIView):
+    def post(self, request):
+        serializer = CO2UploadSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            terminal_id = serializer.validated_data['terminal_id']
+            co2_level = serializer.validated_data['co2_level']
+            timestamp = serializer.validated_data['timestamp']
+        except KeyError as e:
+            return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            terminal = ProcessTerminal.objects.get(id=terminal_id)
+        except ProcessTerminal.DoesNotExist:
+            return Response({"error": "终端不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 保存CO2数据记录
+        co2_data = CO2Data(
+            terminal=terminal,
+            co2_level=co2_level,
+            timestamp=timestamp
+        )
+        co2_data.save()
+        return Response({"message": "CO2数据上传成功"}, status=status.HTTP_201_CREATED)
+
+
+class SummaryView(APIView):
     def get(self, request):
+        cache_key = "system_summary"
+        
+        # 尝试从缓存获取
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
+        # 缓存未命中，查询数据库
         nodes_count = HardwareNode.objects.count()
+        nodes_online_count = HardwareNode.objects.filter(status=True).count()        
         terminals_count = ProcessTerminal.objects.count()
+        terminals_online_count = ProcessTerminal.objects.filter(status=True).count()
         buildings_count = Building.objects.count()
         areas_count = Area.objects.count()
         historical_data_count = HistoricalData.objects.count()
         people_count = get_summary_people_count()
         notice_count = Notice.objects.count()
         alerts_count = Alert.objects.count()
-        return Response({
+        users_count = CustomUser.objects.count()
+        
+        summary_data = {
             "nodes_count": nodes_count,
             "terminals_count": terminals_count,
             "buildings_count": buildings_count,
@@ -450,8 +689,15 @@ class SummaryView(APIView):
             "historical_data_count": historical_data_count,
             "people_count": people_count,
             "notice_count": notice_count,
-            "alerts_count": alerts_count
-        })
+            "alerts_count": alerts_count,
+            "users_count": users_count,
+            "nodes_online_count": nodes_online_count,
+            "terminals_online_count": terminals_online_count
+        }
+        
+        # 缓存结果（2分钟）
+        cache.set(cache_key, summary_data, timeout=120)
+        return Response(summary_data)
 
 
 class TerminalCommandView(APIView):
@@ -553,7 +799,7 @@ class TerminalCommandView(APIView):
             "cpu_usage": terminal.cpu_usage or 0,
             "memory_usage": terminal.memory_usage or 0,
             "co2_level": terminal.co2_level,  # 添加CO2字段
-            "cameras": terminal.cameras or {}
+            "nodes": terminal.nodes or {}
         }
         cache.set(cache_key, status_data, timeout=60)  # 1分钟过期
 
@@ -564,10 +810,10 @@ class EnvironmentView(APIView):
     
     def get(self, request):
         return Response({
-            "type": "server",  # 标识这是服务端
+            "type": "server",
             "version": "2.0.0",
-            "name": "检测服务中心",
-            "id": 0,  # 服务端ID为0
+            "name": "服务端",
+            "id": 0,
             "features": {
                 "local_detection": False,
                 "websocket": True,

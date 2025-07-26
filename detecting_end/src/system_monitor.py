@@ -7,6 +7,9 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+# 导入CO2传感器模块
+from sgp30_reader import SGP30Reader
+
 logger = logging.getLogger('system_monitor')
 
 class SystemMonitor:
@@ -15,11 +18,11 @@ class SystemMonitor:
     独立于检测服务运行，持续监控系统资源和摄像头状态
     """
     
-    def __init__(self, config_manager=None, camera_manager=None, 
+    def __init__(self, config_manager=None, node_manager=None, 
                  detection_manager=None, log_manager=None, 
                  ws_client=None):
         self.config_manager = config_manager
-        self.camera_manager = camera_manager
+        self.node_manager = node_manager
         self.detection_manager = detection_manager
         self.log_manager = log_manager
         self.ws_client = ws_client
@@ -28,11 +31,22 @@ class SystemMonitor:
         self.status = {
             "cpu_usage": 0,
             "memory_usage": 0,
-            "cameras": {},
-            "started_at": datetime.now().isoformat(),
+            "disk_usage": 0,
+            "disk_free": 0,
+            "disk_total": 0,
+            "memory_available": 0,
+            "memory_total": 0,
+            "system_uptime": 0,
+            "nodes": {},
             "frame_rate": 0,
             "total_frames": 0,
-            "system_uptime": 0
+            "model_loaded": False,
+            "push_running": False,
+            "pull_running": False,
+            "mode": "both",  # 默认模式
+            "terminal_id": 1,  # 默认终端ID
+            "co2_level": -1,  # CO2浓度(ppm)，-1表示无效或未检测到
+            "co2_status": "未连接",  # CO2传感器状态：正常、异常、未连接
         }
         
         # 帧率计算
@@ -49,6 +63,26 @@ class SystemMonitor:
         # 添加配置监控相关属性
         self.last_config = {}
         self.last_config_hash = 0
+        
+        # 初始化CO2传感器
+        self.co2_reader = None
+        self.co2_enabled = config_manager.get('co2_enabled', True) if config_manager else True
+        self.co2_last_read_time = 0
+        self.co2_read_interval = config_manager.get('co2_read_interval', 30) if config_manager else 30  # CO2读取间隔（秒）
+        
+        if self.co2_enabled:
+            try:
+                self.co2_reader = SGP30Reader()
+                self.status["co2_status"] = "正常"
+                logger.info("CO2传感器初始化成功")
+                if self.log_manager:
+                    self.log_manager.info("CO2传感器初始化成功", source="monitor")
+            except Exception as e:
+                logger.error(f"CO2传感器初始化失败: {str(e)}")
+                self.status["co2_status"] = "异常"
+                self.co2_enabled = False
+                if self.log_manager:
+                    self.log_manager.error(f"CO2传感器初始化失败: {str(e)}", source="monitor")
         
         if config_manager:
             self.last_config = config_manager.get_all()
@@ -91,15 +125,17 @@ class SystemMonitor:
                 self._update_system_resources()
                 
                 # 更新摄像头状态
-                self._update_camera_status()
+                self._update_node_status()
                 
                 # 更新帧率
                 self._update_frame_rate()
                 
+                # 更新CO2数据
+                self._update_co2_data()
+                
                 # 计算系统运行时间
                 uptime = int(time.time() - psutil.boot_time())
                 self.status["system_uptime"] = uptime
-                
                 
                 # 通过WebSocket定期发送状态更新到服务端
                 # 无论检测模式是否运行，都要发送状态
@@ -155,34 +191,81 @@ class SystemMonitor:
         except Exception as e:
             logger.error(f"更新系统资源信息失败: {str(e)}")
     
-    def _update_camera_status(self):
+    def _update_node_status(self):
         """更新摄像头状态"""
-        if not self.camera_manager:
+        if not self.node_manager:
             return
             
         try:
             # 获取摄像头状态
-            cameras_status = {}
+            nodes_status = {}
             
-            # 修复: 确保正确访问摄像头对象和属性
-            for cam_id, camera in self.camera_manager.cameras.items():
-                # 检查camera是否是对象而不是字符串
-                if hasattr(camera, 'is_available') and callable(camera.is_available):
-                    cameras_status[cam_id] = "在线" if camera.is_available() else "离线"
-                elif hasattr(camera, 'status'):
-                    # 备选方案：如果有status属性
-                    cameras_status[cam_id] = camera.status
+            for node_id, node in self.node_manager.nodes.items():
+                # 检查node是否是对象而不是字符串
+                if hasattr(node, 'is_available') and callable(node.is_available):
+                    nodes_status[node_id] = "在线" if node.is_available() else "离线"
+                elif hasattr(node, 'status'):
+                    nodes_status[node_id] = node.status
                 else:
-                    # 如果无法确定状态，默认为未知
-                    cameras_status[cam_id] = "未知"
+                    nodes_status[node_id] = "离线"
             
-            self.status["cameras"] = cameras_status
+            self.status["nodes"] = nodes_status
         except Exception as e:
             logger.error(f"更新摄像头状态失败: {str(e)}")
             # 记录更详细的错误信息以便调试
-            if self.camera_manager and hasattr(self.camera_manager, 'cameras'):
-                for cam_id, camera in self.camera_manager.cameras.items():
-                    logger.debug(f"摄像头 {cam_id} 的类型: {type(camera)}")
+            if self.node_manager and hasattr(self.node_manager, 'nodes'):
+                for node_id, node in self.node_manager.nodes.items():
+                    logger.debug(f"摄像头 {node_id} 的类型: {type(node)}")
+    
+    def _update_co2_data(self):
+        """更新CO2数据"""
+        if not self.co2_enabled or not self.co2_reader:
+            return
+            
+        current_time = time.time()
+        
+        # 检查是否到了读取CO2数据的时间
+        if current_time - self.co2_last_read_time < self.co2_read_interval:
+            return
+            
+        try:
+            # 读取CO2数据
+            co2_ppm = self.co2_reader.get_co2()
+            
+            if co2_ppm >= 0:  # 有效读数
+                self.status["co2_level"] = co2_ppm
+                self.status["co2_status"] = "正常"
+                logger.debug(f"CO2读数: {co2_ppm} ppm")
+                
+                # 记录显著变化
+                if abs(co2_ppm - self.status.get("co2_level", 0)) > 100:
+                    if self.log_manager:
+                        self.log_manager.info(f"CO2浓度变化: {co2_ppm} ppm", source="monitor")
+                        
+            else:  # 读取失败
+                logger.warning("CO2传感器读取失败，尝试重新初始化")
+                self.status["co2_status"] = "异常"
+                
+                # 尝试重新初始化传感器
+                try:
+                    self.co2_reader = SGP30Reader()
+                    self.status["co2_status"] = "正常"
+                    logger.info("CO2传感器重新初始化成功")
+                except Exception as reinit_error:
+                    logger.error(f"CO2传感器重新初始化失败: {str(reinit_error)}")
+                    self.co2_enabled = False
+                    
+            self.co2_last_read_time = current_time
+            
+        except Exception as e:
+            logger.error(f"更新CO2数据失败: {str(e)}")
+            self.status["co2_status"] = "异常"
+            
+            # 如果连续失败，暂时禁用CO2传感器
+            if current_time - self.co2_last_read_time > self.co2_read_interval * 3:
+                logger.warning("CO2传感器连续失败，暂时禁用")
+                self.co2_enabled = False
+                self.status["co2_status"] = "未连接"
     
     def _update_frame_rate(self):
         """更新帧率计算"""
@@ -287,11 +370,11 @@ class SystemMonitor:
             self._safe_log('error', f"通知检测管理器配置变更失败: {str(e)}")
         
         # 2. 更新摄像头配置
-        if 'cameras' in new_config and new_config['cameras'] != old_config.get('cameras', {}):
+        if 'nodes' in new_config and new_config['nodes'] != old_config.get('nodes', {}):
             self._safe_log('info', "摄像头配置已更改，重新加载摄像头")
             try:
-                if self.camera_manager and hasattr(self.camera_manager, '_load_cameras'):
-                    self.camera_manager._load_cameras()
+                if self.node_manager and hasattr(self.node_manager, '_load_nodes'):
+                    self.node_manager._load_nodes()
             except Exception as e:
                 logger.error(f"重新加载摄像头失败: {str(e)}")
                 self._safe_log('error', f"重新加载摄像头失败: {str(e)}")

@@ -16,7 +16,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 导入自定义模块
 from config_manager import ConfigManager
 from logger_manager import LogManager
-from camera_manager import CameraManager
+from node_manager import NodeManager
 from detection_manager import DetectionManager
 from utils import ensure_dirs_exist, fix_ws_url, get_system_info
 # 导入系统监控模块
@@ -29,7 +29,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 # 全局管理器实例
 config_manager = None
 log_manager = None
-camera_manager = None
+node_manager = None
 detection_manager = None
 ws_client = None
 system_monitor = None  # 添加系统监控实例
@@ -37,7 +37,7 @@ system_monitor = None  # 添加系统监控实例
 # 初始化应用
 def initialize_app():
     """初始化应用程序"""
-    global config_manager, log_manager, camera_manager, detection_manager, ws_client, system_monitor
+    global config_manager, log_manager, node_manager, detection_manager, ws_client, system_monitor
     
     # 创建必要的目录，确保它们位于根目录而非src目录下
     ensure_dirs_exist(
@@ -54,28 +54,29 @@ def initialize_app():
     log_manager = LogManager(log_dir=os.path.join(ROOT_DIR, 'logs'), max_memory_logs=1000)
     
     # 初始化摄像头管理器
-    camera_manager = CameraManager(config_manager)
+    node_manager = NodeManager(config_manager)
     
     # 初始化WebSocket客户端
     ws_client = init_websocket_client()
     
     log_manager.ws_client = ws_client
     
-    # 初始化检测管理器
+    # 初始化检测管理器 - 仅初始化，暂不启动检测线程
     detection_manager = DetectionManager(
         config_manager=config_manager,
-        camera_manager=camera_manager,
+        node_manager=node_manager,
         log_manager=log_manager,
-        ws_client=ws_client
+        ws_client=ws_client,
+        system_monitor=system_monitor
     )
     
-    # 启动检测服务
+    # 只进行初始化，不启动检测线程
     detection_manager.initialize()
     
     # 初始化并启动系统监控模块
     system_monitor = SystemMonitor(
         config_manager=config_manager,
-        camera_manager=camera_manager,
+        node_manager=node_manager,
         detection_manager=detection_manager,
         log_manager=log_manager,
         ws_client=ws_client
@@ -83,9 +84,17 @@ def initialize_app():
     system_monitor.start()
     
     log_manager.info("应用程序初始化完成")
+    
+    # 等待一段时间，确保所有组件就绪
+    time.sleep(2)
+    
+    # 系统初始化完成后，启动检测线程
+    log_manager.info("系统准备就绪，开始启动检测线程...")
+    detection_manager.start_detection()
+    
     return True
 
-# 改进WebSocket客户端初始化函数
+# WebSocket客户端初始化函数
 def init_websocket_client():
     """初始化WebSocket客户端"""
     # 获取WebSocket服务器URL和终端ID
@@ -286,18 +295,18 @@ async def handle_ws_command(command_data):
             else:
                 log_manager.warning(f"无效的间隔值: {interval}")        
         
-        elif command == "update_cameras":
-            cameras = params.get("cameras")
-            if isinstance(cameras, dict):
+        elif command == "update_nodes":
+            nodes = params.get("nodes")
+            if isinstance(nodes, dict):
                 # 更新配置
-                config_manager.set('cameras', cameras)
+                config_manager.set('nodes', nodes)
                 config_manager.save_config()
                 
-                # 重新加载摄像头
-                camera_manager._load_cameras()
+                # 重新加载节点
+                node_manager._load_nodes()
                 
             else:
-                log_manager.warning(f"无效的摄像头配置: {cameras}")
+                log_manager.warning(f"无效的摄像头配置: {nodes}")
         
         elif command == "restart":
             log_manager.info("正在重启服务...")
@@ -338,6 +347,31 @@ async def handle_ws_command(command_data):
                     success=False
                 )
         
+        elif command == "get_logs":
+            # 获取并返回当前日志 - 批量发送到服务端
+            try:
+                # 获取最近的日志
+                count = params.get("count", 100)  # 默认获取100条日志
+                logs_data = log_manager.get_logs(count)
+                
+                log_manager.info(f"返回 {len(logs_data)} 条日志数据")
+                
+                # 通过WebSocket发送日志批次
+                send_success = await ws_client.send_command_response(command, logs_data, success=True)
+                if not send_success:
+                    log_manager.warning("通过WebSocket发送日志失败")
+                                
+            except Exception as e:
+                log_manager.error(f"处理get_logs命令失败: {str(e)}")
+                log_manager.error(f"异常堆栈: {traceback.format_exc()}")
+                
+                # 发送错误响应
+                await ws_client.send_command_response(
+                    command, 
+                    {"error": f"获取日志失败: {str(e)}"}, 
+                    success=False
+                )
+        
         elif command == "update_config" or command == "change_config":
             # 更新配置
             config_data = params
@@ -355,8 +389,8 @@ async def handle_ws_command(command_data):
                 log_manager.info("配置已更新并保存")
                 
                 # 如果摄像头配置变更，重新加载摄像头
-                if 'cameras' in config_data:
-                    camera_manager._load_cameras()
+                if 'nodes' in config_data:
+                    node_manager._load_nodes()
                     log_manager.info("摄像头配置已重新加载")
                 
                 # 如果模式变更，应用新模式
@@ -489,8 +523,8 @@ def config_endpoint():
             config_manager.save_config()
             
             # 如果摄像头配置发生变化，重新加载摄像头
-            if 'cameras' in data:
-                camera_manager._load_cameras()
+            if 'nodes' in data:
+                node_manager._load_nodes()
             
             # 如果模式发生变化，应用新模式
             if mode_changed:
@@ -551,8 +585,8 @@ def control_detection():
 
 
 # API路由 - 接收图像
-@app.route('/api/push_frame/<int:camera_id>', methods=['POST'])
-def receive_frame(camera_id):
+@app.route('/api/push_frame/<int:node_id>', methods=['POST'])
+def receive_frame(node_id):
     """接收并处理上传的图像和环境数据"""
     if not detection_manager.push_running:
         return jsonify({"status": "error", "message": "被动接收模式未启动"}), 400
@@ -569,7 +603,7 @@ def receive_frame(camera_id):
             image_data = image_file.read()
             
             # 处理接收到的帧
-            result = process_received_frame(camera_id, image_data)
+            result = process_received_frame(node_id, image_data)
             
             # 如果有环境数据，更新到结果中
             if temperature is not None:
@@ -581,7 +615,7 @@ def receive_frame(camera_id):
             if (temperature is not None or humidity is not None) and ws_client and ws_client.connected:
                 try:
                     node_data = {
-                        "id": camera_id,
+                        "id": node_id,
                         "temperature": temperature,
                         "humidity": humidity
                     }
@@ -590,7 +624,7 @@ def receive_frame(camera_id):
                     if 'detected_count' in result and result['status'] == 'success':
                         node_data["detected_count"] = result['detected_count']
                     
-                    log_manager.info(f"接收到节点{camera_id}的数据: 温度={temperature}, 湿度={humidity}, 检测结果={node_data.get('detected_count', 'N/A')}")
+                    log_manager.info(f"接收到节点{node_id}的数据: 温度={temperature}, 湿度={humidity}, 检测结果={node_data.get('detected_count', 'N/A')}")
                     # 获取事件循环
                     try:
                         loop = asyncio.get_event_loop()
@@ -612,14 +646,14 @@ def receive_frame(camera_id):
             if temperature is not None or humidity is not None:
                 # 准备节点数据
                 node_data = {
-                    "id": camera_id
+                    "id": node_id
                 }
                 if temperature is not None:
                     node_data["temperature"] = temperature
                 if humidity is not None:
                     node_data["humidity"] = humidity
                 
-                log_manager.info(f"接收到节点{camera_id}的环境数据: 温度={temperature}, 湿度={humidity}")
+                log_manager.info(f"接收到节点{node_id}的环境数据: 温度={temperature}, 湿度={humidity}")
                 
                 # 通过WebSocket发送
                 if ws_client and ws_client.connected:
@@ -720,7 +754,7 @@ def serve_static(path):
         return jsonify({"error": "Internal server error"}), 500
 
 # 修改帧处理函数，更新帧率计数
-def process_received_frame(camera_id, image_data):
+def process_received_frame(node_id, image_data):
     """处理接收到的图像帧（用于被动接收模式）"""
     if not detection_manager.push_running:
         return {'status': 'error', 'message': '被动接收模式未启动'}
@@ -738,13 +772,13 @@ def process_received_frame(camera_id, image_data):
         
         # 如果配置为保存图像，则保存图像
         if config_manager.get('save_image', True):
-            camera_manager.save_image(image, camera_id)
+            node_manager.save_image(image, node_id)
         
         # 分析图像
-        count = detection_manager.analyze_image(image, camera_id)
+        count = detection_manager.analyze_image(image, node_id)
         
         # 上传结果
-        detection_manager.upload_result(camera_id, count)
+        detection_manager.upload_result(node_id, count)
         
         # 更新帧率统计
         system_monitor.add_frame_processed()

@@ -4,8 +4,8 @@ import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService } from '../services'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HeatMap from '../components/HeatMap.vue'
-import AreaHistoryChart from '../components/AreaHistoryChart.vue'
-import HardwareNodeStatus from '../components/HardwareNodeStatus.vue'
+import AreaHistoryChart from '../components/chart/AreaHistoryChart.vue'
+import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
 
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -15,7 +15,10 @@ const summary = ref<SummaryData>({
   historical_data_count: 0,
   people_count: 0,
   notice_count: 0,
-  alerts_count: 0
+  alerts_count: 0,
+  users_count: 0,
+  terminals_online_count: 0,
+  nodes_online_count: 0,
 })
 
 const pageState = reactive({
@@ -137,7 +140,7 @@ const calculateCardWidths = () => {
     cardAnimationState.cardWidths.push(cardWidth)
   })
 
-  console.log('卡片宽度数组:', cardAnimationState.cardWidths)
+
 }
 
 const animateCards = () => {
@@ -595,7 +598,7 @@ function formatTime(value: string) {
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  z-index: 1000;
+  z-index: 9999;
   border: 1px solid rgba(56, 189, 248, 0.3);
   box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
 }

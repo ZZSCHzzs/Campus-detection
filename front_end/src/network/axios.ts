@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { useAuthStore } from '../stores/auth';
 
 export enum ApiMode {
   REMOTE = 'remote',
@@ -70,31 +71,47 @@ class ApiCore {
       instance.interceptors.response.use(
         response => response,
         async error => {
-          if (!error.response) return Promise.reject(error);
-          
           const originalRequest = error.config;
-          if (error.response.status === 401 && !originalRequest._retry) {
+          
+          // 如果收到401错误且请求未被标记为重试过
+          if (error.response && error.response.status === 401 && !originalRequest._retry) {
+            if (isRefreshing) {
+              // 如果正在刷新token，将请求加入队列
+              return new Promise(resolve => {
+                subscribeTokenRefresh(token => {
+                  originalRequest.headers.Authorization = `Bearer ${token}`;
+                  resolve(axios(originalRequest));
+                });
+              });
+            }
+            
             originalRequest._retry = true;
+            isRefreshing = true;
             
             try {
-              // 动态导入auth store，避免循环依赖
-              const { useAuthStore } = await import('../stores/auth');
+              // 尝试刷新token
               const authStore = useAuthStore();
-              const refreshed = await authStore.refreshAccessToken();
+              const refreshSuccess = await authStore.refreshAccessToken();
               
-              if (refreshed) {
-                const token = localStorage.getItem('access');
-                originalRequest.headers['Authorization'] = `JWT ${token}`;
-                return instance(originalRequest);
+              if (refreshSuccess) {
+                const newToken = authStore.accessToken;
+                onTokenRefreshed(newToken);
+                originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                return axios(originalRequest);
               } else {
+                // 刷新失败，可能需要重新登录
+                console.error('Token刷新失败，需要重新登录');
                 authStore.logout();
+                return Promise.reject(error);
               }
-            } catch (error) {
-              const { useAuthStore } = await import('../stores/auth');
-              const authStore = useAuthStore();
-              authStore.logout();
+            } catch (refreshError) {
+              console.error('Token刷新出错:', refreshError);
+              return Promise.reject(refreshError);
+            } finally {
+              isRefreshing = false;
             }
           }
+          
           return Promise.reject(error);
         }
       );
@@ -152,3 +169,18 @@ export const authApi = apiCore.createInstance('auth', {
   mode: ApiMode.REMOTE,
   addTrailingSlash: true
 });
+
+// 用于跟踪正在刷新的过程
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+// 将需要重试的请求加入队列
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+// 刷新token后执行队列中的请求
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach(cb => cb(token));
+  refreshSubscribers = [];
+};

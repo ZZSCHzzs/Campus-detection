@@ -184,7 +184,7 @@ const getAlertTypeType = (type) => {
     'fire': 'danger',
     'guard': 'info',
     'crowd': 'warning',
-    'health': 'error',
+    'health': 'success',
     'other': 'info'
   }
   return typeMap[type] || 'info'
