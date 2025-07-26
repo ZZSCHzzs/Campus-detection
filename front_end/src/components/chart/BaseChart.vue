@@ -8,6 +8,7 @@ import { Refresh, Download, FullScreen, Calendar } from '@element-plus/icons-vue
 interface Props {
   title?: string
   height?: string
+  width?: string  // 新增width prop
   loading?: boolean
   error?: string | null
   showTimeRange?: boolean
@@ -24,6 +25,8 @@ interface Props {
   // 新增props
   hideTitle?: boolean
   hideControls?: boolean
+  // 数据就绪标志 - 新增
+  dataReady?: boolean
   // 新增样式配置选项
   styleConfig?: {
     // 网格线配置
@@ -41,6 +44,8 @@ interface Props {
     // 文字配置
     textColor?: string
     fontSize?: number
+    // 新增：线条宽度
+    lineWidth?: number
     // 边距配置
     padding?: {
       top?: string
@@ -54,12 +59,24 @@ interface Props {
     // 工具提示配置
     tooltipBackgroundColor?: string
     tooltipTextColor?: string
+    // 新增：标题样式
+    titleStyle?: {
+      fontSize?: number
+      fontWeight?: string
+      color?: string
+    }
+    // 新增：区域填充样式
+    areaStyle?: {
+      opacity?: number
+      colorStops?: Array<{ offset: number; color: string }>
+    }
   }
 }
 
 const props = withDefaults(defineProps<Props>(), {
   title: '',
-  height: '400px',
+  height: '300px',
+  width: '100%',
   loading: false,
   error: null,
   showTimeRange: true,
@@ -93,7 +110,8 @@ const props = withDefaults(defineProps<Props>(), {
   }),
   // 新增默认值
   hideTitle: false,
-  hideControls: false
+  hideControls: false,
+  dataReady: false  // 新增默认值
 })
 
 // Emits定义
@@ -113,63 +131,69 @@ const isFullscreen = ref(false)
 const internalLoading = ref(false)
 
 // 计算属性
+// 计算属性 - 修改containerStyle
 const containerStyle = computed(() => ({
   height: props.height,
-  width: '100%',
+  width: props.width,  // 使用props.width
   position: 'relative' as const
 }))
 
-const loadingState = computed(() => props.loading || internalLoading.value)
 
-// 初始化图表
+// 初始化图表 - 修复loading状态
 const initChart = async () => {
   if (!chartContainer.value) {
     console.warn('图表容器不存在')
     return
   }
 
+  // 检查数据是否准备就绪
+  if (!props.dataReady && !props.loading) {
+    console.log('数据未准备就绪，等待数据加载完成')
+    return
+  }
+
   try {
+    // 设置内部加载状态
+    internalLoading.value = true
+
     // 销毁已存在的图表
     if (chart.value) {
       chart.value.dispose()
-      chart.value = undefined // 显式设为undefined
+      chart.value = undefined
     }
 
     // 强制等待一帧以确保DOM完全渲染
     await new Promise(resolve => requestAnimationFrame(resolve))
-    // 额外添加一个短暂延迟，确保弹窗完全展开
     await new Promise(resolve => setTimeout(resolve, 50))
 
     // 检查容器尺寸
-    const containerWidth = chartContainer.value.clientWidth
-    const containerHeight = chartContainer.value.clientHeight
+    let containerWidth = chartContainer.value.clientWidth
+    let containerHeight = chartContainer.value.clientHeight
 
+    // 如果容器尺寸无效，尝试从props获取
+    if (!containerWidth || containerWidth <= 0) {
+      containerWidth = parseInt(props.width, 10)
+    }
+    if (!containerHeight || containerHeight <= 0) {
+      containerHeight = parseInt(props.height, 10)
+    }
 
     if (containerWidth <= 0 || containerHeight <= 0) {
-      console.warn('图表容器尺寸异常，尝试修复')
-      // 尝试设置明确的尺寸
-      chartContainer.value.style.height = props.height
-      chartContainer.value.style.width = '100%'
-      chartContainer.value.style.minHeight = '300px' // 添加最小高度
-
-      // 再次检查尺寸
-      await nextTick()
-      const newWidth = chartContainer.value.clientWidth
-      const newHeight = chartContainer.value.clientHeight
-
-      if (newWidth <= 0 || newHeight <= 0) {
-        console.error('无法修复容器尺寸，图表可能无法正确渲染')
-        // 设置固定像素尺寸作为最后尝试
-        chartContainer.value.style.height = '400px'
-        chartContainer.value.style.width = '100%'
-        await nextTick()
+      console.error('无法获取有效容器尺寸，图表可能无法正确渲染')
+      // 可以在这里设置一个默认的最小尺寸，以防完全无法渲染
+      if (chartContainer.value) {
+        if (containerWidth <= 0) chartContainer.value.style.width = '100%'
+        if (containerHeight <= 0) chartContainer.value.style.height = '300px' // 降级到固定高度
       }
+      await nextTick()
+      containerWidth = chartContainer.value.clientWidth
+      containerHeight = chartContainer.value.clientHeight
     }
 
     // 创建新图表，使用显式尺寸
     const opts = {
-      width: chartContainer.value.clientWidth || undefined,
-      height: chartContainer.value.clientHeight || undefined,
+      width: containerWidth || undefined,
+      height: containerHeight || undefined,
       renderer: 'canvas' as const
     }
     const existChart = echarts.getInstanceByDom(chartContainer.value)
@@ -178,8 +202,7 @@ const initChart = async () => {
     }
     chart.value = echarts.init(chartContainer.value, props.theme, opts)
 
-
-    // 设置基础配置 - 应用样式配置
+    // 设置基础配置
     const baseOption = {
       animation: true,
       animationDuration: 1000,
@@ -268,14 +291,22 @@ const initChart = async () => {
 
       // 触发图表就绪事件
       emit('chartReady', chart.value)
+      console.log('图表初始化完成')
+      
+      // 初始化完成后更新加载状态 - 修复点
+      internalLoading.value = false
+
     } catch (error) {
       console.error('图表初始化失败:', error)
       ElMessage.error('图表初始化失败')
+      // 出错时也要更新加载状态
+      internalLoading.value = false
     }
-  }
-  catch (error) {
+  } catch (error) {
     console.error('图表初始化失败:', error)
     ElMessage.error('图表初始化失败')
+    // 出错时也要更新加载状态
+    internalLoading.value = false
   }
 }
 
@@ -305,8 +336,15 @@ const echartsSeriesTypes = ['line', 'bar', 'pie', 'scatter', 'effectScatter', 'r
   'graph', 'sankey', 'funnel', 'gauge', 'pictorialBar', 'themeRiver', 'custom'];
 
 const updateChart = (option: any) => {
+  // 如果图表实例不存在，先初始化图表
   if (!chart.value) {
-    console.warn('图表实例不存在，跳过更新')
+    console.warn('图表实例不存在，尝试初始化图表')
+    initChart().then(() => {
+      // 初始化完成后再次调用 updateChart
+      if (chart.value && option) {
+        updateChart(option)
+      }
+    })
     return
   }
 
@@ -317,9 +355,176 @@ const updateChart = (option: any) => {
   }
 
   try {
+    // 设置内部加载状态
+    internalLoading.value = true
+
     // 深度克隆选项避免污染原始数据
     const clonedOption = JSON.parse(JSON.stringify(option))
 
+    // **关键修复：合并样式配置**
+    // 应用样式配置到图表选项
+    if (props.styleConfig) {
+      // 合并网格配置
+      if (!clonedOption.grid) clonedOption.grid = {}
+      clonedOption.grid = {
+        ...clonedOption.grid,
+        top: props.styleConfig.padding?.top || clonedOption.grid.top || '15%',
+        right: props.styleConfig.padding?.right || clonedOption.grid.right || '4%',
+        bottom: props.styleConfig.padding?.bottom || clonedOption.grid.bottom || '10%',
+        left: props.styleConfig.padding?.left || clonedOption.grid.left || '3%',
+        containLabel: true
+      }
+
+      // 合并背景色
+      if (props.styleConfig.backgroundColor) {
+        clonedOption.backgroundColor = props.styleConfig.backgroundColor
+      }
+
+      // 合并颜色配置
+      if (props.styleConfig.seriesColors) {
+        clonedOption.color = props.styleConfig.seriesColors
+      }
+
+      // 合并图例配置
+      if (!clonedOption.legend) clonedOption.legend = {}
+      clonedOption.legend = {
+        ...clonedOption.legend,
+        show: props.styleConfig.showLegend !== false,
+        [props.styleConfig.legendPosition || 'top']: '5%',
+        textStyle: {
+          fontSize: props.styleConfig.fontSize || 12,
+          color: props.styleConfig.textColor || '#333'
+        }
+      }
+
+      // 合并提示框配置
+      if (!clonedOption.tooltip) clonedOption.tooltip = {}
+      clonedOption.tooltip = {
+        ...clonedOption.tooltip,
+        trigger: 'axis',
+        backgroundColor: props.styleConfig.tooltipBackgroundColor || 'rgba(50, 50, 50, 0.9)',
+        borderColor: '#333',
+        borderWidth: 1,
+        textStyle: {
+          color: props.styleConfig.tooltipTextColor || '#fff',
+          fontSize: props.styleConfig.fontSize || 12
+        }
+      }
+
+      // 合并X轴配置
+      if (!clonedOption.xAxis) clonedOption.xAxis = {}
+      if (Array.isArray(clonedOption.xAxis)) {
+        clonedOption.xAxis.forEach(axis => {
+          if (!axis.axisLine) axis.axisLine = {}
+          axis.axisLine.lineStyle = {
+            color: props.styleConfig.axisLineColor || '#e0e0e0'
+          }
+          if (!axis.axisLabel) axis.axisLabel = {}
+          axis.axisLabel = {
+            ...axis.axisLabel,
+            color: props.styleConfig.axisLabelColor || '#666',
+            fontSize: props.styleConfig.axisLabelFontSize || 11
+          }
+        })
+      } else {
+        if (!clonedOption.xAxis.axisLine) clonedOption.xAxis.axisLine = {}
+        clonedOption.xAxis.axisLine.lineStyle = {
+          color: props.styleConfig.axisLineColor || '#e0e0e0'
+        }
+        if (!clonedOption.xAxis.axisLabel) clonedOption.xAxis.axisLabel = {}
+        clonedOption.xAxis.axisLabel = {
+          ...clonedOption.xAxis.axisLabel,
+          color: props.styleConfig.axisLabelColor || '#666',
+          fontSize: props.styleConfig.axisLabelFontSize || 11
+        }
+      }
+
+      // 合并Y轴配置
+      if (!clonedOption.yAxis) clonedOption.yAxis = {}
+      if (Array.isArray(clonedOption.yAxis)) {
+        clonedOption.yAxis.forEach(axis => {
+          if (!axis.axisLabel) axis.axisLabel = {}
+          axis.axisLabel = {
+            ...axis.axisLabel,
+            color: props.styleConfig.axisLabelColor || '#666',
+            fontSize: props.styleConfig.axisLabelFontSize || 11
+          }
+          if (!axis.splitLine) axis.splitLine = {}
+          axis.splitLine = {
+            show: props.styleConfig.showGridLine !== false,
+            lineStyle: {
+              color: props.styleConfig.gridLineColor || '#f0f0f0',
+              type: props.styleConfig.gridLineType || 'dashed'
+            }
+          }
+          if (!axis.nameTextStyle) axis.nameTextStyle = {}
+          axis.nameTextStyle = {
+            color: props.styleConfig.textColor || '#666',
+            fontSize: props.styleConfig.fontSize || 12
+          }
+        })
+      } else {
+        if (!clonedOption.yAxis.axisLabel) clonedOption.yAxis.axisLabel = {}
+        clonedOption.yAxis.axisLabel = {
+          ...clonedOption.yAxis.axisLabel,
+          color: props.styleConfig.axisLabelColor || '#666',
+          fontSize: props.styleConfig.axisLabelFontSize || 11
+        }
+        if (!clonedOption.yAxis.splitLine) clonedOption.yAxis.splitLine = {}
+        clonedOption.yAxis.splitLine = {
+          show: props.styleConfig.showGridLine !== false,
+          lineStyle: {
+            color: props.styleConfig.gridLineColor || '#f0f0f0',
+            type: props.styleConfig.gridLineType || 'dashed'
+          }
+        }
+        if (!clonedOption.yAxis.nameTextStyle) clonedOption.yAxis.nameTextStyle = {}
+        clonedOption.yAxis.nameTextStyle = {
+          color: props.styleConfig.textColor || '#666',
+          fontSize: props.styleConfig.fontSize || 12
+        }
+      }
+
+      // 合并系列配置
+      if (clonedOption.series && Array.isArray(clonedOption.series)) {
+        clonedOption.series.forEach((series, index) => {
+          // 应用线条样式
+          if (series.type === 'line') {
+            if (!series.lineStyle) series.lineStyle = {}
+            series.lineStyle = {
+              ...series.lineStyle,
+              width: props.styleConfig.lineWidth || 2,
+              color: props.styleConfig.seriesColors?.[index] || series.lineStyle.color
+            }
+            
+            // 应用区域填充样式
+            if (props.styleConfig.areaStyle) {
+              series.areaStyle = {
+                opacity: props.styleConfig.areaStyle.opacity || 0.1,
+                color: props.styleConfig.areaStyle.colorStops ? {
+                  type: 'linear',
+                  x: 0, y: 0, x2: 0, y2: 1,
+                  colorStops: props.styleConfig.areaStyle.colorStops
+                } : undefined
+              }
+            }
+          }
+          
+          // 应用标题样式
+          if (props.styleConfig.titleStyle && clonedOption.title) {
+            if (!clonedOption.title.textStyle) clonedOption.title.textStyle = {}
+            clonedOption.title.textStyle = {
+              ...clonedOption.title.textStyle,
+              fontSize: props.styleConfig.titleStyle.fontSize || 16,
+              fontWeight: props.styleConfig.titleStyle.fontWeight || 'normal',
+              color: props.styleConfig.titleStyle.color || props.styleConfig.textColor || '#333'
+            }
+          }
+        })
+      }
+    }
+
+    // ... 其余的验证和设置逻辑保持不变
     // 确保基础结构存在
     if (!clonedOption.series) {
       clonedOption.series = []
@@ -389,31 +594,23 @@ const updateChart = (option: any) => {
       chart.value.clear()
       chart.value.setOption(clonedOption, { notMerge: true })
       
-      // 处理加载状态
-      if (loadingState.value) {
-        chart.value.showLoading({
-          text: '加载中...',
-          color: '#409EFF',
-          textColor: '#409EFF',
-          maskColor: 'rgba(255, 255, 255, 0.8)',
-          zlevel: 0,
-          fontSize: 12,
-          showSpinner: true,
-          spinnerRadius: 10,
-          lineWidth: 2
-        })
-      } else {
-        chart.value.hideLoading()
-      }
-      
-      // 检查图表容器尺寸并调整
+      // 确保图表正确渲染
       nextTick(() => {
-        if (chart.value && (chart.value.getWidth() === 0 || chart.value.getHeight() === 0)) {
-          console.warn('图表尺寸为0，尝试调整大小')
+        if (chart.value) {
+          // 检查图表容器尺寸并调整
+          if (chart.value.getWidth() === 0 || chart.value.getHeight() === 0) {
+            console.warn('图表尺寸为0，尝试调整大小')
+            chart.value.resize()
+          }
+          
+          // 强制重绘图表
           chart.value.resize()
+          
+          // 数据渲染成功后更新加载状态
+          console.log('图表数据渲染完成')
         }
       })
-      
+      internalLoading.value = false
     } catch (setOptionError) {
       console.error('ECharts setOption 失败:', setOptionError)
       
@@ -429,13 +626,51 @@ const updateChart = (option: any) => {
         chart.value.clear()
         chart.value.setOption(safeOption, { notMerge: true })
       }
+      
+      // 出错时也要更新加载状态
+      internalLoading.value = false
     }
     
   } catch (error) {
     console.error('图表更新失败:', error)
     ElMessage.error('图表更新失败')
+    // 出错时也要更新加载状态
+    internalLoading.value = false
   }
 }
+
+// 监听数据就绪状态 - 修改逻辑
+watch(() => props.dataReady, (newVal) => {
+  if (newVal && !chart.value) {
+    console.log('数据准备就绪，开始初始化图表')
+    nextTick(() => {
+      initChart()
+    })
+  } else if (newVal && chart.value) {
+    // 如果图表已存在且数据准备就绪，更新加载状态
+    internalLoading.value = false
+  }
+})
+
+// 监听loading状态变化 - 修改逻辑
+watch(() => props.loading, (newVal, oldVal) => {
+  if (chart.value) {
+    if (newVal) {
+      chart.value.showLoading()
+    } else {
+      chart.value.hideLoading()
+      nextTick(() => {
+        if (chart.value) {
+          chart.value.resize()
+          // 外部loading结束时，如果数据已准备就绪，更新内部loading状态
+          if (props.dataReady) {
+            internalLoading.value = false
+          }
+        }
+      })
+    }
+  }
+})
 
 // 导出图表
 const exportChart = () => {
@@ -521,49 +756,28 @@ let cleanupChartEvents: (() => void) | null = null
 
 // 生命周期
 onMounted(async () => {
-  // 移除错误屏蔽相关代码
-  // console.error = filteredConsoleError
-  // window.addEventListener('error', handleGlobalError, true)
-  // window.addEventListener('unhandledrejection', handleUnhandledRejection, true)
-  
   // 确保DOM完全渲染
   await nextTick()
 
-  // 使用requestAnimationFrame确保浏览器已完成布局
-  requestAnimationFrame(async () => {
-    // 添加短暂延迟，进一步确保DOM稳定
-    setTimeout(async () => {
-      await initChart()
-      if (chart.value) {
-        const cleanup = setupChartEvents()
-        if (cleanup) {
-          cleanupChartEvents = cleanup
-        }
-      }
-
-      // 如果图表初始化后宽度为0，尝试再次初始化
-      if (chart.value && chart.value.getWidth() === 0) {
-        console.warn('图表宽度为0，尝试重新初始化')
-        setTimeout(async () => {
-          await initChart()
-          if (chart.value && !cleanupChartEvents) {
-            const cleanup = setupChartEvents();
-            if (cleanup) {
-              cleanupChartEvents = cleanup;
-            }
+  // 只有在数据准备就绪时才初始化图表
+  if (props.dataReady) {
+    requestAnimationFrame(async () => {
+      setTimeout(async () => {
+        await initChart()
+        if (chart.value) {
+          const cleanup = setupChartEvents()
+          if (cleanup) {
+            cleanupChartEvents = cleanup
           }
-        }, 200)
-      }
-    }, 100)
-  })
+        }
+      }, 100)
+    })
+  } else {
+    console.log('组件已挂载，等待数据准备就绪')
+  }
 })
 
 onUnmounted(() => {
-  // 移除错误处理恢复相关代码
-  // console.error = originalConsoleError
-  // window.removeEventListener('error', handleGlobalError, true)
-  // window.removeEventListener('unhandledrejection', handleUnhandledRejection, true)
-  
   if (cleanupChartEvents) {
     cleanupChartEvents()
   }
@@ -575,7 +789,7 @@ onUnmounted(() => {
 
 <template>
   <div class="base-chart" :class="{ 'fullscreen': isFullscreen }">
-    <!-- 图表头部 - 修改显示条件 -->
+    <!-- 图表头部 -->
     <div v-if="!hideTitle && !hideControls && (title || showTimeRange || showRefresh || showExport || showFullscreen)" class="chart-header">
       <div class="chart-title">
         <span v-if="!hideTitle && title">{{ title }}</span>
@@ -590,17 +804,18 @@ onUnmounted(() => {
 
         <!-- 控制按钮 -->
         <div class="chart-buttons">
-          <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" />
-
+          <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="internalLoading" />
           <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" />
-
           <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" />
         </div>
       </div>
     </div>
 
     <!-- 图表容器 -->
-    <div class="chart-content">
+    <div 
+      class="chart-content" 
+      v-loading="internalLoading"
+    >
       <div ref="chartContainer" :style="containerStyle" class="chart-container" />
 
       <!-- 错误状态 -->
@@ -616,7 +831,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 无数据状态 -->
-      <div v-if="!loading && !error && showEmpty" class="chart-empty">
+      <div v-if="!loading && !error && showEmpty && dataReady" class="chart-empty">
         <el-empty description="暂无数据" :image-size="100" />
       </div>
     </div>

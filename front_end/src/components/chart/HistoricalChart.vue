@@ -7,13 +7,16 @@ import type { HistoricalData } from '../../types.ts'
 
 // Props定义
 interface Props {
-  areaId: number
+  areaId?: number  // 修改为可选，支持默认值
   areaName?: string
   height?: string
+  width?: string  // 新增：宽度支持
   showControls?: boolean
   hideTitle?: boolean
   hideControls?: boolean
   chartType?: 'line' | 'bar' | 'area'
+  hideDataZoom?: boolean  // 新增：隐藏下方范围选择条
+  hideStatistics?: boolean // 新增：隐藏统计信息
   // 新增样式配置支持
   styleConfig?: {
     gridLineColor?: string
@@ -26,6 +29,7 @@ interface Props {
     backgroundColor?: string
     textColor?: string
     fontSize?: number
+    lineWidth?: number
     padding?: {
       top?: string
       right?: string
@@ -36,15 +40,28 @@ interface Props {
     showLegend?: boolean
     tooltipBackgroundColor?: string
     tooltipTextColor?: string
+    titleStyle?: {
+      fontSize?: number
+      fontWeight?: string
+      color?: string
+    }
+    areaStyle?: {
+      opacity?: number
+      colorStops?: Array<{ offset: number; color: string }>
+    }
   }
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  areaId: 2,  // 默认 areaId = 2
   height: '100%',
+  width: '100%',  // 新增：默认宽度
   showControls: true,
   hideTitle: false,
   hideControls: false,
   chartType: 'line',
+  hideDataZoom: false,  // 默认显示 dataZoom
+  hideStatistics: false, // 默认显示统计信息
   styleConfig: () => ({})
 })
 
@@ -149,7 +166,7 @@ const fetchHistoricalData = async (areaId: number, hours: number) => {
   }
 }
 
-// 生成图表配置
+// 生成图表配置 - 纯数据结构，无样式
 const generateChartOption = () => {
   const times = historicalData.value.map(item => 
     new Date(item.timestamp).toLocaleTimeString('zh-CN', { 
@@ -167,59 +184,25 @@ const generateChartOption = () => {
   const avgCount = counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0
   const currentCount = counts[counts.length - 1] || 0
 
+  // 基础系列配置 - 不包含样式
   const baseSeriesConfig = {
     name: '检测人数',
     data: counts,
-    smooth: true,
-    lineStyle: {
-      width: 3,
-      color: '#409EFF'
-    },
-    itemStyle: {
-      color: '#409EFF',
-      borderColor: '#fff',
-      borderWidth: 2
-    },
-    emphasis: {
-      itemStyle: {
-        shadowBlur: 10,
-        shadowColor: 'rgba(64, 158, 255, 0.3)'
-      }
-    }
+    smooth: true
   }
 
   let series
   if (props.chartType === 'area') {
     series = {
       ...baseSeriesConfig,
-      type: 'line',
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
-          ]
-        }
-      }
+      type: 'line'
+      // areaStyle 由 BaseChart 根据 styleConfig 处理
     }
   } else if (props.chartType === 'bar') {
     series = {
       ...baseSeriesConfig,
-      type: 'bar',
-      barWidth: '60%',
-      itemStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: '#409EFF' },
-            { offset: 1, color: '#79bbff' }
-          ]
-        },
-        borderRadius: [4, 4, 0, 0]
-      }
+      type: 'bar'
+      // barWidth, itemStyle 由 BaseChart 根据 styleConfig 处理
     }
   } else {
     series = {
@@ -229,16 +212,10 @@ const generateChartOption = () => {
   }
 
   return {
-    // 在 generateChartOption 函数中调整标题配置
     title: {
-      text: `当前:${currentCount} | 峰值:${maxCount} | 平均:${avgCount}`,
-      textStyle: {
-        fontSize: 12, // 减小字体
-        fontWeight: 'normal',
-        color: '#666'
-      },
+      text: props.hideStatistics ? '' : `当前:${currentCount} | 峰值:${maxCount} | 平均:${avgCount}`,
       right: '5%',
-      top: '0%' // 调整位置
+      top: '0%'
     },
     tooltip: {
       trigger: 'axis',
@@ -250,35 +227,42 @@ const generateChartOption = () => {
     xAxis: {
       data: times,
       axisLabel: {
-        rotate: 45,
+        rotate: 0, // 取消旋转
         formatter: (value: string) => {
-          // 如果数据点太多，只显示部分标签
-          if (times.length > 20) {
-            const index = times.indexOf(value)
-            return index % 3 === 0 ? value : ''
+          const date = new Date(value)
+          // 格式化为 HH:mm
+          const hours = date.getHours().toString().padStart(2, '0')
+          const minutes = date.getMinutes().toString().padStart(2, '0')
+          const formattedTime = `${hours}:${minutes}`
+
+          // 根据数据量决定显示频率
+          const total = times.length
+          const index = times.indexOf(value)
+          if (total > 24) { // 如果数据点多于24个
+            // 每隔 (total / 8) 个点显示一个标签，保证最多显示约8个标签
+            const interval = Math.floor(total / 3)
+            return index % interval === 0 ? formattedTime : ''
+          } else if (total > 10) { // 如果数据点在10到24个之间
+            return index % 2 === 0 ? formattedTime : '' // 每隔一个显示
           }
-          return value
+          return formattedTime // 数据点少于10个时全部显示
         }
       }
     },
     yAxis: {
       name: '人数',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      },
       axisLabel: {
         formatter: '{value}人'
       },
       min: 0
     },
     series: [series],
-    dataZoom: [
+    dataZoom: props.hideDataZoom ? [] : [
       {
         type: 'slider',
         show: historicalData.value.length > 20,
-        start: 0,  // 修改：从0%开始显示
-        end: 100,  // 到100%结束，显示全部数据
+        start: 0,
+        end: 100,
         height: 20,
         bottom: 10
       }
@@ -358,11 +342,13 @@ const refreshData = () => {
   fetchHistoricalData(props.areaId, currentTimeRange.value)
 }
 
-// 监听props变化
+// 监听props变化 - 修改为支持可选 areaId
 watch(
   () => [props.areaId],
   () => {
-    refreshData()
+    if (props.areaId) {  // 只有当 areaId 存在时才刷新数据
+      refreshData()
+    }
   },
   { immediate: true }
 )
@@ -374,6 +360,7 @@ watch(
       ref="baseChart"
       :title="chartTitle"
       :height="height"
+      :width="width"
       :loading="loading"
       :error="error"
       :show-time-range="showControls && !hideControls"
@@ -400,7 +387,7 @@ watch(
 
 :deep(.chart-container) {
   flex: 1;
-  min-height: 0; /* 重要：防止flex项目超出容器 */
+  min-height: 0;
 }
 
 :deep(.echarts-container) {

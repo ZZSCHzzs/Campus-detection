@@ -452,27 +452,37 @@ function formatTime(value: string) {
                   :dataType="'temperature-humidity'" 
                   :hideTitle="true" 
                   :hideControls="true"
+                  :width="'100%'"
+                  :height="'100%'"
                   :styleConfig="{
-                    gridLineColor: 'rgba(255, 255, 255, 0.15)',
-                    gridLineType: 'solid',
+                    gridLineColor: 'rgba(56, 189, 248, 0.1)',
+                    gridLineType: 'dashed',
                     showGridLine: true,
-                    axisLineColor: 'rgba(255, 255, 255, 0.3)',
-                    axisLabelColor: '#ffffff',
-                    axisLabelFontSize: 12,
-                    seriesColors: ['#ff9500', '#00d4ff'],
+                    axisLineColor: 'rgba(56, 189, 248, 0.5)',
+                    axisLabelColor: '#a5f3fc',
+                    axisLabelFontSize: 11,
+                    seriesColors: ['#22d3ee', '#a78bfa'],
                     backgroundColor: 'transparent',
-                    textColor: '#ffffff',
-                    fontSize: 13,
+                    textColor: '#e0f2fe',
+                    fontSize: 12,
+                    lineWidth: 2,
                     padding: {
-                      top: '8%',
-                      right: '4%',
+                      top: '15%',
+                      right: '5%',
                       bottom: '10%',
-                      left: '10%'
+                      left: '12%'
                     },
                     showLegend: true,
                     legendPosition: 'top',
-                    tooltipBackgroundColor: 'rgba(0, 0, 0, 0.9)',
-                    tooltipTextColor: '#ffffff',
+                    tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    tooltipTextColor: '#f0f9ff',
+                    areaStyle: {
+                      opacity: 0.2,
+                      colorStops: [
+                        { offset: 0, color: 'rgba(34, 211, 238, 0.4)' },
+                        { offset: 1, color: 'rgba(34, 211, 238, 0)' }
+                      ]
+                    }
                   }"
                 />
               </div>
@@ -484,26 +494,38 @@ function formatTime(value: string) {
                   :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" 
                   :hideTitle="true" 
                   :hideControls="true"
+                  :width="'100%'"
+                  :height="'100%'"
+                  :hideDataZoom="true"
+                  :hideStatistics="true"
                   :styleConfig="{
-                    gridLineColor: 'rgba(255, 255, 255, 0.15)',
-                    gridLineType: 'solid',
+                    gridLineColor: 'rgba(56, 189, 248, 0.1)',
+                    gridLineType: 'dashed',
                     showGridLine: true,
-                    axisLineColor: 'rgba(255, 255, 255, 0.3)',
-                    axisLabelColor: '#ffffff',
-                    axisLabelFontSize: 12,
-                    seriesColors: ['#3b82f6'],
+                    axisLineColor: 'rgba(56, 189, 248, 0.5)',
+                    axisLabelColor: '#a5f3fc',
+                    axisLabelFontSize: 11,
+                    seriesColors: ['#4ade80'],
                     backgroundColor: 'transparent',
-                    textColor: '#ffffff',
-                    fontSize: 13,
+                    textColor: '#e0f2fe',
+                    fontSize: 12,
+                    lineWidth: 2,
                     padding: {
-                      top: '8%',
-                      right: '4%',
+                      top: '15%',
+                      right: '5%',
                       bottom: '10%',
-                      left: '10%'
+                      left: '12%'
                     },
                     showLegend: false,
-                    tooltipBackgroundColor: 'rgba(0, 0, 0, 0.9)',
-                    tooltipTextColor: '#ffffff',
+                    tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    tooltipTextColor: '#f0f9ff',
+                    areaStyle: {
+                      opacity: 0.2,
+                      colorStops: [
+                        { offset: 0, color: 'rgba(74, 222, 128, 0.4)' },
+                        { offset: 1, color: 'rgba(74, 222, 128, 0)' }
+                      ]
+                    }
                   }"
                 />
               </div>
@@ -1529,13 +1551,8 @@ function formatTime(value: string) {
   min-height: 0;
   max-width: 300px;
 }
-.left-column-2 {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  flex: 0.4;
-  min-height: 0;
-  
+.left-column-2 .chart-container {
+  height: 50%; /* 设置为父容器的一半高度 */
 }
 
 .section-header {
@@ -1662,11 +1679,7 @@ function formatTime(value: string) {
 
 .chart-inner-container {
   width: 100%;
-  height: 100%;
-  min-height: 180px;
-  display: flex; /* 确保子元素填充 */
-  flex: 1;
-  
+  height: 100%; 
 }
 /* 确保环境图表组件占满容器 */
 .chart-inner-container :deep(.base-chart) {
