@@ -76,6 +76,35 @@ const initThreeScene = () => {
   // 创建场景
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x141c2f)
+  // 添加地图贴图地面
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load('./public/ground.png', (texture) => {
+    // 设置贴图重复（缩放效果），如2倍缩放
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(5.5, 5.5); // X和Y方向缩放2倍
+
+    // 设置贴图旋转（单位为弧度），如旋转45度
+    texture.center.set(0.5, 0.5); // 以中心为旋转点
+    texture.rotation = Math.PI/4*5 - Math.PI/180*4; // 旋转45度
+
+    // 设置贴图偏移（如需要移动贴图）
+    texture.offset.set(0.02, 0.04);
+
+    // 创建平面几何体，大小可根据实际场景调整
+    const planeSize = 200;
+    const geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.4
+    });
+    const plane = new THREE.Mesh(geometry, material);
+    plane.rotation.x = -Math.PI / 2; // 使平面水平
+    plane.position.y = 0.01; // 稍微高于0，避免与模型重叠
+    scene.add(plane);
+  });
 
   // 设置相机
   const { clientWidth, clientHeight } = heatmapRef.value
@@ -100,9 +129,9 @@ const initThreeScene = () => {
   controls.autoRotateSpeed = 3.0  // 设置旋转速度，可以根据需要调整
     
 
-  // 添加坐标轴辅助工具
-  const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
-  scene.add(axesHelper)
+  // // 添加坐标轴辅助工具
+  // const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
+  // scene.add(axesHelper)
   
 
   // 加载OBJ建筑模型
@@ -1281,10 +1310,10 @@ function easeInOutCubic(t) {
       {{ loadingError }}
     </div>
     
-    <div class="heatmap-title">
+    <!-- <div class="heatmap-title">
       <h2 class="title-text">3D热力分布图</h2>
       <div class="subtitle-text">3D Heat Distribution</div>
-    </div>
+    </div> -->
     
     <div class="tech-decoration top-right"></div>
     <div class="tech-decoration bottom-left"></div>
@@ -1303,8 +1332,8 @@ function easeInOutCubic(t) {
       {{ showDebugInfo ? '隐藏结构' : '查看模型结构' }}
     </button>
     
-    <!-- 调试面板 -->
-    <div v-if="showDebugInfo" class="debug-panel">
+    调试面板
+    <!-- <div v-if="showDebugInfo" class="debug-panel">
       <h3>模型结构</h3>
       <div class="structure-tree">
         <div 
@@ -1321,8 +1350,8 @@ function easeInOutCubic(t) {
           @mouseenter="handleItemMouseEnter(item.id)"
           @mouseleave="handleItemMouseLeave"
           @dblclick.stop="startEditName(item)"
-        >
-          <!-- 可见性切换按钮 -->
+        > -->
+          <!-- 可见性切换按钮
           <button 
             class="visibility-toggle"
             @click.stop="toggleVisibility(item.id)"
@@ -1332,7 +1361,7 @@ function easeInOutCubic(t) {
             <span v-else>👁️‍🗨️</span>
           </button>
           
-          <!-- 编辑状态 -->
+          编辑状态
           <div v-if="item.id === editingItemId" class="edit-name-container" @click.stop>
             <input 
               v-model="newItemName" 
@@ -1342,15 +1371,15 @@ function easeInOutCubic(t) {
               v-focus
             />
           </div>
-          
+           -->
           <!-- 显示状态 -->
-          <template v-else>
+          <!-- <template v-else>
             <span class="item-name">{{ item.name || '未命名' }}</span>
             <span class="item-type">{{ item.type }}</span>
           </template>
         </div>
       </div>
-    </div>
+    </div> -->
     
     <!-- 坐标显示面板 -->
     <div v-if="showCoordinates" class="coordinates-panel">

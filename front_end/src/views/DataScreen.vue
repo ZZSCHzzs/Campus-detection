@@ -389,8 +389,9 @@ function formatTime(value: string) {
 
       <div class="main-content">
         <div class="lower-content">
+          <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container absolute-heatmap" />
           <!-- 移动区域状态监控到热力图左侧 -->
-          <div class="left-column-1"> 
+          <div class="left-column-1 fixed-left"> 
             <div class="areas-container">
               <div class="tech-corners"></div>
               <div class="section-header">
@@ -428,21 +429,21 @@ function formatTime(value: string) {
                 </div>
               </div>
             </div>
-          <div class="right-column">
-            <div class="node-status-container">
-              <div class="tech-corners"></div>
-              <div class="section-header">
-                <h2>硬件节点状态</h2>
-                <div class="subtitle">Hardware Node Status</div>
-              </div>
-              <div class="node-content">
-                <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+            <div class="right-column">
+              <div class="node-status-container">
+                <div class="tech-corners"></div>
+                <div class="section-header">
+                  <h2>硬件节点状态</h2>
+                  <div class="subtitle">Hardware Node Status</div>
+                </div>
+                <div class="node-content">
+                  <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+                </div>
               </div>
             </div>
-          </div>
-          </div>
-          <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
-          <div class="left-column-2"> 
+            </div>
+          
+          <div class="left-column-2 fixed-right"> 
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
@@ -506,7 +507,7 @@ function formatTime(value: string) {
                   }"
                 />
               </div>
-            </div>
+            </div>      
           </div> 
         </div>
         
@@ -955,12 +956,12 @@ function formatTime(value: string) {
 }
 
 .heatmap-container {
-  flex: 1.2;
-  
   border-radius: 15px;
+  padding: 0 !important;
+  box-shadow: none;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  background: rgba(30, 41, 59, 0.7);
+  box-shadow: none;
+  background: transparent;
   border: 1px solid rgba(56, 189, 248, 0.2);
   backdrop-filter: blur(10px);
   position: relative;
@@ -1495,13 +1496,14 @@ function formatTime(value: string) {
 
 
 .lower-content {
+  position: relative;
   display: flex;
   gap: 15px;
   flex: 1;
   min-height: 0;
-  
   margin-top: 10px;
   margin-bottom: 45px;
+  z-index: 1;
 }
 
 @media (max-width: 1200px) {
@@ -1525,7 +1527,7 @@ function formatTime(value: string) {
   gap: 15px;
   flex: 0.4;
   min-height: 0;
-  
+  max-width: 300px;
 }
 .left-column-2 {
   display: flex;
@@ -1735,4 +1737,68 @@ nodes-grid::-webkit-scrollbar-thumb {
 .status-grid:hover .card-container {
   animation-play-state: paused;
 }
+/* 新增：让热力图绝对定位并拉伸 */
+.absolute-heatmap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: auto; /* 保持可交互性 */
+  /* 可选：如果需要透明度可调整 */
+  opacity: 1;
+}
+/* 其它内容提升层级，显示在热力图之上 */
+.content-on-heatmap {
+  position: relative;
+  z-index: 2;
+  /* 可选：加点阴影让内容更清晰 */
+  box-shadow: 0 2px 20px rgba(0,0,0,0.12);
+  background: rgba(30,41,59,0.85); /* 可选：略微加深背景 */
+  border-radius: 12px;
+}
+/* 固定left-column-1在lower-content最左侧 */
+.fixed-left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 300px; /* 可根据实际内容调整宽度 */
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 固定left-column-2在lower-content最右侧 */
+.fixed-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 360px; /* 可根据实际内容调整宽度 */
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* 兼容移动端，自动恢复为纵向排列 */
+@media (max-width: 1200px) {
+  .fixed-left,
+  .fixed-right {
+    position: static;
+    width: 100%;
+    height: auto;
+  }
+  .lower-content {
+    height: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 </style>
