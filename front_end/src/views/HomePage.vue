@@ -7,7 +7,7 @@ import { areaService, noticeService, alertService, summaryService, buildingServi
 import apiService from '../services'
 import AreaList from '../components/data/AreaList.vue'
 import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue'
-import TrendChart from '../components/chart/TrendChart.vue'
+import HistoricalChart from '../components/chart/HistoricalChart.vue'
 
 import {
   User, Monitor, OfficeBuilding, Connection, MapLocation,
@@ -120,10 +120,6 @@ const fetchAllAreas = async () => {
     }
     
     allAreas.value = areasList
-    // 默认选择第一个区域
-    if (allAreas.value.length > 0 && !selectedAreaForEnvironmental.value) {
-      selectedAreaForEnvironmental.value = allAreas.value[0].id
-    }
   } catch (error) {
     console.error('获取区域列表失败:', error)
     ElMessage.error('获取区域列表失败')
@@ -242,6 +238,30 @@ const fetchLatestNotices = async () => {
     }
   }
 }
+
+const selectedAreaForHistorical = ref<number | null>(null)
+const selectedBuildingForHistorical = ref<number | null>(null)
+const historicalBuildingAreas = ref<AreaItem[]>([])
+const loadingHistoricalBuildingAreas = ref(false)
+
+const onHistoricalBuildingChange = async (buildingId: number | null) => {
+  selectedAreaForHistorical.value = null
+  historicalBuildingAreas.value = []
+  
+  if (!buildingId) return
+  
+  try {
+    loadingHistoricalBuildingAreas.value = true
+    const areas = await buildingService.getBuildingAreas(buildingId)
+    historicalBuildingAreas.value = areas
+  } catch (error) {
+    ElMessage.error('获取建筑区域失败')
+    historicalBuildingAreas.value = []
+  } finally {
+    loadingHistoricalBuildingAreas.value = false
+  }
+}
+        
 
 // 获取告警类型
 const getAlertType = (grade: number) => {
@@ -373,11 +393,84 @@ onBeforeUnmount(() => {
           <AreaList :areas="favoriteAreas" :loading="loadingFavorites"
             :max-height="favoriteAreas.length > 6 ? '193px' : 'auto'" empty-text="暂无收藏区域" />
         </el-card>
+        
+
+        <!-- 替换趋势图表为历史图表 -->
         <el-card class="dashboard-card">
           <template #header>
+            <div class="chart-header">
               <span class="card-title">📈 人员变化趋势</span>
+              <div class="chart-controls">
+                <el-select 
+                  v-model="selectedBuildingForHistorical" 
+                  placeholder="选择建筑" 
+                  size="small" 
+                  style="width: 120px; margin-right: 8px;"
+                  @change="onHistoricalBuildingChange"
+                  clearable
+                >
+                  <el-option
+                    v-for="building in buildings"
+                    :key="building.id"
+                    :label="building.name"
+                    :value="building.id"
+                  />
+                </el-select>
+                <el-select 
+                  v-model="selectedAreaForHistorical" 
+                  placeholder="选择区域" 
+                  size="small" 
+                  style="width: 180px;"
+                  :loading="loadingHistoricalBuildingAreas"
+                  :disabled="!selectedBuildingForHistorical"
+                >
+                  <el-option
+                    v-for="area in historicalBuildingAreas"
+                    :key="area.id"
+                    :label="area.name"
+                    :value="area.id"
+                  />
+                </el-select>
+              </div>
+            </div>
           </template>
-          <TrendChart height="320px" />
+          <HistoricalChart 
+            v-if="selectedAreaForHistorical"
+            :area-id="selectedAreaForHistorical" 
+            height="320px"
+            :hide-data-zoom="true"
+            :style-config="{
+              gridLineColor: 'rgba(255, 255, 255, 0.1)',
+              axisLineColor: 'rgba(255, 255, 255, 0.2)',
+              axisLabelColor: '#ffffff',
+              axisLabelFontSize: 12,
+              seriesColors: ['#409EFF'],
+              backgroundColor: 'transparent',
+              textColor: '#ffffff',
+              fontSize: 12,
+              showLegend: false,
+              tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
+              tooltipTextColor: '#ffffff'
+            }"
+          />
+          <HistoricalChart 
+            v-else
+            height="320px"
+            :hide-data-zoom="true"
+            :style-config="{
+              gridLineColor: 'rgba(255, 255, 255, 0.1)',
+              axisLineColor: 'rgba(255, 255, 255, 0.2)',
+              axisLabelColor: '#ffffff',
+              axisLabelFontSize: 12,
+              seriesColors: ['#409EFF'],
+              backgroundColor: 'transparent',
+              textColor: '#ffffff',
+              fontSize: 12,
+              showLegend: false,
+              tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
+              tooltipTextColor: '#ffffff'
+            }"
+          />
         </el-card>
         
         <!-- 温湿度图表 -->
@@ -425,9 +518,11 @@ onBeforeUnmount(() => {
             data-type="temperature-humidity" 
             height="280px" 
           />
-          <div v-else class="empty-chart">
-            <el-empty description="请先选择建筑和区域" :image-size="80" />
-          </div>
+          <EnvironmentalChart 
+            v-else
+            data-type="temperature-humidity" 
+            height="280px" 
+          />
         </el-card>
       </el-col>
       <el-col :span="isMobile ? 24 : 8" :xs="24" :sm="24" :md="8" :lg="8">
@@ -780,18 +875,16 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  width: 100%;
 }
 
 .chart-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .empty-chart {
-  height: 280px;
+  height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;

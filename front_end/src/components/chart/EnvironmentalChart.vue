@@ -11,10 +11,11 @@ interface Props {
   terminalId?: number
   dataType: 'temperature' | 'humidity' | 'co2' | 'temperature-humidity'
   height?: string
+  width?: string
   showControls?: boolean
   hideTitle?: boolean
   hideControls?: boolean
-  // 新增样式配置
+  // 样式配置 - 完全依赖外部传入
   styleConfig?: {
     gridLineColor?: string
     gridLineType?: 'solid' | 'dashed' | 'dotted'
@@ -26,6 +27,7 @@ interface Props {
     backgroundColor?: string
     textColor?: string
     fontSize?: number
+    lineWidth?: number
     padding?: {
       top?: string
       right?: string
@@ -36,14 +38,25 @@ interface Props {
     showLegend?: boolean
     tooltipBackgroundColor?: string
     tooltipTextColor?: string
+    titleStyle?: {
+      fontSize?: number
+      fontWeight?: string
+      color?: string
+    }
+    // 新增 areaStyle 类型定义
+    areaStyle?: {
+      opacity?: number
+      colorStops?: Array<{ offset: number; color: string }>
+    }
   }
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  height: '400px',
+  width: '100%',
   showControls: true,
   hideTitle: false,
   hideControls: false,
+  areaId: 2,
   styleConfig: () => ({})
 })
 
@@ -213,19 +226,13 @@ const generateChartOption = () => {
   }
 }
 
-// 生成CO2图表配置
+// 生成CO2图表配置 - 纯数据结构，无样式
 const generateCO2ChartOption = () => {
   // 检查数据是否有效
   if (!co2Data.value || co2Data.value.length === 0) {
-    console.warn('CO2数据为空，无法生成图表');
     return {
       title: {
         text: '当前浓度：-- ppm',
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 'normal',
-          color: '#666'
-        },
         right: '5%',
         top: '2%'
       },
@@ -234,11 +241,7 @@ const generateCO2ChartOption = () => {
         data: []
       },
       yAxis: {
-        name: 'CO2浓度 (ppm)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        }
+        name: 'CO2浓度 (ppm)'
       },
       series: [{
         name: 'CO2浓度',
@@ -246,25 +249,18 @@ const generateCO2ChartOption = () => {
         data: [],
         smooth: true
       }]
-    };
+    }
   }
   
   // 数据处理和验证
   const validData = co2Data.value.filter(item => 
     item && item.timestamp && item.co2_level !== undefined && item.co2_level !== null
-  );
-  
+  )
   
   if (validData.length === 0) {
-    console.warn('没有有效的CO2数据点');
     return {
       title: {
         text: '当前浓度：-- ppm',
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 'normal',
-          color: '#666'
-        },
         right: '5%',
         top: '2%'
       },
@@ -273,11 +269,7 @@ const generateCO2ChartOption = () => {
         data: []
       },
       yAxis: {
-        name: 'CO2浓度 (ppm)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        }
+        name: 'CO2浓度 (ppm)'
       },
       series: [{
         name: 'CO2浓度',
@@ -285,7 +277,7 @@ const generateCO2ChartOption = () => {
         data: [],
         smooth: true
       }]
-    };
+    }
   }
   
   const times = validData.map(item => 
@@ -293,22 +285,18 @@ const generateCO2ChartOption = () => {
       hour: '2-digit', 
       minute: '2-digit' 
     })
-  );
+  )
   
-  const values = validData.map(item => item.co2_level);
+  const values = validData.map(item => item.co2_level)
   
   // 检查最后一个值是否有效
-  const lastValue = values[values.length - 1];
-  const currentValue = lastValue !== undefined && lastValue !== null ? lastValue : '--';
+  const lastValue = values[values.length - 1]
+  const currentValue = lastValue !== undefined && lastValue !== null ? lastValue : '--'
 
+  // 纯数据结构，不包含任何样式
   return {
     title: {
       text: '当前浓度：' + currentValue + ' ppm',
-      textStyle: {
-        fontSize: 14,
-        fontWeight: 'normal',
-        color: '#666'
-      },
       right: '5%',
       top: '2%'
     },
@@ -317,61 +305,36 @@ const generateCO2ChartOption = () => {
       data: times
     },
     yAxis: {
-      name: 'CO2浓度 (ppm)',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      }
+      name: 'CO2浓度 (ppm)'
     },
     series: [{
       name: 'CO2浓度',
       type: 'line',
       data: values,
-      smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#ff6b6b'
-      },
-      itemStyle: {
-        color: '#ff6b6b'
-      },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(255, 107, 107, 0.3)' },
-            { offset: 1, color: 'rgba(255, 107, 107, 0.05)' }
-          ]
-        }
-      }
+      smooth: true
     }]
-  };
-};
+  }
+}
 
-// 生成温湿度图表配置
+// 生成温湿度图表配置 - 纯数据结构，无样式
 const generateTemperatureHumidityChartOption = () => {
-  const times = temperatureHumidityData.value.map(item => 
-    new Date(item.timestamp).toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+  const times = temperatureHumidityData.value.map(item =>
+    new Date(item.timestamp).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit'
     })
   )
-
+  
   const series: any[] = []
   const yAxis: any[] = []
 
   if (props.dataType === 'temperature' || props.dataType === 'temperature-humidity') {
     const temperatures = temperatureHumidityData.value.map(item => item.temperature || null)
-    
+
     yAxis.push({
       type: 'value',
       name: '温度 (°C)',
       position: 'left',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      },
       axisLabel: {
         formatter: '{value}°C'
       }
@@ -382,31 +345,19 @@ const generateTemperatureHumidityChartOption = () => {
       type: 'line',
       yAxisIndex: 0,
       data: temperatures,
-      smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#ff9500'
-      },
-      itemStyle: {
-        color: '#ff9500'
-      }
+      smooth: true
     })
   }
 
   if (props.dataType === 'humidity' || props.dataType === 'temperature-humidity') {
     const humidities = temperatureHumidityData.value.map(item => item.humidity || null)
-    
     const yAxisIndex = props.dataType === 'temperature-humidity' ? 1 : 0
-    
+
     if (props.dataType === 'temperature-humidity') {
       yAxis.push({
         type: 'value',
         name: '湿度 (%)',
         position: 'right',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        },
         axisLabel: {
           formatter: '{value}%'
         }
@@ -415,10 +366,6 @@ const generateTemperatureHumidityChartOption = () => {
       yAxis.push({
         type: 'value',
         name: '湿度 (%)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        },
         axisLabel: {
           formatter: '{value}%'
         }
@@ -430,14 +377,7 @@ const generateTemperatureHumidityChartOption = () => {
       type: 'line',
       yAxisIndex: yAxisIndex,
       data: humidities,
-      smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#00d4ff'
-      },
-      itemStyle: {
-        color: '#00d4ff'
-      }
+      smooth: true
     })
   }
 
@@ -445,18 +385,10 @@ const generateTemperatureHumidityChartOption = () => {
     xAxis: {
       data: times
     },
-    yAxis: yAxis.length > 0 ? yAxis : [{
-      type: 'value',
-      name: '数值',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      }
-    }],
+    yAxis: yAxis,
     series: series,
     legend: {
-      data: series.map(s => s.name),
-      top: '5%'
+      data: series.map(s => s.name)
     }
   }
 }
@@ -524,6 +456,7 @@ watch(
   <BaseChart
     :title="chartTitle"
     :height="height"
+    :width="width"
     :loading="loading"
     :error="error"
     :show-time-range="showControls"
@@ -538,5 +471,5 @@ watch(
 </template>
 
 <style scoped>
-/* 可以添加特定于环境图表的样式 */
+/* 移除所有样式硬编码 */
 </style>
