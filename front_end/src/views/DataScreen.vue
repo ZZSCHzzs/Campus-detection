@@ -15,7 +15,10 @@ const summary = ref<SummaryData>({
   historical_data_count: 0,
   people_count: 0,
   notice_count: 0,
-  alerts_count: 0
+  alerts_count: 0,
+  users_count: 0,
+  terminals_online_count: 0,
+  nodes_online_count: 0,
 })
 
 const pageState = reactive({
