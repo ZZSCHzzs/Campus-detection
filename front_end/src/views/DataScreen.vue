@@ -3,9 +3,9 @@ import { ref, onMounted, reactive, watch } from 'vue'
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService } from '../services'
 import type { AreaItem, HistoricalData, SummaryData, HardwareNode } from '../types'
-import HistoricalChart  from '../components/chart/HistoricalChart.vue'
+import HistoricalChart2  from '../components/chart-datascreen/HistoricalChart2.vue'
 import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
-import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue'
+import EnvironmentalChart2 from '../components/chart-datascreen/EnvironmentalChart2.vue'
 
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -390,6 +390,10 @@ function formatTime(value: string) {
       <div class="main-content">
         <div class="lower-content">
           <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container absolute-heatmap" />
+          <!-- 热力图中央顶部倒梯形标题 -->
+          <div class="heatmap-title-trapezoid">
+            <span class="heatmap-title-text">实时3D热力图</span>
+          </div>
           <!-- 移动区域状态监控到热力图左侧 -->
           <div class="left-column-1 fixed-left"> 
             <div class="areas-container">
@@ -429,7 +433,7 @@ function formatTime(value: string) {
                 </div>
               </div>
             </div>
-            <div class="right-column">
+            <!-- <div class="right-column"> -->
               <div class="node-status-container">
                 <div class="tech-corners"></div>
                 <div class="section-header">
@@ -440,14 +444,14 @@ function formatTime(value: string) {
                   <HardwareNodeStatus :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
                 </div>
               </div>
-            </div>
+            <!-- </div> -->
             </div>
           
           <div class="left-column-2 fixed-right"> 
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <EnvironmentalChart 
+                <EnvironmentalChart2 
                   :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" 
                   :dataType="'temperature-humidity'" 
                   :hideTitle="true" 
@@ -490,7 +494,7 @@ function formatTime(value: string) {
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <HistoricalChart 
+                <HistoricalChart2 
                   :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" 
                   :hideTitle="true" 
                   :hideControls="true"
@@ -529,7 +533,8 @@ function formatTime(value: string) {
                   }"
                 />
               </div>
-            </div>      
+            </div>
+                
           </div> 
         </div>
         
@@ -797,7 +802,7 @@ function formatTime(value: string) {
 .overview-item {
   background: rgba(30, 41, 59, 0.7);
   padding: 15px;
-  border-radius: 10px;
+  border-radius: 0px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
   transition: all 0.3s;
@@ -961,7 +966,7 @@ function formatTime(value: string) {
 .chart-container {
   flex: 1;
   min-width: 300px; /* 设置最小宽度 */
-  border-radius: 15px;
+  border-radius: 0px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
@@ -1057,11 +1062,11 @@ function formatTime(value: string) {
 
 
 .areas-container {
-  flex: 0.6;
+  flex: 1;
   flex-direction: column;
   display: flex;
   background: rgba(30, 41, 59, 0.7);
-  border-radius: 12px;
+  border-radius: 0px;
   padding: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
@@ -1093,7 +1098,7 @@ function formatTime(value: string) {
 .card-container {
   display: flex;
   flex-direction: column; /* 保持纵向排列 */
-  gap: 12px;
+  flex: 1;
   width: 100%;
   box-sizing: border-box;
   padding: 0 5px;
@@ -1524,7 +1529,7 @@ function formatTime(value: string) {
   flex: 1;
   min-height: 0;
   margin-top: 10px;
-  margin-bottom: 45px;
+  margin-bottom: 35px;
   z-index: 1;
 }
 
@@ -1546,7 +1551,6 @@ function formatTime(value: string) {
 .left-column-1 {
   display: flex;
   flex-direction: column;
-  gap: 15px;
   flex: 0.4;
   min-height: 0;
   max-width: 300px;
@@ -1688,9 +1692,10 @@ function formatTime(value: string) {
   flex: 1;
 }
 .node-status-container {
-  flex: 1;
+  flex: 0.55;
+  top: 1px;
   background: rgba(30, 41, 59, 0.7);
-  border-radius: 15px;
+  border-radius: 0px;
   padding: 15px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(56, 189, 248, 0.2);
@@ -1764,6 +1769,21 @@ nodes-grid::-webkit-scrollbar-thumb {
   /* 可选：如果需要透明度可调整 */
   opacity: 1;
 }
+/* 新增：渐变暗效果 */
+.absolute-heatmap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  /* 渐变从中心亮到四周更暗，中心区域缩小 */
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(30,41,59,0) 30%,
+    rgba(30,41,59,0.4) 60%,
+    rgba(30,41,59,0.85) 100%
+  );
+}
 /* 其它内容提升层级，显示在热力图之上 */
 .content-on-heatmap {
   position: relative;
@@ -1813,5 +1833,59 @@ nodes-grid::-webkit-scrollbar-thumb {
     flex-direction: column;
   }
 }
+/* 热力图中央顶部倒梯形标题样式 */
+.heatmap-title-trapezoid {
+  position: absolute;
+  top: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: 220px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
 
+.heatmap-title-trapezoid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* 正梯形效果 */
+  clip-path: polygon(0% 0, 100% 0, 90% 100%, 10% 100%);
+  background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+  opacity: 0.92;
+  /* 多层光效，蓝色和浅蓝色外发光 */
+  box-shadow:
+    0 0 16px 4px rgba(56,189,248,0.35),
+    0 0 32px 8px rgba(56,189,248,0.18),
+    0 4px 18px rgba(30,41,59,0.28);
+  border: 1.5px solid rgba(56,189,248,0.25);
+}
+
+.heatmap-title-text {
+  position: relative;
+  z-index: 1;
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #e0f2fe;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 8px rgba(56,189,248,0.25);
+  font-family: 'Microsoft YaHei', 'Arial', sans-serif;
+  user-select: none;
+  padding: 0 12px;
+}
+
+@media (max-width: 600px) {
+  .heatmap-title-trapezoid {
+    width: 140px;
+    height: 32px;
+  }
+  .heatmap-title-text {
+    font-size: 1rem;
+    padding: 0 6px;
+  }
+}
 </style>

@@ -58,7 +58,7 @@ const heatmapPoints = [
   { x: -4, y: 2, z: -3, intensity: 40 }, // 高强度点
   { x: -3.7, y: 2, z: -2.1, intensity: 35 },
   { x: 3, y: 3, z: 0, intensity: 30 }, // 中心点，最高强度
-  { x: -6, y: 1, z: -6, intensity: 0 },
+  { x: -4, y: 2, z: -2, intensity: 20 },
   { x: 6, y: 0.8, z: -5.5, intensity: 0 },
   { x: 5.5, y: 0.2, z: 5, intensity: 0 },
   { x: -1, y: 4, z: 2, intensity: 40 },
@@ -831,8 +831,8 @@ const createHeatmapPointCloud = () => {
       size: 0.01, // 粒子大小
       vertexColors: true,
       transparent: true,
-      opacity: 0.3,
-      blending: THREE.AdditiveBlending,
+      opacity: 1,
+      blending: THREE.NormalBlending,
       sizeAttenuation: true,
     });
     
@@ -887,8 +887,8 @@ const createParticlesFromDensityField = (densityField) => {
     const normalizedDensity = cellDensity / maxDensity;
     
     // 添加基础概率确保低密度区域也能生成粒子
-    const baseProbability = 0.0005;  // 基础概率，即使密度为0也有10%概率生成粒子
-    const densityWeight = 0.8;    // 密度权重
+    const baseProbability = 0.001;  // 基础概率，即使密度为0也有10%概率生成粒子
+    const densityWeight = 0.999;    // 密度权重
     
     // 计算综合概率
     const generationProbability = baseProbability + normalizedDensity * densityWeight;
@@ -1327,12 +1327,12 @@ function easeInOutCubic(t) {
     <button @click="toggleAutoRotate" class="auto-rotate-btn">
       {{ autoRotateEnabled ? '停止环视' : '自动环视' }}
     </button>
-    <!-- 调试按钮 -->
+    <!-- 调试按钮
     <button @click="showDebugInfo = !showDebugInfo" class="debug-toggle">
       {{ showDebugInfo ? '隐藏结构' : '查看模型结构' }}
     </button>
     
-    调试面板
+    调试面板 -->
     <!-- <div v-if="showDebugInfo" class="debug-panel">
       <h3>模型结构</h3>
       <div class="structure-tree">
@@ -1769,7 +1769,9 @@ function easeInOutCubic(t) {
 .auto-rotate-btn {
   position: absolute;
   bottom: 20px;
-  left: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(56, 189, 248, 0.5);
   color: #38bdf8;
@@ -1824,7 +1826,7 @@ function easeInOutCubic(t) {
 /* 聚焦模式提示样式 */
 .focus-mode-indicator {
   position: absolute;
-  top: 15px;
+  top: 50px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(56, 189, 248, 0.2);
