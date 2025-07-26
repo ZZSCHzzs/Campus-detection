@@ -77,16 +77,15 @@ const internalLoading = ref(false)
 
 // 计算属性
 const containerStyle = computed(() => ({
+  height: props.height,
   width: '100%',
-  height: '100%',
-  minHeight: '180px', // 与 chart-inner-container 保持一致
-  position: 'relative'
-}));
+  position: 'relative' as const
+}))
 
 const loadingState = computed(() => props.loading || internalLoading.value)
 
 // 初始化图表
-// 初始化图表
+// 修改基础配置以匹配AreaHistoryChart风格
 const initChart = async () => {
   if (!chartContainer.value) {
     console.warn('图表容器不存在')
@@ -144,20 +143,32 @@ const initChart = async () => {
     chart.value = echarts.init(chartContainer.value, props.theme, opts)
 
 
-    // 设置基础配置
+    // 设置基础配置 - 更新为与AreaHistoryChart相似的风格
     const baseOption = {
       animation: true,
       animationDuration: 1000,
       animationEasing: 'cubicOut',
-      grid: props.gridConfig,
-      legend: props.legendConfig,
+      grid: {
+        ...props.gridConfig,
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '15%',
+        containLabel: true
+      },
+      legend: {
+        ...props.legendConfig,
+        textStyle: {
+          color: '#e2e8f0',
+          fontSize: 12
+        }
+      },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(50, 50, 50, 0.9)',
-        borderColor: '#333',
-        borderWidth: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        borderColor: 'rgba(56, 189, 248, 0.3)',
         textStyle: {
-          color: '#fff',
+          color: '#e2e8f0',
           fontSize: 12
         },
         formatter: '{b}<br/>{a}: {c}'
@@ -167,12 +178,12 @@ const initChart = async () => {
         boundaryGap: props.chartType === 'bar',
         axisLine: {
           lineStyle: {
-            color: '#e0e0e0'
+            color: 'rgba(148, 163, 184, 0.3)'
           }
         },
         axisLabel: {
-          color: '#666',
-          fontSize: 11
+          color: '#94a3b8',
+          fontSize: 10
         },
         splitLine: {
           show: false
@@ -187,12 +198,12 @@ const initChart = async () => {
           show: false
         },
         axisLabel: {
-          color: '#666',
-          fontSize: 11
+          color: '#94a3b8',
+          fontSize: 10
         },
         splitLine: {
           lineStyle: {
-            color: '#f0f0f0',
+            color: 'rgba(148, 163, 184, 0.1)',
             type: 'dashed'
           }
         }
@@ -268,15 +279,78 @@ const updateChart = (option: any) => {
           Array.isArray(s.data) &&
           s.data.length > 0
         )
-        .map(s => ({
-          ...s,
-          // 确保data格式合法
-          data: s.data.filter(d => d !== null && d !== undefined)
-        }));
+        .map(s => {
+          // 应用与AreaHistoryChart类似的样式
+          const seriesStyle = {
+            ...s,
+            // 确保data格式合法
+            data: s.data.filter(d => d !== null && d !== undefined)
+          };
+          
+          // 为线图添加平滑效果和渐变
+          if (s.type === 'line') {
+            seriesStyle.smooth = true;
+            seriesStyle.lineStyle = {
+              width: 3,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: '#38bdf8' },
+                { offset: 1, color: '#818cf8' }
+              ])
+            };
+            seriesStyle.areaStyle = {
+              opacity: 0.3,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(56, 189, 248, 0.5)' },
+                { offset: 1, color: 'rgba(56, 189, 248, 0.05)' }
+              ])
+            };
+            seriesStyle.symbol = 'circle';
+            seriesStyle.symbolSize = 6;
+            seriesStyle.itemStyle = {
+              color: '#38bdf8',
+              borderColor: '#ffffff',
+              borderWidth: 1
+            };
+            seriesStyle.emphasis = {
+              itemStyle: {
+                color: '#38bdf8',
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                shadowColor: 'rgba(56, 189, 248, 0.5)',
+                shadowBlur: 10
+              }
+            };
+          }
+          
+          // 为柱状图添加渐变
+          if (s.type === 'bar') {
+            seriesStyle.itemStyle = {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: '#38bdf8' },
+                { offset: 1, color: 'rgba(56, 189, 248, 0.3)' }
+              ]),
+              borderRadius: [3, 3, 0, 0]
+            };
+          }
+          
+          return seriesStyle;
+        });
 
       if (clonedOption.series.length === 0) {
         throw new Error('无效图表数据：无有效series配置');
       }
+    }
+    
+    // 修改标题样式
+    if (clonedOption.title) {
+      clonedOption.title = {
+        ...clonedOption.title,
+        textStyle: {
+          color: '#e2e8f0',
+          fontSize: 18,
+          fontWeight: 'normal'
+        }
+      };
     }
 
     // 先清除旧配置再渲染时添加错误捕获
@@ -494,32 +568,37 @@ onUnmounted(() => {
 <template>
   <div class="base-chart" :class="{ 'fullscreen': isFullscreen }">
     <!-- 图表头部 -->
-    <div v-if="title || showTimeRange || showRefresh || showExport || showFullscreen" class="section-header">
-      <div class="subtitle">
+    <div v-if="title || showTimeRange || showRefresh || showExport || showFullscreen" class="chart-header">
+      <div class="chart-title">
         <span v-if="title">{{ title }}</span>
       </div>
-    </div>
-    <!-- 控制按钮 -->
-    <div class="chart-buttons">
-      <!-- 时间范围选择 -->
-      <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" style="width: 120px;"
-        @change="handleTimeRangeChange">
-        <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
-      </el-select>
-      <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" />
 
-      <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" />
+      <div class="chart-controls">
+        <!-- 时间范围选择 -->
+        <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" class="time-range-select"
+          @change="handleTimeRangeChange">
+          <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
+        </el-select>
 
-      <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" />
+        <!-- 控制按钮 -->
+        <div class="chart-buttons">
+          <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" class="chart-control-btn" />
+
+          <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" class="chart-control-btn" />
+
+          <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" class="chart-control-btn" />
+        </div>
+      </div>
     </div>
+
     <!-- 图表容器 -->
     <div class="chart-content">
-      <div ref="chartContainer" :style="containerStyle" class="chart-container"></div>
+      <div ref="chartContainer" :style="containerStyle" class="chart-container" />
 
       <!-- 错误状态 -->
       <div v-if="error" class="chart-error">
-        <el-empty :description="error || '未知错误'" :image-size="100">
-          <el-button type="primary" @click="refreshChart">
+        <el-empty :description="error" :image-size="100">
+          <el-button type="primary" @click="refreshChart" class="retry-btn">
             <el-icon>
               <Refresh />
             </el-icon>
@@ -539,56 +618,70 @@ onUnmounted(() => {
 <style scoped>
 .base-chart {
   background: transparent;
-  border-radius: 0;
+  border-radius: 8px;
   box-shadow: none;
   overflow: hidden;
   transition: all 0.3s ease;
+  position: relative;
+  color: #e2e8f0;
 }
+
 .chart-header {
-  padding: 10px 15px;  /* 减小内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 16px 20px;
   border-bottom: none;
   background: transparent;
-  flex-wrap: wrap; /* 允许在小屏幕上换行 */
 }
+
 .chart-title {
-  font-size: 8px;
-  font-weight: 600;
-  margin: 0 0 0px 0px;
-  /* 增加下边距 */
-  padding-left: 4px;
-  border-left: 4px solid var(--el-color-primary);
+  font-size: 18px;
+  font-weight: normal;
+  color: #e2e8f0;
+  position: relative;
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid #38bdf8;
 }
+
 .chart-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .chart-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
+}
+
+.chart-control-btn {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  transition: all 0.2s ease;
+}
+
+.chart-control-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  transform: translateY(-2px);
+}
+
+.time-range-select {
+  width: 120px;
+  --el-select-border-color-hover: rgba(56, 189, 248, 0.5);
+  --el-select-input-focus-border-color: rgba(56, 189, 248, 0.7);
+  --el-select-text-color: #e2e8f0;
 }
 
 .chart-content {
   position: relative;
-  width: 100%;
-  height: 100%; /* 确保内容填满容器 */
-  display: flex;
-  flex-direction: column; /* 垂直布局 */
-  justify-content: center; /* 垂直居中内容 */
-  align-items: center; /* 水平居中内容 */
-  box-sizing: border-box; /* 包含内边距 */
 }
 
 .chart-container {
   width: 100%;
-  height: 100%; /* 确保图表容器填满内容区域 */
-  display: flex;
-  flex: 1; /* 使图表容器扩展到父容器的剩余空间 */
-  overflow: hidden; /* 防止内容溢出 */
+  transition: opacity 0.5s ease;
 }
 
 .chart-error,
@@ -601,8 +694,37 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(15, 23, 42, 0.8);
   z-index: 10;
+  color: #e2e8f0;
+}
+
+.retry-btn {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  padding: 5px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.retry-btn:hover {
+  background: rgba(56, 189, 248, 0.3);
+  transform: translateY(-2px);
+}
+
+.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: #0f172a;
+  width: 100vw;
+  height: 100vh;
 }
 
 /* 响应式设计 */
@@ -620,42 +742,5 @@ onUnmounted(() => {
   .chart-buttons {
     flex-shrink: 0;
   }
-}
-.section-header {
-  margin-bottom: 6px;
-  flex-shrink: 0;
-  display: flex;
-  
-  align-items: center;
-  
-  gap: 10px;
-  
-}
-
-.section-header h2 {
-  font-size: 0.95rem;
-  margin: 0;
-  white-space: nowrap;
-  
-}
-
-.subtitle {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  position: relative;
-  padding-left: 10px;
-  
-}
-
-
-.subtitle::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 12px;
-  width: 1px;
-  background: rgba(56, 189, 248, 0.5);
 }
 </style>

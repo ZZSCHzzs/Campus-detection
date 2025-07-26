@@ -470,6 +470,7 @@ function formatTime(value: string) {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   color: #e2e8f0;
   overflow: hidden;
+  --scroll-speed: 20s;
 }
 
 
@@ -992,7 +993,7 @@ function formatTime(value: string) {
   padding: 0 5px;
   position: relative;
   /* 添加持续滚动动画 */
-  animation: continuousScroll 20s linear infinite;
+  animation: continuousScroll 200s linear infinite;
 }
 
 .status-grid:after {
