@@ -162,44 +162,44 @@ const calculateCardHeights = () => {
   console.log('卡片高度数组:', cardAnimationState.cardHeights)
 }
 
-const animateCards = () => {
-  const container = document.querySelector('.card-container') as HTMLElement
-  if (!container || !areas.value.length) return
+// const animateCards = () => {
+//   const container = document.querySelector('.card-container') as HTMLElement
+//   if (!container || !areas.value.length) return
 
-  const cards = document.querySelectorAll('.area-card')
-  const uniqueAreasCount = areas.value.length
-  if (cards.length <= 0) return
+//   const cards = document.querySelectorAll('.area-card')
+//   const uniqueAreasCount = areas.value.length
+//   if (cards.length <= 0) return
 
-  cardAnimationState.isMoving = true
+//   cardAnimationState.isMoving = true
 
-  // 使用固定步长，确保每次滚动精确一个卡片的高度
-  // 计算第一个卡片的实际高度作为固定步长
-  const firstCardHeight = cardAnimationState.cardHeights[0] || 62 // 使用固定步长
+//   // 使用固定步长，确保每次滚动精确一个卡片的高度
+//   // 计算第一个卡片的实际高度作为固定步长
+//   const firstCardHeight = cardAnimationState.cardHeights[0] || 62 // 使用固定步长
 
-  // 修改为垂直方向移动固定步长
-  cardAnimationState.currentPosition -= firstCardHeight
-  container.style.transform = `translateY(${cardAnimationState.currentPosition}px)`
+//   // 修改为垂直方向移动固定步长
+//   cardAnimationState.currentPosition -= firstCardHeight
+//   container.style.transform = `translateY(${cardAnimationState.currentPosition}px)`
 
-  cardAnimationState.currentIndex = (cardAnimationState.currentIndex + 1) % cards.length
+//   cardAnimationState.currentIndex = (cardAnimationState.currentIndex + 1) % cards.length
 
-  if (cardAnimationState.currentIndex >= uniqueAreasCount) {
-    setTimeout(() => {
-      container.style.transition = 'none'
-      cardAnimationState.currentPosition = 0
-      cardAnimationState.currentIndex = 0
-      container.style.transform = `translateY(0px)`
+//   if (cardAnimationState.currentIndex >= uniqueAreasCount) {
+//     setTimeout(() => {
+//       container.style.transition = 'none'
+//       cardAnimationState.currentPosition = 0
+//       cardAnimationState.currentIndex = 0
+//       container.style.transform = `translateY(0px)`
 
-      setTimeout(() => {
-        container.style.transition = 'transform 0.5s ease-in-out'
-        cardAnimationState.isMoving = false
-      }, 50)
-    }, 500)
-  } else {
-    setTimeout(() => {
-      cardAnimationState.isMoving = false
-    }, 500)
-  }
-}
+//       setTimeout(() => {
+//         container.style.transition = 'transform 0.5s ease-in-out'
+//         cardAnimationState.isMoving = false
+//       }, 50)
+//     }, 500)
+//   } else {
+//     setTimeout(() => {
+//       cardAnimationState.isMoving = false
+//     }, 500)
+//   }
+// }
 
 onMounted(async () => {
   try {
@@ -214,11 +214,11 @@ onMounted(async () => {
 
     setTimeout(calculateCardWidths, 500)
     setTimeout(calculateCardHeights, 500)
-    cardAnimationState.animationTimer = setInterval(() => {
-      if (!cardAnimationState.isMoving && areas.value.length > 0) {
-        animateCards()
-      }
-    }, 2000)
+    // cardAnimationState.animationTimer = setInterval(() => {
+    //   if (!cardAnimationState.isMoving && areas.value.length > 0) {
+    //     animateCards()
+    //   }
+    // }, 2000)
 
     const handleResize = () => {
       cardAnimationState.currentPosition = 0
@@ -408,60 +408,9 @@ function formatTime(value: string) {
                       </div>
                     </div>
                   </el-card>
-                  <!-- 重复一次卡片以实现连续轮播 -->
-                  <el-card v-for="(area, index) in areas" :key="`dup-${area.id}`" class="area-card">
-                    <!-- 复制的区域卡片内容 -->
-                    <div class="area-header">
-                      <h4>
-                        {{ area.name.length > 6 ? area.name.substring(0, 6) + '...' : area.name }}
-                        <span class="status-badge" :class="{ 'status-active': area.status }">
-                          {{ area.status ? '正常' : '异常' }}
-                        </span>
-                      </h4>
-                    </div>
-
-                    <div class="area-stats">
-                      <div class="stat-item">
-                        <div class="stat-top">
-                          <span>{{ area.detected_count || 0 }}/{{ area.capacity }}</span>
-                          <span v-if="area.updated_at" class="update-time">{{ formatTime(area.updated_at) }}</span>
-                        </div>
-                        <div class="usage-bar">
-                          <div class="usage-fill"
-                            :style="{ width: `${Math.min(100, area.detected_count ? (area.detected_count / area.capacity) * 100 : 0)}%` }"
-                            :class="{ 'high-usage': area.detected_count && area.capacity && (area.detected_count / area.capacity) > 0.8 }">
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </el-card>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="left-column-2"> 
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="chart-inner-container">
-                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'co2'" />
-              </div>
-            </div>
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="chart-inner-container">
-                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'temperature-humidity'" />
-              </div>
-            </div>
-            <div ref="chartRef" class="chart-container">
-              <div class="tech-corners"></div>
-              <div class="chart-inner-container">
-                <HistoricalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
-              </div>
-            </div>
-          </div>
-          
-          <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
-
           <div class="right-column">
             <div class="node-status-container">
               <div class="tech-corners"></div>
@@ -474,6 +423,28 @@ function formatTime(value: string) {
               </div>
             </div>
           </div>
+          </div>
+          <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container" />
+          <div class="left-column-2"> 
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'temperature'" />
+              </div>
+            </div>
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <EnvironmentalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :dataType="'humidity'" />
+              </div>
+            </div>
+            <div ref="chartRef" class="chart-container">
+              <div class="tech-corners"></div>
+              <div class="chart-inner-container">
+                <HistoricalChart :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" />
+              </div>
+            </div>
+          </div> 
         </div>
         
         
@@ -979,8 +950,7 @@ function formatTime(value: string) {
 
 
 .areas-container {
-  flex: 1;
-  max-width: 250px;
+  flex: 0.6;
   flex-direction: column;
   display: flex;
   background: rgba(30, 41, 59, 0.7);
@@ -1015,17 +985,14 @@ function formatTime(value: string) {
 
 .card-container {
   display: flex;
-  flex-direction: column; /* 改为纵向排列 */
+  flex-direction: column; /* 保持纵向排列 */
   gap: 12px;
-  
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
   padding: 0 5px;
-  
-  transition: transform 0.5s ease-in-out;
-  
   position: relative;
+  /* 添加持续滚动动画 */
+  animation: continuousScroll 20s linear infinite;
 }
 
 .status-grid:after {
@@ -1608,16 +1575,19 @@ function formatTime(value: string) {
 .chart-inner-container {
   width: 100%;
   height: 100%;
-  
   min-height: 180px;
-  
+  display: flex; /* 确保子元素填充 */
   flex: 1;
   
 }
-
+/* 确保环境图表组件占满容器 */
+.chart-inner-container :deep(.base-chart) {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+}
 .node-status-container {
   flex: 1;
-  
   background: rgba(30, 41, 59, 0.7);
   border-radius: 15px;
   padding: 15px;
@@ -1664,5 +1634,19 @@ nodes-grid::-webkit-scrollbar-thumb {
   height: 0 !important;
   display: none !important;
   background: transparent !important;
+}
+/* 添加持续滚动的关键帧动画 */
+@keyframes continuousScroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%); /* 滚动一半高度，与重复卡片高度相匹配 */
+  }
+}
+
+/* 鼠标悬停时暂停动画 */
+.status-grid:hover .card-container {
+  animation-play-state: paused;
 }
 </style>
