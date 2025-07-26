@@ -582,6 +582,9 @@ const customColorMethod = (percentage) => {
 // 状态更新定时器
 const statusRefreshTimer = ref(null);
 
+// 配置标签页状态
+const activeConfigTab = ref('basic');
+
 
 onMounted(async () => {
   loading.value = true;
@@ -1201,12 +1204,12 @@ watch(connectionMode, handleModeChange);
 
         <!-- 右侧：配置管理和日志查看 -->
         <div class="right-panel">
-          <!-- 基本设置 -->
+          <!-- 统一配置面板 -->
           <div class="panel-section">
             <div class="section-header">
               <h3><el-icon>
                   <Tools />
-                </el-icon> 基本设置</h3>
+                </el-icon> 终端配置</h3>
               <div class="button-group">
                 <el-button type="primary" size="small" @click="saveConfig" class="action-button">
                   <el-icon>
@@ -1226,166 +1229,180 @@ watch(connectionMode, handleModeChange);
               </div>
             </div>
 
-            <el-form :model="config" label-width="90px" class="config-form" size="small">
-              <div class="form-grid">
-                <el-form-item label="工作模式" class="form-item">
-                  <el-select v-model="config.mode" style="width: 100%">
-                    <el-option label="拉取模式" value="pull">
-                      <div class="option-content">
-                        <el-icon class="option-icon">
-                          <Download />
-                        </el-icon>
-                        <span>拉取模式</span>
-                      </div>
-                    </el-option>
-                    <el-option label="接收模式" value="push">
-                      <div class="option-content">
-                        <el-icon class="option-icon">
-                          <Upload />
-                        </el-icon>
-                        <span>接收模式</span>
-                      </div>
-                    </el-option>
-                    <el-option label="双模式" value="both">
-                      <div class="option-content">
-                        <el-icon class="option-icon">
-                          <Refresh />
-                        </el-icon>
-                        <span>双模式</span>
-                      </div>
-                    </el-option>
-                  </el-select>
-                </el-form-item>
+            <el-tabs v-model="activeConfigTab" class="config-tabs">
+              <!-- 基本设置标签页 -->
+              <el-tab-pane label="基本设置" name="basic">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><Setting /></el-icon>
+                    基本设置
+                  </span>
+                </template>
+                
+                <el-form :model="config" label-width="90px" class="config-form" size="small">
+                  <div class="form-grid">
+                    <el-form-item label="工作模式" class="form-item">
+                      <el-select v-model="config.mode" style="width: 100%">
+                        <el-option label="拉取模式" value="pull">
+                          <div class="option-content">
+                            <el-icon class="option-icon">
+                              <Download />
+                            </el-icon>
+                            <span>拉取模式</span>
+                          </div>
+                        </el-option>
+                        <el-option label="接收模式" value="push">
+                          <div class="option-content">
+                            <el-icon class="option-icon">
+                              <Upload />
+                            </el-icon>
+                            <span>接收模式</span>
+                          </div>
+                        </el-option>
+                        <el-option label="双模式" value="both">
+                          <div class="option-content">
+                            <el-icon class="option-icon">
+                              <Refresh />
+                            </el-icon>
+                            <span>双模式</span>
+                          </div>
+                        </el-option>
+                      </el-select>
+                    </el-form-item>
 
-                <el-form-item label="拉取间隔" class="form-item">
-                  <el-input-number v-model="config.interval" :min="1" :max="60"
-                    style="width: 100%"></el-input-number>
-                </el-form-item>
+                    <el-form-item label="拉取间隔" class="form-item">
+                      <el-input-number v-model="config.interval" :min="1" :max="60"
+                        style="width: 100%"></el-input-number>
+                    </el-form-item>
 
-                <el-form-item label="高级选项" class="form-item full-width">
-                  <div class="switch-grid">
-                    <div class="switch-item">
-                      <span>保存图像</span>
-                      <el-switch v-model="config.save_image" active-color="#13ce66"></el-switch>
-                    </div>
-                    <div class="switch-item">
-                      <span>预加载模型</span>
-                      <el-switch v-model="config.preload_model" active-color="#13ce66"></el-switch>
-                    </div>
-                    <div class="switch-item">
-                      <span>启用CO2传感器</span>
-                      <el-switch v-model="config.co2_enabled" active-color="#13ce66"></el-switch>
-                    </div>
+                    <el-form-item label="高级选项" class="form-item full-width">
+                      <div class="switch-grid">
+                        <div class="switch-item">
+                          <span>保存图像</span>
+                          <el-switch v-model="config.save_image" active-color="#13ce66"></el-switch>
+                        </div>
+                        <div class="switch-item">
+                          <span>预加载模型</span>
+                          <el-switch v-model="config.preload_model" active-color="#13ce66"></el-switch>
+                        </div>
+                        <div class="switch-item">
+                          <span>启用CO2传感器</span>
+                          <el-switch v-model="config.co2_enabled" active-color="#13ce66"></el-switch>
+                        </div>
+                      </div>
+                    </el-form-item>
+
+                    <el-form-item label="CO2读取间隔" class="form-item" v-if="config.co2_enabled">
+                      <el-input-number v-model="config.co2_read_interval" :min="10" :max="300"
+                        style="width: 100%"></el-input-number>
+                    </el-form-item>
                   </div>
-                </el-form-item>
+                </el-form>
+              </el-tab-pane>
 
-                <el-form-item label="CO2读取间隔" class="form-item" v-if="config.co2_enabled">
-                  <el-input-number v-model="config.co2_read_interval" :min="10" :max="300"
-                    style="width: 100%"></el-input-number>
-                </el-form-item>
-              </div>
-            </el-form>
-          </div>
+              <!-- 节点管理标签页 -->
+              <el-tab-pane label="节点管理" name="nodes">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><VideoCamera /></el-icon>
+                    节点管理
+                  </span>
+                </template>
+                
+                <div class="node-config">
+                  <div class="node-list-container">
+                    <el-table :data="config.nodes" size="small" height="200px" class="node-table">
+                      <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
+                      <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
+                      <el-table-column label="操作" width="70" align="center">
+                        <template #default="scope">
+                          <el-button type="danger" size="small" @click="removeNode(scope.$index)" circle>
+                            <el-icon>
+                              <Delete />
+                            </el-icon>
+                          </el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                  <div class="add-node-form">
+                    <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
+                    <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input"
+                      size="small"></el-input>
+                    <el-button type="primary" @click="addNode" size="small" class="add-button">
+                      <el-icon>
+                        <Plus />
+                      </el-icon>添加
+                    </el-button>
+                  </div>
+                </div>
+              </el-tab-pane>
 
-          <!-- 节点管理 -->
-          <div class="panel-section">
-            <div class="section-header">
-              <h3><el-icon>
-                  <VideoCamera />
-                </el-icon> 节点管理</h3>
-            </div>
-
-            <div class="node-config">
-              <div class="node-list-container">
-                <el-table :data="config.nodes" size="small" height="200px" class="node-table">
-                  <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
-                  <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
-                  <el-table-column label="操作" width="70" align="center">
-                    <template #default="scope">
-                      <el-button type="danger" size="small" @click="removeNode(scope.$index)" circle>
-                        <el-icon>
-                          <Delete />
-                        </el-icon>
-                      </el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-              <div class="add-node-form">
-                <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
-                <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input"
-                  size="small"></el-input>
-                <el-button type="primary" @click="addNode" size="small" class="add-button">
-                  <el-icon>
-                    <Plus />
-                  </el-icon>添加
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 摄像头参数 -->
-          <div class="panel-section">
-            <div class="section-header">
-              <h3><el-icon>
-                  <Picture />
-                </el-icon> 摄像头参数</h3>
-            </div>
-
-            <div class="camera-config-form">
-              <el-form :model="config.camera_config" label-width="100px" size="small">
-                <el-row :gutter="12">
-                  <el-col :span="8">
-                    <el-form-item label="分辨率">
-                      <el-select v-model="config.camera_config.frame_size">
-                        <el-option v-for="(size, key) in frameSizes" :key="key" :label="size.label"
-                          :value="parseInt(key)" />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="亮度">
-                      <el-input-number v-model="config.camera_config.brightness" :min="0" :max="2" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="对比度">
-                      <el-input-number v-model="config.camera_config.contrast" :min="0" :max="2" />
-                    </el-form-item>
-                  </el-col>
-                </el-row>
-                <el-row :gutter="12">
-                  <el-col :span="8">
-                    <el-form-item label="饱和度">
-                      <el-input-number v-model="config.camera_config.saturation" :min="0" :max="2" />
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="特效">
-                      <el-select v-model="config.camera_config.special_effect">
-                        <el-option label="无" :value="0" />
-                        <el-option label="黑白" :value="1" />
-                        <el-option label="负片" :value="2" />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="8">
-                    <el-form-item label="镜像">
-                      <el-switch v-model="config.camera_config.hmirror" active-color="#13ce66" />
-                      <span style="margin-left:8px;">水平</span>
-                      <el-switch v-model="config.camera_config.vflip" active-color="#13ce66"
-                        style="margin-left:8px;" />
-                      <span style="margin-left:8px;">垂直</span>
-                    </el-form-item>
-                  </el-col>
-                </el-row>
-              </el-form>
-              <el-button type="primary" size="small" style="margin-top:8px;" @click="saveCameraConfig">
-                <el-icon>
-                  <Check />
-                </el-icon>保存摄像头参数
-              </el-button>
-            </div>
+              <!-- 摄像头参数标签页 -->
+              <el-tab-pane label="摄像头参数" name="camera">
+                <template #label>
+                  <span class="tab-label">
+                    <el-icon><Picture /></el-icon>
+                    摄像头参数
+                  </span>
+                </template>
+                
+                <div class="camera-config-form">
+                  <el-form :model="config.camera_config" label-width="100px" size="small">
+                    <el-row :gutter="12">
+                      <el-col :span="8">
+                        <el-form-item label="分辨率">
+                          <el-select v-model="config.camera_config.frame_size">
+                            <el-option v-for="(size, key) in frameSizes" :key="key" :label="size.label"
+                              :value="parseInt(key)" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="亮度">
+                          <el-input-number v-model="config.camera_config.brightness" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="对比度">
+                          <el-input-number v-model="config.camera_config.contrast" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="12">
+                      <el-col :span="8">
+                        <el-form-item label="饱和度">
+                          <el-input-number v-model="config.camera_config.saturation" :min="0" :max="2" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="特效">
+                          <el-select v-model="config.camera_config.special_effect">
+                            <el-option label="无" :value="0" />
+                            <el-option label="黑白" :value="1" />
+                            <el-option label="负片" :value="2" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="镜像">
+                          <el-switch v-model="config.camera_config.hmirror" active-color="#13ce66" />
+                          <span style="margin-left:8px;">水平</span>
+                          <el-switch v-model="config.camera_config.vflip" active-color="#13ce66"
+                            style="margin-left:8px;" />
+                          <span style="margin-left:8px;">垂直</span>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                  </el-form>
+                  <el-button type="primary" size="small" style="margin-top:8px;" @click="saveCameraConfig">
+                    <el-icon>
+                      <Check />
+                    </el-icon>保存摄像头参数
+                  </el-button>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
           </div>
 
           <!-- CO2数据图表 -->
@@ -1860,7 +1877,53 @@ watch(connectionMode, handleModeChange);
   margin-top: 0;
 }
 
+/* 配置标签页样式 */
+.config-tabs {
+  margin-top: 16px;
+}
 
+.config-tabs .el-tabs__header {
+  margin-bottom: 20px;
+}
+
+.config-tabs .el-tabs__nav-wrap {
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.config-tabs .el-tabs__item {
+  border-radius: 6px;
+  margin: 0 2px;
+  transition: all 0.3s ease;
+}
+
+.config-tabs .el-tabs__item.is-active {
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.tab-label el-icon {
+  font-size: 16px;
+}
+
+.config-tabs .el-tabs__content {
+  padding: 0;
+}
+
+.config-tabs .el-tab-pane {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+}
 
 .form-grid {
   display: grid;

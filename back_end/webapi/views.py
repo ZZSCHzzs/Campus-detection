@@ -404,7 +404,6 @@ class HistoricalDataViewSet(viewsets.ModelViewSet):
 class TemperatureHumidityDataViewSet(viewsets.ModelViewSet):
     queryset = TemperatureHumidityData.objects.all()
     serializer_class = TemperatureHumidityDataSerializer
-    permission_classes = [StaffEditSelected]
     allow_staff_edit = False
 
     @action(detail=False, methods=['get'])
@@ -440,7 +439,6 @@ class TemperatureHumidityDataViewSet(viewsets.ModelViewSet):
 class CO2DataViewSet(viewsets.ModelViewSet):
     queryset = CO2Data.objects.all()
     serializer_class = CO2DataSerializer
-    permission_classes = [StaffEditSelected]
     allow_staff_edit = False
 
     @action(detail=False, methods=['get'])
