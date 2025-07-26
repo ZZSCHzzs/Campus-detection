@@ -319,50 +319,67 @@ function formatTime(value: string) {
       <div class="overview">
         <div class="overview-item">
           <h3>今日总客流</h3>
-          <div class="number">{{ summary.people_count }}</div>
-          <div class="trend up">+{{ Math.floor(summary.people_count * 0.12) }}</div>
+          <div class="number-container">
+            <div class="number">{{ summary.people_count }}</div>
+            <div class="trend up">+{{ Math.floor(summary.people_count * 0.12) }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>在线节点数</h3>
-          <div class="number">{{ summary.nodes_online_count }}</div>
+          <div class="number-container">
+            <div class="number">{{ summary.nodes_online_count }}</div>
           <div class="label">总量: {{ summary.nodes_count }}</div>
+          </div>  
         </div>
         <div class="overview-item">
           <h3>在线终端数</h3>
-          <div class="number">{{ summary.terminals_online_count }}</div>
-          <div class="label">总量: {{ summary.terminals_count }}</div>
-        </div>
+          <div class="number-container">
+            <div class="number">{{ summary.terminals_online_count }}</div>
+            <div class="label">总量: {{ summary.terminals_count }}</div>
+          </div>
+        </div>    
         <div class="overview-item">
           <h3>告警事件数</h3>
-          <div class="number warning">{{ summary.alerts_count }}</div>
-          <div class="label" :class="{ 'warning-text': summary.alerts_count > 0 }">
-            {{ summary.alerts_count > 0 ? '需要处理' : '无告警' }}
+          <div class="number-container">
+            <div class="number warning">{{ summary.alerts_count }}</div>
+            <div class="label" :class="{ 'warning-text': summary.alerts_count > 0 }">
+              {{ summary.alerts_count > 0 ? '需要处理' : '无告警' }}
+            </div>
           </div>
         </div>
         <div class="overview-item">
           <h3>通知事件数</h3>
-          <div class="number info">{{ summary.notice_count }}</div>
-          <div class="label">今日新增: {{ Math.floor(summary.notice_count * 0.3) }}</div>
+          <div class="number-container">
+            <div class="number info">{{ summary.notice_count }}</div>
+            <div class="label">今日新增: {{ Math.floor(summary.notice_count * 0.3) }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>建筑数量</h3>
-          <div class="number">{{ summary.buildings_count }}</div>
-          <div class="label">覆盖区域: {{ summary.areas_count }}</div>
+          <div class="number-container">
+            <div class="number">{{ summary.buildings_count }}</div>
+            <div class="label">已覆盖: {{ summary.areas_count }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>区域总数</h3>
-          <div class="number">{{ summary.areas_count }}</div>
-          <div class="trend up">+{{ Math.max(1, Math.floor(summary.areas_count * 0.05)) }}</div>
+          <div class="number-container">
+            <div class="number">{{ summary.areas_count }}</div>
+            <div class="trend up">+{{ Math.max(1, Math.floor(summary.areas_count * 0.05)) }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>历史数据量</h3>
-          <div class="number info">{{ summary.historical_data_count }}</div>
-          <div class="label">持续增长中</div>
+          <div class="number-container">
+            <div class="number info">{{ summary.historical_data_count }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>系统用户数</h3>
-          <div class="number">{{ summary.users_count }}</div>
-          <div class="trend up">+{{ Math.max(1, Math.floor(summary.users_count * 0.08)) }}</div>
+          <div class="number-container">
+            <div class="number">{{ summary.users_count }}</div>
+            <div class="trend up">+{{ Math.max(1, Math.floor(summary.users_count * 0.08)) }}</div>
+          </div>
         </div>
         <div class="overview-item">
           <h3>当前时间</h3>
@@ -746,11 +763,30 @@ function formatTime(value: string) {
   box-shadow: 0 8px 25px rgba(56, 189, 248, 0.25);
 }
 
+.number-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+/* 调整 number 元素的样式，移除上边距因为现在由容器控制 */
+.number-container .number {
+  margin-top: 0;
+}
+
+/* 调整 trend 元素的样式，不再是绝对定位 */
+.number-container .trend {
+  position: static;
+  margin-left: 10px;
+  white-space: nowrap;
+}
 
 .number {
   font-size: 2rem;
   font-weight: bold;
   margin-top: 8px;
+  margin-left: 8px;
   background: linear-gradient(90deg, #38bdf8, #818cf8);
   -webkit-background-clip: text;
   color: transparent;
@@ -794,8 +830,11 @@ function formatTime(value: string) {
 
 
 .label {
-  margin-top: 6px;
   font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
   color: #94a3b8;
 }
 
@@ -804,9 +843,7 @@ function formatTime(value: string) {
 }
 
 .trend {
-  position: absolute;
-  right: 15px;
-  bottom: 15px;
+  
   font-size: 0.8rem;
   font-weight: 500;
   padding: 4px 8px;
@@ -1034,7 +1071,7 @@ function formatTime(value: string) {
   justify-content: space-between !important;
   margin: 0 auto !important; /* 居中显示 */
   box-sizing: border-box;
-  height: auto; /* 根据内容自适应高度 */
+  height: 80px; /* 根据内容自适应高度 */
   order: 0;
   
   transform-origin: center;
@@ -1078,6 +1115,8 @@ function formatTime(value: string) {
 }
 
 .stat-item {
+  display:flex;
+  flex-direction: row;
   width: 100%;
 }
 

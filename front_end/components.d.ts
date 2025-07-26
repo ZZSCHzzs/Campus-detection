@@ -10,7 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AlertManager: typeof import('./src/components/admin/AlertManager.vue')['default']
     AreaCard: typeof import('./src/components/data/AreaCard.vue')['default']
-    AreaHistoryChart: typeof import('./src/components/chart/AreaHistoryChart.vue')['default']
+    AreaHistoryChart: typeof import('./src/components/AreaHistoryChart.vue')['default']
     AreaList: typeof import('./src/components/data/AreaList.vue')['default']
     AreaManager: typeof import('./src/components/admin/AreaManager.vue')['default']
     BaseChart: typeof import('./src/components/chart/BaseChart.vue')['default']
