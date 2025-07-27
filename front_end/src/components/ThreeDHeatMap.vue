@@ -98,7 +98,7 @@ const initThreeScene = () => {
       map: texture,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.4
+      opacity: 0.6
     });
     const plane = new THREE.Mesh(geometry, material);
     plane.rotation.x = -Math.PI / 2; // 使平面水平
@@ -193,7 +193,7 @@ const loadBuildingModel = () => {
             const transparentMaterial = new THREE.MeshPhysicalMaterial({
               color: 0x6b7280,
               transparent: true,
-              opacity: 0.2,         // 降低不透明度，使模型更透明
+              opacity: 0.4,         // 降低不透明度，使模型更透明
               roughness: 0.5,       // 较低的粗糙度，增加光泽感
               metalness: 0.5,       // 轻微的金属感
               side: THREE.FrontSide, // 双面渲染，确保内部面可见
@@ -1637,7 +1637,7 @@ function easeInOutCubic(t) {
 }
 
 .visibility-toggle:hover {
-  opacity: 1;
+  opacity: 0.8;
 }
 
 .structure-item {

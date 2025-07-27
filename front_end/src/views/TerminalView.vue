@@ -1420,7 +1420,7 @@ watch(connectionMode, handleModeChange);
               <EnvironmentalChart
                 :terminal-id="terminal.id"
                 data-type="co2"
-                height="400px"
+                height="250px"
               />
             </div>
           </div>

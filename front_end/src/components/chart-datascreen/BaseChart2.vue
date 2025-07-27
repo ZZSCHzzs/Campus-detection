@@ -45,16 +45,18 @@ const props = withDefaults(defineProps<Props>(), {
   chartType: 'line',
   theme: 'light',
   gridConfig: () => ({
-    left: '3%',
-    right: '4%',
-    bottom: '10%',
     top: '15%',
+    right: '5%',
+    bottom: '10%',
+    left: '12%',
     containLabel: true
   }),
   legendConfig: () => ({
-    top: '5%',
+    show: true,
+    top: 'top',
     textStyle: {
-      fontSize: 12
+      fontSize: 12,
+      color: '#e0f2fe'
     }
   })
 })
@@ -79,7 +81,7 @@ const internalLoading = ref(false)
 const containerStyle = computed(() => ({
   width: '100%',
   height: '100%',
-  minHeight: '180px', // 与 chart-inner-container 保持一致
+  minHeight: '250px', // 与 chart-inner-container 保持一致
   position: 'relative'
 }));
 
@@ -146,6 +148,8 @@ const initChart = async () => {
 
     // 设置基础配置
     const baseOption = {
+      backgroundColor: 'transparent',
+      color: ['#22d3ee', '#a78bfa'],
       animation: true,
       animationDuration: 1000,
       animationEasing: 'cubicOut',
@@ -153,11 +157,11 @@ const initChart = async () => {
       legend: props.legendConfig,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(50, 50, 50, 0.9)',
+        backgroundColor: 'rgba(15, 23, 42, 0.9)',
         borderColor: '#333',
         borderWidth: 1,
         textStyle: {
-          color: '#fff',
+          color: '#f0f9ff',
           fontSize: 12
         },
         formatter: '{b}<br/>{a}: {c}'
@@ -167,15 +171,19 @@ const initChart = async () => {
         boundaryGap: props.chartType === 'bar',
         axisLine: {
           lineStyle: {
-            color: '#e0e0e0'
+            color: 'rgba(56, 189, 248, 0.5)'
           }
         },
         axisLabel: {
-          color: '#666',
+          color: '#a5f3fc',
           fontSize: 11
         },
         splitLine: {
-          show: false
+          show: true,
+          lineStyle: {
+            color: 'rgba(56, 189, 248, 0.1)',
+            type: 'dashed'
+          }
         }
       },
       yAxis: {
@@ -187,16 +195,18 @@ const initChart = async () => {
           show: false
         },
         axisLabel: {
-          color: '#666',
+          color: '#a5f3fc',
           fontSize: 11
         },
         splitLine: {
+          show: true,
           lineStyle: {
-            color: '#f0f0f0',
+            color: 'rgba(56, 189, 248, 0.1)',
             type: 'dashed'
           }
         }
-      }
+      },
+      series: [] // 将 series 的默认配置移到 setOption 中
     }
 
     try {
@@ -443,7 +453,7 @@ onMounted(async () => {
   // console.error = filteredConsoleError
   // window.addEventListener('error', handleGlobalError, true)
   // window.addEventListener('unhandledrejection', handleUnhandledRejection, true)
-  
+
   // 确保DOM完全渲染
   await nextTick()
 
@@ -481,7 +491,7 @@ onUnmounted(() => {
   // console.error = originalConsoleError
   // window.removeEventListener('error', handleGlobalError, true)
   // window.removeEventListener('unhandledrejection', handleUnhandledRejection, true)
-  
+
   if (cleanupChartEvents) {
     cleanupChartEvents()
   }
@@ -498,23 +508,26 @@ onUnmounted(() => {
       <div class="subtitle">
         <span v-if="title">{{ title }}</span>
       </div>
+      <div class="chart-buttons">
+        <!-- 时间范围选择 -->
+        <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" style="width: 120px;"
+          @change="handleTimeRangeChange">
+          <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
+        </el-select>
+        <el-button v-if="showRefresh" size="small" :icon="Refresh" type="primary" @click="refreshChart" :loading="loadingState" />
+
+      </div>
     </div>
     <!-- 控制按钮 -->
-    <div class="chart-buttons">
-      <!-- 时间范围选择 -->
-      <el-select v-if="showTimeRange" v-model="currentTimeRange" size="small" style="width: 120px;"
-        @change="handleTimeRangeChange">
-        <el-option v-for="option in timeOptions" :key="option.value" :label="option.label" :value="option.value" />
-      </el-select>
-      <el-button v-if="showRefresh" size="small" :icon="Refresh" @click="refreshChart" :loading="loadingState" />
 
-      <el-button v-if="showExport" size="small" :icon="Download" @click="exportChart" />
-
-      <el-button v-if="showFullscreen" size="small" :icon="FullScreen" @click="toggleFullscreen" />
-    </div>
     <!-- 图表容器 -->
     <div class="chart-content">
-      <div ref="chartContainer" :style="containerStyle" class="chart-container"></div>
+      <div ref="chartContainer" :style="{
+        width: '100%',
+        height: '100%',
+        minHeight: '300px',
+        position: 'relative' as const
+      }" class="chart-container"></div>
 
       <!-- 错误状态 -->
       <div v-if="error" class="chart-error">
@@ -544,23 +557,28 @@ onUnmounted(() => {
   overflow: hidden;
   transition: all 0.3s ease;
 }
+
 .chart-header {
-  padding: 10px 15px;  /* 减小内边距 */
+  padding: 10px 15px;
+  /* 减小内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: none;
   background: transparent;
-  flex-wrap: wrap; /* 允许在小屏幕上换行 */
+  flex-wrap: wrap;
+  /* 允许在小屏幕上换行 */
 }
+
 .chart-title {
-  font-size: 8px;
+  font-size: 18px;
   font-weight: 600;
   margin: 0 0 0px 0px;
   /* 增加下边距 */
   padding-left: 4px;
   border-left: 4px solid var(--el-color-primary);
 }
+
 .chart-controls {
   display: flex;
   align-items: center;
@@ -575,20 +593,28 @@ onUnmounted(() => {
 .chart-content {
   position: relative;
   width: 100%;
-  height: 100%; /* 确保内容填满容器 */
+  height: 100%;
+  /* 确保内容填满容器 */
   display: flex;
-  flex-direction: column; /* 垂直布局 */
-  justify-content: center; /* 垂直居中内容 */
-  align-items: center; /* 水平居中内容 */
-  box-sizing: border-box; /* 包含内边距 */
+  flex-direction: column;
+  /* 垂直布局 */
+  justify-content: center;
+  /* 垂直居中内容 */
+  align-items: center;
+  /* 水平居中内容 */
+  box-sizing: border-box;
+  /* 包含内边距 */
 }
 
 .chart-container {
   width: 100%;
-  height: 100%; /* 确保图表容器填满内容区域 */
+  height: 100%;
+  /* 确保图表容器填满内容区域 */
   display: flex;
-  flex: 1; /* 使图表容器扩展到父容器的剩余空间 */
-  overflow: hidden; /* 防止内容溢出 */
+  flex: 1;
+  /* 使图表容器扩展到父容器的剩余空间 */
+  overflow: hidden;
+  /* 防止内容溢出 */
 }
 
 .chart-error,
@@ -621,30 +647,31 @@ onUnmounted(() => {
     flex-shrink: 0;
   }
 }
+
 .section-header {
   margin-bottom: 6px;
   flex-shrink: 0;
   display: flex;
-  
+  justify-content: space-between;
   align-items: center;
-  
+
   gap: 10px;
-  
+
 }
 
 .section-header h2 {
   font-size: 0.95rem;
   margin: 0;
   white-space: nowrap;
-  
+
 }
 
 .subtitle {
-  font-size: 0.7rem;
+  font-size: 1rem;
   color: #94a3b8;
   position: relative;
   padding-left: 10px;
-  
+
 }
 
 

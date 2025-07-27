@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from './BaseChart2.vue'
+import * as echarts from 'echarts' // 引入echarts以使用渐变色
 import { areaService, temperatureHumidityService, co2Service, terminalService } from '../../services'
 import type { TemperatureHumidityData, CO2Data } from '../../types.ts'
 
@@ -186,33 +187,7 @@ const generateCO2ChartOption = () => {
   if (!co2Data.value || co2Data.value.length === 0) {
     console.warn('CO2数据为空，无法生成图表');
     return {
-      title: {
-        text: '当前浓度：-- ppm',
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 'normal',
-          color: '#666'
-        },
-        right: '5%',
-        top: '2%'
-      },
-      xAxis: {
-        type: 'category',
-        data: []
-      },
-      yAxis: {
-        name: 'CO2浓度 (ppm)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        }
-      },
-      series: [{
-        name: 'CO2浓度',
-        type: 'line',
-        data: [],
-        smooth: true
-      }]
+      series: [] // 返回空系列以清空图表
     };
   }
   
@@ -221,96 +196,49 @@ const generateCO2ChartOption = () => {
     item && item.timestamp && item.co2_level !== undefined && item.co2_level !== null
   );
   
-  
   if (validData.length === 0) {
     console.warn('没有有效的CO2数据点');
     return {
-      title: {
-        text: '当前浓度：-- ppm',
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 'normal',
-          color: '#666'
-        },
-        right: '5%',
-        top: '2%'
-      },
-      xAxis: {
-        type: 'category',
-        data: []
-      },
-      yAxis: {
-        name: 'CO2浓度 (ppm)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        }
-      },
-      series: [{
-        name: 'CO2浓度',
-        type: 'line',
-        data: [],
-        smooth: true
-      }]
+      series: []
     };
   }
   
-  const times = validData.map(item => 
-    new Date(item.timestamp).toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
-  );
-  
+  const times = validData.map(item => new Date(item.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
   const values = validData.map(item => item.co2_level);
-  
-  // 检查最后一个值是否有效
-  const lastValue = values[values.length - 1];
-  const currentValue = lastValue !== undefined && lastValue !== null ? lastValue : '--';
 
   return {
-    title: {
-      text: '当前浓度：' + currentValue + ' ppm',
-      textStyle: {
-        fontSize: 14,
-        fontWeight: 'normal',
-        color: '#666'
-      },
-      right: '5%',
-      top: '2%'
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+      textStyle: { color: '#f0f9ff' }
     },
     xAxis: {
       type: 'category',
-      data: times
+      data: times,
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } }, // 降低不透明度
+      axisLabel: { color: '#a5f3fc', fontSize: 11 }
     },
     yAxis: {
       name: 'CO2浓度 (ppm)',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      }
+      type: 'value',
+      nameTextStyle: { color: '#a5f3fc' },
+      axisLine: { show: false, lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } }, // 降低不透明度
+      axisLabel: { color: '#a5f3fc', fontSize: 11 },
+      splitLine: { show: true, lineStyle: { color: 'rgba(255, 255, 255, 0.15)', type: 'dashed' } } // 调整颜色和不透明度
     },
     series: [{
       name: 'CO2浓度',
       type: 'line',
       data: values,
       smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#ff6b6b'
-      },
-      itemStyle: {
-        color: '#ff6b6b'
-      },
+      lineStyle: { width: 2, color: '#22d3ee' },
+      itemStyle: { color: '#22d3ee' },
       areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(255, 107, 107, 0.3)' },
-            { offset: 1, color: 'rgba(255, 107, 107, 0.05)' }
-          ]
-        }
+        opacity: 0.2,
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(34, 211, 238, 0.6)' }, // 增强渐变
+          { offset: 1, color: 'rgba(34, 211, 238, 0)' }
+        ])
       }
     }]
   };
@@ -318,114 +246,79 @@ const generateCO2ChartOption = () => {
 
 // 生成温湿度图表配置
 const generateTemperatureHumidityChartOption = () => {
-  const times = temperatureHumidityData.value.map(item => 
-    new Date(item.timestamp).toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
-  )
+  const times = temperatureHumidityData.value.map(item => new Date(item.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
+  const series: any[] = [];
+  const yAxis: any[] = [];
 
-  const series: any[] = []
-  const yAxis: any[] = []
+  const baseAxisStyle = {
+    type: 'value',
+    nameTextStyle: { color: '#a5f3fc', fontSize: 12 },
+    axisLine: { show: false, lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } }, // 降低不透明度
+    axisLabel: { color: '#a5f3fc', fontSize: 11 },
+    splitLine: { show: true, lineStyle: { color: 'rgba(255, 255, 255, 0.15)', type: 'dashed' } } // 调整颜色和不透明度
+  };
 
   if (props.dataType === 'temperature' || props.dataType === 'temperature-humidity') {
-    const temperatures = temperatureHumidityData.value.map(item => item.temperature || null)
-    
-    yAxis.push({
-      type: 'value',
-      name: '温度 (°C)',
-      position: 'left',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      },
-      axisLabel: {
-        formatter: '{value}°C'
-      }
-    })
-
+    yAxis.push({ ...baseAxisStyle, name: '温度 (°C)', position: 'left', axisLabel: { ...baseAxisStyle.axisLabel, formatter: '{value}°C' } });
     series.push({
       name: '温度',
       type: 'line',
       yAxisIndex: 0,
-      data: temperatures,
+      data: temperatureHumidityData.value.map(item => item.temperature || null),
       smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#ff9500'
-      },
-      itemStyle: {
-        color: '#ff9500'
+      lineStyle: { width: 2, color: '#22d3ee' },
+      itemStyle: { color: '#22d3ee' },
+      areaStyle: { // 添加温度渐变
+        opacity: 0.2,
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(34, 211, 238, 0.6)' }, // 增强渐变
+          { offset: 1, color: 'rgba(34, 211, 238, 0)' }
+        ])
       }
-    })
+    });
   }
 
   if (props.dataType === 'humidity' || props.dataType === 'temperature-humidity') {
-    const humidities = temperatureHumidityData.value.map(item => item.humidity || null)
-    
-    const yAxisIndex = props.dataType === 'temperature-humidity' ? 1 : 0
-    
-    if (props.dataType === 'temperature-humidity') {
-      yAxis.push({
-        type: 'value',
-        name: '湿度 (%)',
-        position: 'right',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        },
-        axisLabel: {
-          formatter: '{value}%'
-        }
-      })
-    } else {
-      yAxis.push({
-        type: 'value',
-        name: '湿度 (%)',
-        nameTextStyle: {
-          color: '#666',
-          fontSize: 12
-        },
-        axisLabel: {
-          formatter: '{value}%'
-        }
-      })
-    }
-
+    const yAxisIndex = props.dataType === 'temperature-humidity' ? 1 : 0;
+    yAxis.push({ ...baseAxisStyle, name: '湿度 (%)', position: yAxisIndex === 1 ? 'right' : 'left', axisLabel: { ...baseAxisStyle.axisLabel, formatter: '{value}%' } });
     series.push({
       name: '湿度',
       type: 'line',
       yAxisIndex: yAxisIndex,
-      data: humidities,
+      data: temperatureHumidityData.value.map(item => item.humidity || null),
       smooth: true,
-      lineStyle: {
-        width: 3,
-        color: '#00d4ff'
-      },
-      itemStyle: {
-        color: '#00d4ff'
+      lineStyle: { width: 2, color: '#a78bfa' },
+      itemStyle: { color: '#a78bfa' },
+      areaStyle: { // 添加湿度渐变
+        opacity: 0.2,
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(167, 139, 250, 0.6)' }, // 增强渐变
+          { offset: 1, color: 'rgba(167, 139, 250, 0)' }
+        ])
       }
-    })
+    });
   }
 
   return {
-    xAxis: {
-      data: times
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+      textStyle: { color: '#f0f9ff' }
     },
-    yAxis: yAxis.length > 0 ? yAxis : [{
-      type: 'value',
-      name: '数值',
-      nameTextStyle: {
-        color: '#666',
-        fontSize: 12
-      }
-    }],
+    xAxis: {
+      type: 'category',
+      data: times,
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } }, // 降低不透明度
+      axisLabel: { color: '#a5f3fc', fontSize: 11 }
+    },
+    yAxis: yAxis,
     series: series,
     legend: {
       data: series.map(s => s.name),
-      top: '5%'
+      top: 'top',
+      textStyle: { color: '#e0f2fe' }
     }
-  }
+  };
 }
 
 // 图表就绪事件处理

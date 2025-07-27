@@ -115,8 +115,6 @@ const fetchHistoricalData = async (areaId: number, hours = 24) => {
 const generateChartOption = () => {
   const times = historicalData.value.map(item => 
     new Date(item.timestamp).toLocaleTimeString('zh-CN', { 
-      month: '2-digit',
-      day: '2-digit',
       hour: '2-digit', 
       minute: '2-digit' 
     })
@@ -133,25 +131,28 @@ const generateChartOption = () => {
     name: '检测人数',
     data: counts,
     smooth: true,
+    symbol: 'circle', // 统一标记样式
+    symbolSize: 6,    // 统一标记大小
     lineStyle: {
-      width: 3,
-      color: '#409EFF'
+      width: 2, // 更细的线
+      color: '#00E5FF' // 科技感蓝色
     },
     itemStyle: {
-      color: '#409EFF',
+      color: '#00E5FF',
       borderColor: '#fff',
-      borderWidth: 2
+      borderWidth: 1
     },
     emphasis: {
+      focus: 'series',
       itemStyle: {
         shadowBlur: 10,
-        shadowColor: 'rgba(64, 158, 255, 0.3)'
+        shadowColor: 'rgba(0, 229, 255, 0.5)'
       }
     }
   }
 
   let series
-  if (props.chartType === 'area') {
+  if (props.chartType === 'area' || props.chartType === 'line') { // 同时为 line 和 area 类型应用渐变
     series = {
       ...baseSeriesConfig,
       type: 'line',
@@ -160,8 +161,8 @@ const generateChartOption = () => {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+            { offset: 0, color: 'rgba(0, 229, 255, 0.6)' }, // 增强渐变起始不透明度
+            { offset: 1, color: 'rgba(0, 229, 255, 0)' }   // 渐变结束色（透明）
           ]
         }
       }
@@ -176,8 +177,8 @@ const generateChartOption = () => {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: '#409EFF' },
-            { offset: 1, color: '#79bbff' }
+            { offset: 0, color: '#00E5FF' },
+            { offset: 1, color: '#00AACC' }
           ]
         },
         borderRadius: [4, 4, 0, 0]
@@ -191,46 +192,68 @@ const generateChartOption = () => {
   }
 
   return {
-    // 在 generateChartOption 函数中调整标题配置
     title: {
       text: `当前:${currentCount} | 峰值:${maxCount} | 平均:${avgCount}`,
       textStyle: {
-        fontSize: 12, // 减小字体
+        fontSize: 14, // 调整字体大小
         fontWeight: 'normal',
-        color: '#666'
+        color: '#ffffff' // 白色字体
       },
       right: '5%',
-      top: '0%' // 调整位置
+      top: '2%'
     },
     tooltip: {
       trigger: 'axis',
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      borderColor: '#333',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff'
+      },
       formatter: (params: any) => {
         const param = params[0]
         return `时间: ${param.name}<br/>检测人数: ${param.value}人`
       }
     },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '10%', // 为 dataZoom 留出空间
+      containLabel: true
+    },
     xAxis: {
+      type: 'category',
+      boundaryGap: false,
       data: times,
+      axisLine: { show: true, lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } }, // 降低坐标轴线不透明度
       axisLabel: {
-        rotate: 45,
+        color: '#ffffff',
+        // rotate: 45, // 取消旋转以获得更简洁的外观
+        interval: Math.floor(times.length / 10), // 动态计算间隔，减少标签密度
         formatter: (value: string) => {
-          // 如果数据点太多，只显示部分标签
-          if (times.length > 20) {
-            const index = times.indexOf(value)
-            return index % 3 === 0 ? value : ''
-          }
-          return value
+          return value;
         }
-      }
+      },
+      splitLine: { show: false } // X轴通常不显示分割线
     },
     yAxis: {
+      type: 'value',
       name: '人数',
       nameTextStyle: {
-        color: '#666',
+        color: '#ffffff',
         fontSize: 12
       },
+      axisLine: { show: false },
       axisLabel: {
-        formatter: '{value}人'
+        formatter: '{value}人',
+        color: '#ffffff'
+      },
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: 'rgba(255, 255, 255, 0.15)', // 降低网格线不透明度
+          type: 'dashed'
+        }
       },
       min: 0
     },

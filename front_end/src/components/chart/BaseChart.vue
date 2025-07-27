@@ -183,7 +183,7 @@ const initChart = async () => {
       // 可以在这里设置一个默认的最小尺寸，以防完全无法渲染
       if (chartContainer.value) {
         if (containerWidth <= 0) chartContainer.value.style.width = '100%'
-        if (containerHeight <= 0) chartContainer.value.style.height = '300px' // 降级到固定高度
+        if (containerHeight <= 0) chartContainer.value.style.height = '200px' // 降级到固定高度
       }
       await nextTick()
       containerWidth = chartContainer.value.clientWidth
