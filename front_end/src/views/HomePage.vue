@@ -440,17 +440,25 @@ onBeforeUnmount(() => {
             height="320px"
             :hide-data-zoom="true"
             :style-config="{
-              gridLineColor: 'rgba(255, 255, 255, 0.1)',
-              axisLineColor: 'rgba(255, 255, 255, 0.2)',
-              axisLabelColor: '#ffffff',
+              gridLineColor: 'rgba(0, 0, 0, 0.1)',
+              axisLineColor: 'rgba(0, 0, 0, 0.2)',
+              axisLabelColor: '#333',
               axisLabelFontSize: 12,
               seriesColors: ['#409EFF'],
               backgroundColor: 'transparent',
-              textColor: '#ffffff',
+              textColor: '#333',
               fontSize: 12,
               showLegend: false,
               tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
-              tooltipTextColor: '#ffffff'
+              tooltipTextColor: '#ffffff',
+              showGridLine: true, // 确保显示网格线
+              yAxis: {
+                axisLine: { show: true }, // 确保显示Y轴线
+                splitLine: { show: true } // 确保显示Y轴分割线
+              },
+              xAxis: {
+                axisLine: { show: true } // 确保显示X轴线
+              }
             }"
           />
           <HistoricalChart 
@@ -458,17 +466,25 @@ onBeforeUnmount(() => {
             height="320px"
             :hide-data-zoom="true"
             :style-config="{
-              gridLineColor: 'rgba(255, 255, 255, 0.1)',
-              axisLineColor: 'rgba(255, 255, 255, 0.2)',
-              axisLabelColor: '#ffffff',
+              gridLineColor: 'rgba(0, 0, 0, 0.1)',
+              axisLineColor: 'rgba(0, 0, 0, 0.2)',
+              axisLabelColor: '#333',
               axisLabelFontSize: 12,
               seriesColors: ['#409EFF'],
               backgroundColor: 'transparent',
-              textColor: '#ffffff',
+              textColor: '#333',
               fontSize: 12,
               showLegend: false,
               tooltipBackgroundColor: 'rgba(15, 23, 42, 0.9)',
-              tooltipTextColor: '#ffffff'
+              tooltipTextColor: '#ffffff',
+              showGridLine: true, // 确保显示网格线
+              yAxis: {
+                axisLine: { show: true }, // 确保显示Y轴线
+                splitLine: { show: true } // 确保显示Y轴分割线
+              },
+              xAxis: {
+                axisLine: { show: true } // 确保显示X轴线
+              }
             }"
           />
         </el-card>

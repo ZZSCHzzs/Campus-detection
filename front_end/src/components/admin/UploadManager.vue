@@ -264,7 +264,7 @@ const submitDataForm = async () => {
         id: Number(dataForm.id)
       }
       
-      const response = await axios.post('/api/upload/', formData)
+      const response = await apiService.customPost('/api/upload/', formData)
       resultMessage.value = response.data.message || '数据上传成功'
       resultStatus.value = 'success'
       ElMessage.success(resultMessage.value)
@@ -300,7 +300,7 @@ const submitAlertForm = async () => {
         grade: Number(alertForm.grade)
       }
       
-      const response = await axios.post('/api/alert/', formData)
+      const response = await apiService.customPost('/api/alert/', formData)
       resultMessage.value = response.data.message || '告警创建成功'
       resultStatus.value = 'success'
       ElMessage.success(resultMessage.value)

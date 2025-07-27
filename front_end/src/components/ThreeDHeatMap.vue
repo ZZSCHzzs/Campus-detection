@@ -32,7 +32,7 @@ let animationFrameId: number
 
 // 添加调试状态
 const showDebugInfo = ref(false)
-const modelStructure = ref<{name: string, type: string, depth: number, id: string}[]>([])
+const modelStructure = ref<{name: string, type: string, depth: number, id: string, visible: boolean}[]>([])
 
 // 添加模型引用映射和高亮状态
 const modelObjectsMap = ref<Map<string, THREE.Object3D>>(new Map())

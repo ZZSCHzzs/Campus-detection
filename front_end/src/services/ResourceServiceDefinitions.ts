@@ -258,6 +258,15 @@ export const userCustomMethods = {
   },
 };
 
+export const uploadDataCustomMethods = {
+  upload: (data: any) => {
+    return customApiCall('/api/upload/', 'post', data);
+  },
+  alert: (data: any) => {
+    return customApiCall('/api/alert/', 'post', data);
+  }
+}
+
 // 本地终端服务自定义方法
 export const localTerminalCustomMethods = {
   // 获取终端状态

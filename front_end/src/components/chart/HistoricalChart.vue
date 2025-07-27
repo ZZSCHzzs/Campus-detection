@@ -45,6 +45,10 @@ interface Props {
       fontWeight?: string
       color?: string
     }
+    yAxis?: {
+    }
+    xAxis?: {
+    }
     areaStyle?: {
       opacity?: number
       colorStops?: Array<{ offset: number; color: string }>

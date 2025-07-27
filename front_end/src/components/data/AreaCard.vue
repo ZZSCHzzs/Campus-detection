@@ -94,9 +94,9 @@ const loadColor = computed(() => {
   const ratio = loadRatio.value
   if (ratio >= 0.9) return '#F56C6C'
   if (ratio >= 0.7) return '#E6A23C'
-  if (ratio >= 0.5) return '#F7BA2A'
+  if (ratio >= 0.3) return '#67C23A'
   if (ratio == -1) return '#409EFF'
-  return '#67C23A'
+  return '#409EFF'
 })
 
 const loadStatus = computed(() => {

@@ -29,11 +29,11 @@ const calculateRatio = (count: number | undefined | null, capacity: number | und
 
 const getProgressColor = (rate: number) => {
 
-  if (rate === -1) return '#909399'
-  if (rate > 0.9) return '#F56C6C'
-  if (rate > 0.7) return '#E6A23C'
-  if (rate > 0.5) return '#409EFF'
-  return '#67C23A'
+  if (rate >= 0.9) return '#F56C6C'
+  if (rate >= 0.7) return '#E6A23C'
+  if (rate >= 0.3) return '#67C23A'
+  if (rate == -1) return '#409EFF'
+  return '#409EFF'
 }
 
 const getTagType = (rate: number) => {
@@ -41,8 +41,8 @@ const getTagType = (rate: number) => {
   if (rate === -1) return 'info'
   if (rate > 0.9) return 'danger'
   if (rate > 0.7) return 'warning'
-  if (rate > 0.5) return 'info'
-  return 'success'
+  if (rate > 0.3) return 'success'
+  return 'info'
 }
 
 const getStatusText = (rate: number) => {
@@ -50,7 +50,7 @@ const getStatusText = (rate: number) => {
   if (rate === -1) return '未设置容量';
   if (rate >= 0.9) return '拥挤';
   if (rate >= 0.7) return '较拥挤';
-  if (rate >= 0.5) return '适中';
+  if (rate >= 0.3) return '适中';
   return '空闲';
 }
 
@@ -59,8 +59,8 @@ const getStatusIcon = (rate: number) => {
   if (rate === -1) return 'el-icon-info';
   if (rate >= 0.9) return 'el-icon-warning-filled';
   if (rate >= 0.7) return 'el-icon-warning';
-  if (rate >= 0.5) return 'el-icon-info-filled';
-  return 'el-icon-success-filled';
+  if (rate >= 0.3) return 'el-icon-success-filled';
+  return 'el-icon-info-filled';
 }
 
 const processedAreas = computed(() => {
