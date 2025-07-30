@@ -78,7 +78,7 @@ const initThreeScene = () => {
   scene.background = new THREE.Color(0x141c2f)
   // 添加地图贴图地面
   const textureLoader = new THREE.TextureLoader();
-  textureLoader.load('./public/ground.png', (texture) => {
+  textureLoader.load('./ground.png', (texture) => {
     // 设置贴图重复（缩放效果），如2倍缩放
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;

@@ -467,8 +467,8 @@ watch(buildings, () => {
     <!-- 顶部标题卡片 -->
     <div class="page-header-card">
       <div class="header-content">
-        <h1 class="main-title">校园区域监测</h1>
-        <p class="subtitle">实时查看各区域人流情况</p>
+        <h1 class="main-title">区域监测</h1>
+        <p class="subtitle">实时查看各区域人员数量与环境数据</p>
         <div class="header-decoration"></div>
       </div>
     </div>

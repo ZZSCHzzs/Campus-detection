@@ -317,8 +317,8 @@ onBeforeUnmount(() => {
   <div class="home-container">
     <el-card class="header-card">
       <div class="header-wrapper">
-        <h1 class="header-title">智慧校园<span class="highlight">人员检测</span>系统</h1>
-        <div class="sub-title">实时监测校园内各区域人员情况，保障安全与高效管理</div>
+        <h1 class="header-title">智慧校园<span class="highlight">空间感知调控</span>系统</h1>
+        <div class="sub-title">实时监测校园内各区域人员情况与环境数据，保障安全与高效管理</div>
       </div>
     </el-card>
     <el-card class="stats-card mb-20 mt-20">

@@ -270,7 +270,6 @@ onMounted(async () => {
   }
 })
 
-const mapImage = new URL('../assets/map_zx_F1.png', import.meta.url).href
 
 const statusGridRef = ref(null)
 
@@ -310,9 +309,9 @@ function formatTime(value: string) {
 <template>
   <div class="dashboard">
     <!-- 3D Heatmap as background -->
-    <ThreeDHeatMap :areas="areas" :mapImage="mapImage" class="heatmap-container-fullscreen" />
+    <ThreeDHeatMap :areas="areas" class="heatmap-container-fullscreen" />
 
-    <!-- UI Overlay -->
+    <!-- UI Overlay -->s
     <div class="ui-overlay">
       <div class="fullscreen-toggle" @click="toggleFullScreen">
         <i class="fullscreen-icon" :class="{ 'is-active': isFullscreen }"></i>
