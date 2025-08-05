@@ -93,20 +93,18 @@ front_end/
 └── readme.md               # 项目说明
 ```
 
-## 4. 路由结构
+##  4. 路由结构
 
-| 路径              | 组件           | 描述      | 权限要求    |
-| --------------- | ------------ | ------- | ------- |
-| `/`             | HomePage     | 首页，系统概览 | 无       |
-| `/areas`        | AreasView    | 区域列表和详情 | 无       |
-| `/screen`       | DataScreen   | 数据大屏可视化 | 无       |
-| `/login`        | AuthView     | 登录      | 无       |
-| `/register`     | AuthView     | 注册      | 无       |
-| `/alerts`       | AlertNotice  | 告警和通知   | 无       |
-| `/profile`      | UserView     | 用户个人中心  | 需要登录    |
-| `/terminal`     | TerminalView | 终端管理    | 需要管理员权限 |
-| `/terminal/:id` | TerminalView | 终端详情    | 需要管理员权限 |
-| `/admin`        | AdminView    | 管理控制面板  | 需要管理员权限 |
+| 路径                          | 组件           | 描述      | 权限要求    |
+| --------------------------- | ------------ | ------- | ------- |
+| `/`                         | HomePage     | 首页，系统概览 | 无       |
+| `/areas`                    | AreasView    | 区域列表和详情 | 无       |
+| `/screen`                   | DataScreen   | 数据大屏可视化 | 无       |
+| `/login`,`/register`        | AuthView     | 登录注册页面  | 无       |
+| `/alerts`                   | AlertNotice  | 告警和通知中心 | 无       |
+| `/profile`                  | UserView     | 用户个人中心  | 需要登录    |
+| `/terminal`,`/terminal/:id` | TerminalView | 终端管理    | 需要管理员权限 |
+| `/admin`                    | AdminView    | 数据后台管理  | 需要管理员权限 |
 
 ### 路由守卫
 

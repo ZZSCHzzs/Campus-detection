@@ -1,8 +1,8 @@
 {
     "mode": "push",
-    "interval": 3,
+    "interval": 5,
     "nodes": {
-        "2": "192.168.1.102:81"
+        "2": "192.168.1.100:81"
     },
     "save_image": true,
     "preload_model": true,
@@ -19,6 +19,21 @@
         "hmirror": false,
         "vflip": false
     },
+    "camera_config": {
+        "frame_size": 10,
+        "frame_rate": 30,
+        "exposure": 0,
+        "brightness": 0,
+        "contrast": 0,
+        "saturation": 0,
+        "sharpness": 0,
+        "gain": 0,
+        "white_balance": "auto",
+        "auto_exposure": true,
+        "special_effect": 1,
+        "hmirror": false,
+        "vflip": false
+    },
     "co2_enabled": true,
-    "co2_read_interval": 30
+    "co2_read_interval": 27
 }
