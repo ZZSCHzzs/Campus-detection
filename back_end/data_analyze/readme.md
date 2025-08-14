@@ -1,0 +1,3 @@
+## models里面是温湿度的模型，用的是梯度下降树
+## stu_models里面是人数的模型，用的是Gradient Boosting
+## co2_models里面是co2的模型，用的是LightGBM
