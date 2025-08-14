@@ -26,4 +26,5 @@ urlpatterns = [
     path('api/environment/', EnvironmentView.as_view(), name='environment'),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
+    path('api/llm/', include('llm.urls')),
 ]
