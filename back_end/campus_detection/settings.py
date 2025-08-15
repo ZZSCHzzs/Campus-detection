@@ -253,3 +253,7 @@ CACHES = {
         }
     }
 }
+
+# Pydantic 配置
+import pydantic.v1.config
+pydantic.v1.config.PYDANTIC_VALIDATOR_REUSE = True

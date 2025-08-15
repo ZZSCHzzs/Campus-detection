@@ -77,6 +77,7 @@ declare module 'vue' {
     Navbar: typeof import('./src/components/layout/Navbar.vue')['default']
     NodeManager: typeof import('./src/components/admin/NodeManager.vue')['default']
     NoticeManager: typeof import('./src/components/admin/NoticeManager.vue')['default']
+    ProcessingSteps: typeof import('./src/components/ProcessingSteps.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TerminalManager: typeof import('./src/components/admin/TerminalManager.vue')['default']

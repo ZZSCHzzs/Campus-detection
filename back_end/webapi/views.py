@@ -383,7 +383,28 @@ class AreaViewSet(viewsets.ModelViewSet):
             request.user.save()
             return Response({"detail": "区域已收藏"})
 
+    @action(detail=False, methods=['get'])
+    def suggest(self, request):
+        """获取推荐区域列表"""
+        count = int(request.query_params.get('count', 5))
+        cache_key = f"suggested_areas_{building}_{count}"
 
+        # 尝试从缓存获取
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        # 缓存未命中，查询数据库
+        building = request.query_params.get('building', None)
+        if not building or Building.objects.filter(id=building).count() == 0:
+            building = 1
+        areas = Area.objects.filter(type_id=building).select_related('bound_node')
+        areas = sorted(areas, key=lambda x: x.bound_node.detected_count if x.bound_node else 0)[:count]
+        serializer = AreaSerializer(areas, many=True)
+
+        # 缓存结果（5分钟）
+        cache.set(cache_key, serializer.data, timeout=300)
+        return Response(serializer.data)
 
 
 
@@ -694,9 +715,9 @@ class SummaryView(APIView):
             "nodes_online_count": nodes_online_count,
             "terminals_online_count": terminals_online_count
         }
-        
-        # 缓存结果（2分钟）
-        cache.set(cache_key, summary_data, timeout=120)
+
+        # 缓存结果（30分钟）
+        cache.set(cache_key, summary_data, timeout=1800)
         return Response(summary_data)
 
 

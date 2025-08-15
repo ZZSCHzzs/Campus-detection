@@ -1,13 +1,14 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.views import APIView
+from rest_framework.views import View
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from datetime import timedelta
-import requests
-import os
+from asgiref.sync import async_to_sync
 import json
+import logging
+import asyncio
 
 from .models import LLMAnalysis, UserRecommendation, AlertAnalysis, AreaUsagePattern, GeneratedContent
 from .serializers import (
@@ -20,6 +21,7 @@ from .tasks import (
     generate_area_usage_pattern, generate_personalized_recommendations
 )
 from .agent import get_agent_response
+from .utils import get_model_info
 
 
 class LLMAnalysisViewSet(viewsets.ReadOnlyModelViewSet):
@@ -33,7 +35,6 @@ class LLMAnalysisViewSet(viewsets.ReadOnlyModelViewSet):
         except Area.DoesNotExist:
             return Response({"error": "Area not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Check for recent analysis (e.g., within the last hour)
         recent_analysis = self.get_queryset().filter(
             area=area,
             timestamp__gte=timezone.now() - timedelta(hours=1)
@@ -62,7 +63,6 @@ class LLMAnalysisViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(latest_analysis)
         return Response(serializer.data)
 
-    # 新增：按区域ID分页获取历史分析列表（默认10条，可用?limit=20控制）
     @action(detail=False, methods=['get'], url_path='areas/(?P<area_id>[^/.]+)/analyses')
     def analyses_by_area(self, request, area_id=None):
         try:
@@ -91,10 +91,8 @@ class UserRecommendationViewSet(viewsets.ReadOnlyModelViewSet):
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # 获取用户的最新推荐
         recommendations = self.get_queryset().filter(user=user).order_by('-timestamp')[:5]
         
-        # 如果没有推荐或推荐较老，触发生成任务
         if not recommendations.exists() or recommendations.first().timestamp < timezone.now() - timedelta(days=1):
             generate_personalized_recommendations.delay()
             
@@ -122,7 +120,6 @@ class AlertAnalysisViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             analysis = self.get_queryset().get(alert=alert)
         except AlertAnalysis.DoesNotExist:
-            # 如果没有分析，触发分析任务
             analyze_alert.delay(alert.id)
             return Response({
                 "message": "正在为该告警生成分析，请稍后再试",
@@ -147,7 +144,6 @@ class AreaUsagePatternViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             pattern = self.get_queryset().get(area=area)
             
-            # 如果分析过期（超过7天），触发更新
             if pattern.last_updated < timezone.now() - timedelta(days=7):
                 generate_area_usage_pattern.delay(area.id)
                 return Response({
@@ -160,7 +156,6 @@ class AreaUsagePatternViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(serializer.data)
             
         except AreaUsagePattern.DoesNotExist:
-            # 如果没有分析，触发分析任务
             generate_area_usage_pattern.delay(area.id)
             return Response({
                 "message": "正在为该区域生成使用模式分析，请稍后再试",
@@ -179,7 +174,6 @@ class GeneratedContentViewSet(viewsets.ReadOnlyModelViewSet):
         except Area.DoesNotExist:
             return Response({"error": "Area not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # 获取区域的公告
         notices = self.get_queryset().filter(
             content_type='notice',
             related_area=area
@@ -201,10 +195,6 @@ class GeneratedContentViewSet(viewsets.ReadOnlyModelViewSet):
         except Area.DoesNotExist:
             return Response({"error": "Area not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # 这里简化处理，直接生成公告
-        # 实际应用中可能需要调用异步任务
-        
-        # 生成的公告示例
         if notice_type == "status":
             title = f"{area.name}状态通知"
             content = f"尊敬的用户，{area.name}目前状态良好，环境舒适。当前人流量适中，温度适宜。欢迎前来使用！"
@@ -218,7 +208,6 @@ class GeneratedContentViewSet(viewsets.ReadOnlyModelViewSet):
             title = f"{area.name}通知"
             content = f"这是关于{area.name}的通知。"
         
-        # 创建生成内容记录
         generated_content = GeneratedContent.objects.create(
             content_type='notice',
             title=title,
@@ -231,32 +220,61 @@ class GeneratedContentViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
-class AgentChatView(APIView):
-    async def post(self, request):
-        user_message = request.data.get('message')
-        chat_history = request.data.get('history', []) or []
+class ModelInfoView(View):
+    async def get(self, request, *args, **kwargs):
+        """
+        获取模型信息API，返回可用模型配置
+        """
+        model_info = get_model_info()
+        return Response(model_info)
+
+
+class AgentChatView(View):
+    async def post(self, request, *args, **kwargs):
+        body_bytes = request.body
+        try:
+            data = json.loads(body_bytes)
+        except json.JSONDecodeError:
+            return StreamingHttpResponse(
+                json.dumps({"error": "Invalid JSON"}),
+                status=400,
+                content_type="application/json"
+            )
+
+        user_message = data.get("message")
+        chat_history = data.get("history", []) or []
+        model_type = data.get("model_type", "default")  # 提取模型类型，默认为default
 
         if not user_message:
-            return Response({"error": "Message not provided"}, status=status.HTTP_400_BAD_REQUEST)
+            return StreamingHttpResponse(
+                json.dumps({"error": "Message not provided"}),
+                status=400,
+                content_type="application/json"
+            )
 
-        # 统一SSE格式：每条消息以"data: "开头，以空行分隔；最后发送[DONE]
         async def stream_generator():
             try:
-                async for chunk in get_agent_response(user_message, chat_history):
-                    # chunk可能为字符串或结构化对象，统一转为JSON字符串，便于前端解析
-                    data = chunk
-                    if not isinstance(chunk, str):
-                        data = json.dumps(chunk, ensure_ascii=False)
-                    yield f"data: {data}\n\n"
+                async for chunk in get_agent_response(user_message, chat_history, model_type=model_type):
+                    data_out = chunk if isinstance(chunk, str) else json.dumps(chunk, ensure_ascii=False)
+                    yield f"data: {data_out}\n\n"
+                    await asyncio.sleep(0)
             except Exception as e:
-                # 简单错误透传，前端可据此提示
-                err = json.dumps({"error": str(e)}, ensure_ascii=False)
-                yield f"data: {err}\n\n"
+                import traceback
+                traceback_str = traceback.format_exc()
+                logging.error(f"Agent响应生成失败: {str(e)}\n{traceback_str}")
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
             finally:
                 yield "data: [DONE]\n\n"
+                await asyncio.sleep(0)
 
-        response = StreamingHttpResponse(stream_generator(), content_type='text/event-stream')
-        # 可选：提升SSE兼容性
-        response['Cache-Control'] = 'no-cache'
-        response['X-Accel-Buffering'] = 'no'  # Nginx下禁用缓冲以实时推送
+        # 创建响应对象并设置关键的流式传输头部
+        response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+        
+        # 防止缓冲的关键头部
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate, no-transform'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        response['X-Accel-Buffering'] = 'no'  # 禁用nginx缓冲
+        response['Connection'] = 'keep-alive'
+        
         return response

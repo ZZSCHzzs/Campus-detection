@@ -19,6 +19,10 @@ const isScreenPage = computed(() => {
 const isAdminPage = computed(() => {
   return route.path.startsWith('/admin');
 });
+
+const isLLMPage = computed(() => {
+  return route.path.startsWith('/ai');
+});
 </script>
 
 <template>
@@ -56,7 +60,7 @@ const isAdminPage = computed(() => {
           <Navbar />
           <router-view />
         </div>
-        <Footer v-if="!isScreenPage && !isAdminPage" />
+        <Footer v-if="!isScreenPage && !isAdminPage && !isLLMPage" />
       </div>
       <div class="el-message-container"></div>
     </el-scrollbar>

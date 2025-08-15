@@ -80,8 +80,28 @@ class ProcessTerminal(models.Model):
 
 
 class Building(models.Model):
+    BUILDING_CATEGORY_CHOICES = [
+        ('library', '图书馆/阅览室'),
+        ('study', '自习室/学习空间'),
+        ('teaching', '教学楼/教室'),
+        ('cafeteria', '食堂/餐饮'),
+        ('dorm', '宿舍'),
+        ('lab', '实验室/科研'),
+        ('office', '行政/办公'),
+        ('sports', '体育场馆'),
+        ('service', '服务/办事大厅'),
+        ('other', '其他'),
+    ]
+
     name = models.CharField(max_length=100, verbose_name="建筑名称")
     description = models.TextField(blank=True, verbose_name="描述")
+    # 新增：建筑类型字段
+    category = models.CharField(
+        max_length=32,
+        choices=BUILDING_CATEGORY_CHOICES,
+        default='other',
+        verbose_name="建筑类型"
+    )
 
     def __str__(self):
         return self.name

@@ -7,11 +7,15 @@ import asyncio
 import pandas as pd
 import numpy as np
 from django.db.models import Avg, Count
-from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import HumanMessage, SystemMessage
+import os
+import re
 
-from webapi.models import Area, SensorData, SensorType, Alert, HistoricalData, CustomUser, TemperatureHumidityData
+# 使用我们的工具函数替代直接导入ChatOpenAI
+from .utils import get_llm_client, run_llm_with_retry
+
+from webapi.models import Area, Alert, HistoricalData, TemperatureHumidityData, CustomUser
 from .models import LLMAnalysis, AlertAnalysis, AreaUsagePattern, GeneratedContent, UserRecommendation
 
 logger = logging.getLogger(__name__)
@@ -247,13 +251,11 @@ async def generate_analysis_text(area_name, analysis_data):
         HumanMessage(content=human_prompt)
     ])
     
-    llm = ChatOpenAI(
-        temperature=0.3,
-        openai_api_key=settings.OPENAI_API_KEY
-    )
+    # 使用工具函数获取LLM客户端
+    messages = prompt.format_messages()
     
-    response = await llm.agenerate([prompt.to_messages()])
-    return response.generations[0][0].text
+    # 使用我们的重试工具函数
+    return await run_llm_with_retry(messages, temperature=0.3)
 
 @shared_task
 def analyze_area_data(area_id):
@@ -283,35 +285,49 @@ def analyze_area_data(area_id):
             "environment": env_analysis
         }
         
-        # 确定整体警报状态
-        alert_status = False
+        # 确定整体警报状态（保存为字符串枚举：normal|warning|critical）
         alert_messages = []
+        levels = []
         
-        if crowd_analysis.get("alert"):
-            alert_status = True
+        # crowd level
+        if crowd_analysis.get("status") in ("warning", "critical"):
+            levels.append(crowd_analysis.get("status"))
             alert_messages.append(crowd_analysis.get("message"))
         
-        if env_analysis["temperature"].get("alert"):
-            alert_status = True
+        # temperature level
+        temp_status = env_analysis["temperature"].get("status")
+        if temp_status in ("warning_low", "warning_high", "critical_low", "critical_high"):
+            levels.append("critical" if temp_status.startswith("critical") else "warning")
             alert_messages.append(env_analysis["temperature"].get("message"))
         
-        if env_analysis["humidity"].get("alert"):
-            alert_status = True
+        # humidity level
+        hum_status = env_analysis["humidity"].get("status")
+        if hum_status in ("warning_low", "warning_high", "critical_low", "critical_high"):
+            levels.append("critical" if hum_status.startswith("critical") else "warning")
             alert_messages.append(env_analysis["humidity"].get("message"))
+        
+        if "critical" in levels:
+            alert_level = "critical"
+        elif "warning" in levels:
+            alert_level = "warning"
+        else:
+            alert_level = "normal"
         
         # 使用LLM生成分析文本
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        analysis_text = loop.run_until_complete(generate_analysis_text(area.name, analysis_data))
-        loop.close()
+        try:
+            analysis_text = loop.run_until_complete(generate_analysis_text(area.name, analysis_data))
+        finally:
+            loop.close()
         
         # 保存分析结果
         LLMAnalysis.objects.create(
             area=area,
             analysis_text=analysis_text,
             analysis_data=json.dumps(analysis_data, ensure_ascii=False),
-            alert_status=alert_status,
-            alert_message="; ".join(alert_messages) if alert_messages else None
+            alert_status=alert_level,
+            alert_message="; ".join(m for m in alert_messages if m) if alert_messages else None
         )
         
         logger.info(f"Completed analysis for area: {area.name}")
@@ -389,14 +405,12 @@ def analyze_alert(alert_id):
             HumanMessage(content=human_prompt)
         ])
         
-        llm = ChatOpenAI(
-            temperature=0.3,
-            openai_api_key=settings.OPENAI_API_KEY
-        )
-        
-        response = loop.run_until_complete(llm.agenerate([prompt.to_messages()]))
-        analysis_text = response.generations[0][0].text
-        loop.close()
+        # 使用我们的工具函数获取LLM客户端
+        messages = prompt.format_messages()
+        try:
+            analysis_text = loop.run_until_complete(run_llm_with_retry(messages, temperature=0.3))
+        finally:
+            loop.close()
         
         # 解析LLM响应，提取结构化信息
         # 这里使用简单的文本解析，实际应用中可能需要更复杂的处理
@@ -410,7 +424,6 @@ def analyze_alert(alert_id):
                 if ":" in priority_text:
                     score_text = priority_text.split(":")[1].strip()
                     # 提取数字
-                    import re
                     score_match = re.search(r"0\.\d+|\d+\.\d+|\d+", score_text)
                     if score_match:
                         extracted_score = float(score_match.group())
@@ -528,7 +541,7 @@ def generate_area_usage_pattern(area_id):
 def generate_personalized_recommendations():
     """为所有活跃用户生成个性化推荐"""
     try:
-        # 获取最近7天活跃的用户 (假设通过登录记录或其他活动判断)
+        # 获取用户
         active_users = CustomUser.objects.all()[:100]  # 简化处理，获取前100个用户
         
         recommendations_created = 0
@@ -613,22 +626,3 @@ def generate_personalized_recommendations():
     except Exception as e:
         logger.error(f"Error generating personalized recommendations: {str(e)}")
         return False
-
-@shared_task
-def schedule_recurring_tasks():
-    """调度定期任务"""
-    # 为所有区域生成使用模式分析
-    for area in Area.objects.all():
-        if not AreaUsagePattern.objects.filter(area=area).exists() or \
-           AreaUsagePattern.objects.get(area=area).last_updated < datetime.now() - timedelta(days=7):
-            generate_area_usage_pattern.delay(area.id)
-    
-    # 为所有用户生成个性化推荐
-    generate_personalized_recommendations.delay()
-    
-    # 分析所有未处理的告警
-    for alert in Alert.objects.filter(solved=False):
-        if not AlertAnalysis.objects.filter(alert=alert).exists():
-            analyze_alert.delay(alert.id)
-    
-    return True

@@ -1,62 +1,50 @@
 <template>
-  <div class="nav-container header" :class="{'mobile-header': isMobile}">
+  <div class="nav-container header" :class="{ 'mobile-header': isMobile }">
     <div v-if="isMobile" class="mobile-nav-container">
 
       <div class="mobile-header-row">
 
         <el-button class="hamburger-btn" @click="toggleMobileMenu">
-          <el-icon size="20"><Menu /></el-icon>
+          <el-icon size="20">
+            <Menu />
+          </el-icon>
         </el-button>
 
         <div class="logo-container">
-          <img alt="Logo" class="logo" src="/favicon256.ico"/>
+          <img alt="Logo" class="logo" src="/favicon256.ico" />
           <span class="site-name">慧感云瞻</span>
         </div>
 
         <div v-if="authStore.isAuthenticated" class="mobile-user-button">
-          <el-avatar 
-            :icon="UserFilled" 
-            :size="32" 
-            class="user-avatar"
-            @click="navigateToProfile"
-          ></el-avatar>
+          <el-avatar :icon="UserFilled" :size="32" class="user-avatar" @click="navigateToProfile"></el-avatar>
         </div>
         <div v-else class="mobile-auth-button">
           <el-button circle size="small" type="primary" @click="navigateToLogin">
-            <el-icon><UserFilled /></el-icon>
+            <el-icon>
+              <UserFilled />
+            </el-icon>
           </el-button>
         </div>
       </div>
 
       <div v-show="mobileMenuVisible" class="mobile-menu-overlay" @click="closeMobileMenu"></div>
-      <div 
-        class="mobile-side-menu" 
-        :class="{'mobile-menu-open': mobileMenuVisible}"
-      >
+      <div class="mobile-side-menu" :class="{ 'mobile-menu-open': mobileMenuVisible }">
 
         <div class="side-menu-header">
           <div class="logo-container">
-            <img alt="Logo" class="logo" src="/favicon256.ico"/>
+            <img alt="Logo" class="logo" src="/favicon256.ico" />
             <span class="site-name">慧感云瞻</span>
           </div>
           <el-button class="close-menu-btn" @click="closeMobileMenu">
-            <el-icon size="20"><Close /></el-icon>
+            <el-icon size="20">
+              <Close />
+            </el-icon>
           </el-button>
         </div>
 
-        <el-menu 
-          :default-active="activeIndex" 
-          mode="vertical" 
-          class="mobile-el-menu" 
-          @select="handleSelect"
-        >
-          <el-menu-item 
-            v-for="item in content" 
-            :key="item.index" 
-            :index="item.index" 
-            class="nav-item"
-            v-show="(!item.adminOnly || isAdmin) && !item.hideOnMobile"
-          >
+        <el-menu :default-active="activeIndex" mode="vertical" class="mobile-el-menu" @select="handleSelect">
+          <el-menu-item v-for="item in content" :key="item.index" :index="item.index" class="nav-item"
+            v-show="(!item.adminOnly || isAdmin) && !item.hideOnMobile">
             <el-icon v-if="item.icon" :size="18" class="nav-icon">
               <component :is="getIconComponent(item.icon)"></component>
             </el-icon>
@@ -69,27 +57,35 @@
             <el-avatar :icon="UserFilled" :size="32" class="user-avatar"></el-avatar>
             <span class="username">{{ authStore.username }}</span>
           </div>
-          
+
           <div class="user-menu-items">
             <div class="user-menu-item" @click="goToProfile('profile')">
-              <el-icon><UserFilled /></el-icon>
+              <el-icon>
+                <UserFilled />
+              </el-icon>
               <span>个人信息</span>
             </div>
             <div class="user-menu-item" @click="goToProfile('password')">
-              <el-icon><Lock /></el-icon>
+              <el-icon>
+                <Lock />
+              </el-icon>
               <span>修改密码</span>
             </div>
             <div class="user-menu-item" @click="goToProfile('favorites')">
-              <el-icon><Star /></el-icon>
+              <el-icon>
+                <Star />
+              </el-icon>
               <span>我的收藏</span>
             </div>
             <div class="user-menu-item logout-item" @click="confirmLogout">
-              <el-icon><SwitchButton /></el-icon>
+              <el-icon>
+                <SwitchButton />
+              </el-icon>
               <span>退出登录</span>
             </div>
           </div>
         </div>
-        
+
         <div v-else class="mobile-auth-buttons">
           <el-button plain size="small" type="primary" class="login-btn" @click="navigateToLogin">登录</el-button>
           <el-button size="small" type="primary" class="register-btn" @click="navigateToRegister">注册</el-button>
@@ -105,21 +101,13 @@
     </div>
 
     <el-menu v-else :default-active="activeIndex" :ellipsis="false" class="el-menu-demo nav-container" mode="horizontal"
-             @select="handleSelect">
+      @select="handleSelect">
       <div class="logo-container">
-        <img
-            alt="Logo"
-            class="logo"
-            src="/favicon256.ico"/>
+        <img alt="Logo" class="logo" src="/favicon256.ico" />
         <span class="site-name">慧感云瞻</span>
       </div>
-      <el-menu-item 
-        v-for="item in content" 
-        :key="item.index" 
-        :index="item.index" 
-        class="nav-item"
-        v-show="!item.adminOnly || isAdmin"
-      >
+      <el-menu-item v-for="item in content" :key="item.index" :index="item.index" class="nav-item"
+        v-show="!item.adminOnly || isAdmin">
         <el-icon v-if="item.icon" :size="18" class="nav-icon">
           <component :is="getIconComponent(item.icon)"></component>
         </el-icon>
@@ -127,6 +115,8 @@
       </el-menu-item>
 
       <div class="flex-grow"></div>
+
+      <div id="tp-weather-widget"></div>
 
       <div class="github-button-container">
         <a href="https://github.com/ZZSCHzzs/Campus-detection" target="_blank" class="github-btn">
@@ -137,25 +127,34 @@
       <div v-if="authStore.isAuthenticated" class="user-area">
         <el-dropdown trigger="click" @command="handleCommand">
           <div class="user-info" :class="{ 'user-info-active': isProfileRoute }">
-            <el-avatar :icon="UserFilled" :size="32" class="user-avatar" :class="{ 'avatar-active': isProfileRoute }"></el-avatar>
+            <el-avatar :icon="UserFilled" :size="32" class="user-avatar"
+              :class="{ 'avatar-active': isProfileRoute }"></el-avatar>
             <span class="username">{{ authStore.username }}</span>
             <el-icon>
-              <ArrowDown/>
+              <ArrowDown />
             </el-icon>
           </div>
           <template #dropdown>
             <el-dropdown-menu class="custom-dropdown">
               <el-dropdown-item command="profile">
-                <el-icon><UserFilled /></el-icon>个人信息
+                <el-icon>
+                  <UserFilled />
+                </el-icon>个人信息
               </el-dropdown-item>
               <el-dropdown-item command="password">
-                <el-icon><Lock /></el-icon>修改密码
+                <el-icon>
+                  <Lock />
+                </el-icon>修改密码
               </el-dropdown-item>
               <el-dropdown-item command="favorites">
-                <el-icon><Star /></el-icon>我的收藏
+                <el-icon>
+                  <Star />
+                </el-icon>我的收藏
               </el-dropdown-item>
               <el-dropdown-item command="logout" divided>
-                <el-icon><SwitchButton /></el-icon>退出登录
+                <el-icon>
+                  <SwitchButton />
+                </el-icon>退出登录
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -171,15 +170,17 @@
 </template>
 
 <script lang="ts" setup>
-import {ref, onMounted, watch, computed} from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import router from '../../router'
-import {useRoute} from 'vue-router'
-import {useAuthStore} from '../../stores/auth.ts'
+import { useRoute } from 'vue-router'
+import { useAuthStore } from '../../stores/auth.ts'
 import {
   UserFilled, ArrowDown, HomeFilled, Menu as MenuIcon, DataLine,
-  SwitchButton, Operation, Lock, Star, Bell, Menu, Close
+  SwitchButton, Operation, Lock, Star, Bell, Menu, Close, MagicStick, StarFilled,
+  // 新增用于导航栏的图标
+  MapLocation, Histogram, Management, Monitor
 } from '@element-plus/icons-vue'
-import {ElMessage, ElMessageBox} from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()
 const route = useRoute()
@@ -193,6 +194,27 @@ onMounted(async () => {
     } catch (error) {
       console.error('获取用户信息失败:', error)
     }
+  }
+
+  const isMobile = ref(window.innerWidth < 992)
+
+  const handleResize = () => {
+    mobileMenuVisible.value = false
+  }
+
+  if (!isMobile.value) {
+    (function (a:any, h, g, f, e, d, c, b) { b = function () { d = h.createElement(g); c = h.getElementsByTagName(g)[0]; d.src = e; d.charset = "utf-8"; d.async = 1; c.parentNode.insertBefore(d, c) }; a["SeniverseWeatherWidgetObject"] = f; a[f] || (a[f] = function () { (a[f].q = a[f].q || []).push(arguments) }); a[f].l = +new Date(); if (a.attachEvent) { a.attachEvent("onload", b) } else { a.addEventListener("load", b, false) } }(window, document, "script", "SeniverseWeatherWidget", "//cdn.sencdn.com/widget2/static/js/bundle.js?t=" + parseInt((new Date().getTime() / 100000000).toString(), 10)));
+    (window as any).SeniverseWeatherWidget('show', {
+      flavor: "slim",
+      location: "WX4FBXXFKE4F",
+      geolocation: true,
+      language: "zh-Hans",
+      unit: "c",
+      theme: "auto",
+      token: "8237a328-a343-42d7-9de5-075fb91ab4b0",
+      hover: "enabled",
+      container: "tp-weather-widget"
+    })
   }
 })
 
@@ -209,37 +231,44 @@ const content = ref([
   },
   {
     index: '1',
-    title: '区域',
-    path: '/areas',
-    icon: 'Menu',
+    title: '云小瞻',
+    path: '/ai',
+    icon: 'MagicStick',
     hideOnMobile: false,
   },
   {
     index: '2',
-    title: '数据大屏',
-    path: '/screen',
-    icon: 'DataLine',
-    hideOnMobile: true
+    title: '区域',
+    path: '/areas',
+    icon: 'MapLocation',
+    hideOnMobile: false,
   },
   {
     index: '3',
+    title: '数据大屏',
+    path: '/screen',
+    icon: 'Histogram',
+    hideOnMobile: true
+  },
+  {
+    index: '4',
     title: '告警与通知',
     path: '/alerts',
     icon: 'Bell'
   },
   {
-    index: '4',
+    index: '5',
     title: '管理面板',
     path: '/admin',
-    icon: 'Operation',
-    adminOnly: true  
+    icon: 'Management',
+    adminOnly: true
   }
   ,
   {
-    index: '5',
+    index: '6',
     title: '终端管理',
     path: '/terminal',
-    icon: 'DataLine',
+    icon: 'Monitor',
     adminOnly: true,
     hideOnMobile: true
   }
@@ -247,22 +276,31 @@ const content = ref([
 
 const getIconComponent = (iconName: string) => {
   const iconMap = {
+    // 已有映射
     'HomeFilled': HomeFilled,
     'Menu': MenuIcon,
     'DataLine': DataLine,
     'Bell': Bell,
-    'Operation': Operation
+    'Operation': Operation,
+    'MagicStick': MagicStick,
+    'StarFilled': StarFilled,
+    // 新增映射
+    'MapLocation': MapLocation,
+    'Histogram': Histogram,
+    'Management': Management,
+    'Monitor': Monitor,
   }
   return iconMap[iconName] || HomeFilled
 }
 
 const routePathMap = {
   '0': '/index',
-  '1': '/areas',
-  '2': '/screen',
-  '3': '/alerts',
-  '4': '/admin',
-  '5': '/terminal'
+  '1': '/ai',
+  '2': '/areas',
+  '3': '/screen',
+  '4': '/alerts',
+  '5': '/admin',
+  '6': '/terminal'
 }
 
 const activeIndex = ref('0')
@@ -283,9 +321,9 @@ const updateActiveIndex = () => {
     activeIndex.value = ''
     return
   }
-  
+
   if (currentPath === '/' || currentPath === '/index') {
-    activeIndex.value = '0' 
+    activeIndex.value = '0'
     return
   }
 
@@ -298,7 +336,7 @@ const updateActiveIndex = () => {
 }
 
 onMounted(() => {
-  updateActiveIndex()
+  updateActiveIndex();
 })
 
 watch(() => route.path, () => {
@@ -337,42 +375,42 @@ const handleCommand = (command: string) => {
       break
     case 'logout':
       ElMessageBox.confirm(
-          '确定要退出登录吗?',
-          '提示',
-          {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
-            type: 'warning',
-            center: true,
-            customClass: 'logout-confirm-box'
-          }
+        '确定要退出登录吗?',
+        '提示',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+          center: true,
+          customClass: 'logout-confirm-box'
+        }
       )
-          .then(async () => {
-            try {
-              authStore.logout()
-              ElMessage({
-                message: '成功退出登录',
-                type: 'success',
-                duration: 2000
-              })
-              mobileMenuVisible.value = false
-              await router.push('/')
-            } catch (error) {
-              console.error('退出失败:', error)
-              ElMessage({
-                message: '退出登录失败，请重试',
-                type: 'error',
-                duration: 2000
-              })
-            }
-          })
-          .catch(() => {
+        .then(async () => {
+          try {
+            authStore.logout()
             ElMessage({
-              message: '取消退出登录',
-              type: 'info',
+              message: '成功退出登录',
+              type: 'success',
               duration: 2000
             })
+            mobileMenuVisible.value = false
+            await router.push('/')
+          } catch (error) {
+            console.error('退出失败:', error)
+            ElMessage({
+              message: '退出登录失败，请重试',
+              type: 'error',
+              duration: 2000
+            })
+          }
+        })
+        .catch(() => {
+          ElMessage({
+            message: '取消退出登录',
+            type: 'info',
+            duration: 2000
           })
+        })
       break
   }
 }
@@ -499,20 +537,22 @@ onMounted(() => {
   margin-right: 4px;
 }
 
-.nav-item:hover .nav-icon{
+.nav-item:hover .nav-icon {
   transform: scale(1.1);
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 
 }
+
 .nav-item:hover .nav-text {
   transform: scale(1.05);
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 
 }
 
 .nav-item:hover {
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 }
+
 .nav-item::after {
   content: '';
   position: absolute;
@@ -522,7 +562,7 @@ onMounted(() => {
   width: 0;
   height: 3px;
   background-color: #409EFF;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 
 }
 
@@ -535,7 +575,7 @@ onMounted(() => {
   width: 30px;
   height: 3px;
   background-color: #409EFF;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)!important;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 
 }
 
@@ -576,12 +616,12 @@ el-menu-item {
   text-decoration: none !important;
 }
 
-.el-menu--horizontal > .el-menu-item.is-active {
+.el-menu--horizontal>.el-menu-item.is-active {
   border-bottom: none !important;
   background-color: transparent !important;
 }
 
-.el-menu--horizontal > .el-menu-item:not(.is-disabled):hover {
+.el-menu--horizontal>.el-menu-item:not(.is-disabled):hover {
   background-color: transparent !important;
   border-bottom: none !important;
 }
@@ -592,7 +632,7 @@ el-menu-item {
   border-bottom: none !important;
 }
 
-.el-menu--horizontal > .el-menu-item {
+.el-menu--horizontal>.el-menu-item {
   border-bottom: none !important;
 }
 
@@ -890,24 +930,24 @@ el-menu-item {
   .nav-container {
     width: 100%;
   }
-  
+
   .logo {
     height: 30px;
   }
-  
+
   .site-name {
     font-size: 16px;
   }
-  
+
   .mobile-menu .nav-item {
     height: 50px;
     line-height: 50px;
   }
-  
+
   .mobile-menu .nav-item::after {
     display: none;
   }
-  
+
   .mobile-menu .el-menu-item.is-active::after {
     content: '';
     position: absolute;
@@ -930,6 +970,12 @@ el-menu-item {
 
 .nav-item:hover .external-link-icon {
   opacity: 1;
+}
+
+#tp-weather-widget {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
 }
 
 /* GitHub按钮样式 */

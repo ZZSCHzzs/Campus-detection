@@ -23,6 +23,11 @@ const routes: Array<RouteRecordRaw> = [
     redirect: '/',
   },
   {
+    path: '/ai',
+    name: 'AI',
+    component: () => import('../views/LLMView.vue'),
+  },
+  {
     path: '/areas',
     name: 'Areas',
     component: Areas,
