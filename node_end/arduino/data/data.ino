@@ -88,6 +88,41 @@ const int maxWifiRetries = 5;
 int led_duty = 0;
 bool isStreaming = false;
 
+// =================== 摄像头配置 ===================
+// 可以根据需求修改这些默认值
+struct CameraDefaults {
+  // 硬件配置
+  framesize_t initial_framesize = FRAMESIZE_QVGA;    // 初始分辨率：QVGA(320x240)
+  framesize_t psram_framesize = FRAMESIZE_UXGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
+  framesize_t noram_framesize = FRAMESIZE_SVGA;      // 无PSRAM时分辨率：SVGA(800x600)
+  
+  // 质量设置
+  int jpeg_quality_psram = 10;                       // PSRAM时JPEG质量(0-63, 越小越好)
+  int jpeg_quality_normal = 12;                      // 普通时JPEG质量
+  
+  // 帧缓冲设置
+  int fb_count_psram = 2;                           // PSRAM时帧缓冲数量(双缓冲)
+  int fb_count_normal = 1;                          // 普通时帧缓冲数量
+  
+  // 时钟频率
+  uint32_t xclk_freq_hz = 20000000;                 // 20MHz时钟频率
+  
+  // OV2640优化设置
+  int brightness = 1;                               // 亮度 (-2 到 2)
+  int contrast = 0;                                 // 对比度 (-2 到 2)
+  int saturation = -2;                              // 饱和度 (-2 到 2)
+  bool vflip = true;                                // 垂直翻转
+  bool hmirror = false;                             // 水平镜像
+  
+  // 自动控制
+  bool awb = true;                                  // 自动白平衡
+  bool aec = true;                                  // 自动曝光控制
+  bool agc = true;                                  // 自动增益控制
+};
+
+// 全局默认配置实例 - 你可以在这里修改默认值
+CameraDefaults cameraDefaults;
+
 // =================== 流媒体常量 ===================
 #define PART_BOUNDARY "123456789000000000000987654321"
 static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
@@ -877,38 +912,3 @@ void loop() {
      
     delay(100);
 }
-
-// =================== 摄像头配置 ===================
-// 可以根据需求修改这些默认值
-struct CameraDefaults {
-  // 硬件配置
-  framesize_t initial_framesize = FRAMESIZE_QVGA;    // 初始分辨率：QVGA(320x240)
-  framesize_t psram_framesize = FRAMESIZE_UXGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
-  framesize_t noram_framesize = FRAMESIZE_SVGA;      // 无PSRAM时分辨率：SVGA(800x600)
-  
-  // 质量设置
-  int jpeg_quality_psram = 10;                       // PSRAM时JPEG质量(0-63, 越小越好)
-  int jpeg_quality_normal = 12;                      // 普通时JPEG质量
-  
-  // 帧缓冲设置
-  int fb_count_psram = 2;                           // PSRAM时帧缓冲数量(双缓冲)
-  int fb_count_normal = 1;                          // 普通时帧缓冲数量
-  
-  // 时钟频率
-  uint32_t xclk_freq_hz = 20000000;                 // 20MHz时钟频率
-  
-  // OV2640优化设置
-  int brightness = 1;                               // 亮度 (-2 到 2)
-  int contrast = 0;                                 // 对比度 (-2 到 2)
-  int saturation = -2;                              // 饱和度 (-2 到 2)
-  bool vflip = true;                                // 垂直翻转
-  bool hmirror = false;                             // 水平镜像
-  
-  // 自动控制
-  bool awb = true;                                  // 自动白平衡
-  bool aec = true;                                  // 自动曝光控制
-  bool agc = true;                                  // 自动增益控制
-};
-
-// 全局默认配置实例 - 你可以在这里修改默认值
-CameraDefaults cameraDefaults;
