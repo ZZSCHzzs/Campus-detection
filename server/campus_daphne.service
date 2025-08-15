@@ -1,0 +1,14 @@
+[Unit]
+Description=Daphne ASGI server for WebSocket
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/Campus-detection/back_end
+Environment=DJANGO_SETTINGS_MODULE=campus_detection.settings
+ExecStart=/var/www/Campus-detection/back_end/venv/bin/daphne -b 127.0.0.1 -p 8001 campus_detection.asgi:application
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

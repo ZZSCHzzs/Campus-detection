@@ -1,0 +1,70 @@
+#!/bin/bash
+set -e
+
+# ====== 环境配置 ======
+SOCKET_DIR="/run/gunicorn"
+SOCKET_FILE="$SOCKET_DIR/gunicorn-campus.sock"
+GUNICORN_SERVICE="campus_backend.service"
+DAPHNE_SERVICE="campus_daphne.service"
+NGINX_SERVICE="nginx"
+GUNICORN_USER="www-data"
+GUNICORN_GROUP="www-data"
+LOG_DIR="/var/log/gunicorn"
+
+echo "🚀 开始部署流程..."
+
+# ====== 创建 Gunicorn 套接字目录 ======
+echo "📁 创建 Gunicorn socket 目录: $SOCKET_DIR"
+sudo mkdir -p $SOCKET_DIR
+sudo chown $GUNICORN_USER:$GUNICORN_GROUP $SOCKET_DIR
+sudo chmod 775 $SOCKET_DIR
+
+# ====== 创建日志目录 ======
+echo "🗂️ 检查并创建日志目录: $LOG_DIR"
+sudo mkdir -p $LOG_DIR
+sudo chown -R $GUNICORN_USER:$GUNICORN_GROUP $LOG_DIR
+sudo chmod 755 $LOG_DIR
+
+# ====== 重载 systemd 配置 ======
+echo "🔄 重载 systemd..."
+sudo systemctl daemon-reload
+
+# ====== 重启 Gunicorn 服务 ======
+echo "🔥 重启 Gunicorn 服务: $GUNICORN_SERVICE"
+sudo systemctl restart $GUNICORN_SERVICE
+sudo systemctl enable $GUNICORN_SERVICE
+
+# ====== 重启 Daphne 服务 ======
+echo "🌐 重启 Daphne 服务: $DAPHNE_SERVICE"
+sudo systemctl restart $DAPHNE_SERVICE
+sudo systemctl enable $DAPHNE_SERVICE
+
+# ====== 重载 Nginx 配置 ======
+echo "🔁 重新加载 Nginx 配置..."
+sudo systemctl reload $NGINX_SERVICE
+
+# ====== 检查服务状态 ======
+echo "✅ 检查服务状态："
+
+echo -e "\n📡 Gunicorn 状态:"
+if ! sudo systemctl is-active --quiet $GUNICORN_SERVICE; then
+    echo "❌ Gunicorn 启动失败，请检查日志：sudo journalctl -u $GUNICORN_SERVICE -xe"
+else
+    echo "✅ Gunicorn 正在运行"
+fi
+
+echo -e "\n📡 Daphne 状态:"
+if ! sudo systemctl is-active --quiet $DAPHNE_SERVICE; then
+    echo "❌ Daphne 启动失败，请检查日志：sudo journalctl -u $DAPHNE_SERVICE -xe"
+else
+    echo "✅ Daphne 正在运行"
+fi
+
+echo -e "\n🌍 Nginx 状态:"
+if ! sudo systemctl is-active --quiet $NGINX_SERVICE; then
+    echo "❌ Nginx 启动失败，请检查配置文件并使用 nginx -t"
+else
+    echo "✅ Nginx 正在运行"
+fi
+
+echo -e "\n🎉 部署完成！"
