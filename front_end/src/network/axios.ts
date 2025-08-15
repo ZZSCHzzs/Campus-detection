@@ -149,7 +149,7 @@ class ApiCore {
 export const apiCore = new ApiCore();
 
 // 创建默认API实例
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top';
 export const defaultApi = apiCore.createInstance('default', {
   baseURL: API_BASE_URL,
   mode: ApiMode.REMOTE,

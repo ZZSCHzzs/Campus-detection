@@ -3,6 +3,7 @@
  * 提供与 LLM 后端 API 通信的功能
  */
 import { http } from '../network';
+import { API_BASE_URL } from '../network/axios';
 
 // 聊天消息格式
 export interface ChatMessage {
@@ -26,8 +27,8 @@ interface LLMRecommendationResponse {
   status?: string;
 }
 
-// LLM 基础 URL - 本地开发用
-const LLM_BASE_URL = 'http://127.0.0.1:8000/api/llm';
+// LLM 基础 URL
+const LLM_BASE_URL = API_BASE_URL + '/api/llm';
 
 /**
  * 发送聊天消息（非流式）
