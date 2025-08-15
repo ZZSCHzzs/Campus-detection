@@ -1,70 +1,150 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
-import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js'
-import type { AreaItem } from '../types'
+import { ref, onMounted, onBeforeUnmount, reactive, watch, nextTick } from 'vue';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import type { AreaItem } from '../types';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
-// 聚焦相关（脚本开头部分）
+let composer;
+
+// 聚焦相关
 const focusModeActive = ref(false);
 const focusedObjectId = ref<string | null>(null);
 const showRestoreButton = ref(false);
 
-// 添加摄像头位置相关变量
+// 摄像头位置相关变量
 const originalCameraPosition = ref<THREE.Vector3 | null>(null);
 const originalCameraTarget = ref<THREE.Vector3 | null>(null);
 const cameraAnimationInProgress = ref(false);
 
 const props = defineProps<{
-  areas: AreaItem[]
-  mapImage: string
-}>()
-// 在组件顶部添加（与其他ref变量同级位置）
-const autoRotateEnabled = ref(true)
-const heatmapRef = ref<HTMLElement | null>(null)
-const loadingError = ref<string | null>(null)
-let scene: THREE.Scene
-let camera: THREE.PerspectiveCamera
-let renderer: THREE.WebGLRenderer
-let controls: OrbitControls
-let animationFrameId: number
+  areas: AreaItem[];
+  mapImage: string;
+}>();
 
-// 添加调试状态
-const showDebugInfo = ref(false)
-const modelStructure = ref<{name: string, type: string, depth: number, id: string, visible: boolean}[]>([])
+const autoRotateEnabled = ref(true);
+const heatmapRef = ref<HTMLElement | null>(null);
+const loadingError = ref<string | null>(null);
+let scene: THREE.Scene;
+let camera: THREE.PerspectiveCamera;
+let renderer: THREE.WebGLRenderer;
+let controls: OrbitControls;
+let animationFrameId: number;
 
-// 添加模型引用映射和高亮状态
-const modelObjectsMap = ref<Map<string, THREE.Object3D>>(new Map())
-const originalMaterials = ref<Map<string, THREE.Material | THREE.Material[]>>(new Map())
-const highlightedObjectId = ref<string | null>(null)
+// 调试状态
+const showDebugInfo = ref(false);
+const modelStructure = ref<{ name: string; type: string; depth: number; id: string; visible: boolean }[]>([]);
 
-// 添加编辑状态管理
+// 模型引用映射和高亮状态
+const modelObjectsMap = ref<Map<string, THREE.Object3D>>(new Map());
+const originalMaterials = ref<Map<string, THREE.Material | THREE.Material[]>>(new Map());
+const highlightedObjectId = ref<string | null>(null);
+
+// 编辑状态管理
 const editingItemId = ref<string | null>(null);
 const newItemName = ref('');
 
-// 添加坐标显示相关变量
-const showCoordinates = ref(false)
-const selectedPosition = reactive({
-  x: 0,
-  y: 0,
-  z: 0
-})
-const raycaster = new THREE.Raycaster()
-const mouse = new THREE.Vector2()
+// 坐标显示相关变量
+const showCoordinates = ref(false);
+const selectedPosition = reactive({ x: 0, y: 0, z: 0 });
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
 
-// 虚构的热点坐标数据
-const heatmapPoints = [
-  { x: -4, y: 2, z: -3, intensity: 40 }, // 高强度点
-  { x: -3.7, y: 2, z: -2.1, intensity: 35 },
-  { x: 3, y: 3, z: 0, intensity: 30 }, // 中心点，最高强度
-  { x: -4, y: 2, z: -2, intensity: 20 },
-  { x: 6, y: 0.8, z: -5.5, intensity: 0 },
-  { x: 5.5, y: 0.2, z: 5, intensity: 0 },
-  { x: -1, y: 4, z: 2, intensity: 40 },
-  { x: 2.2, y: 1.8, z: 4.1, intensity: 35 },
-  { x: 1, y: 1, z: 3.7, intensity: 30 }
-]
+// 顶点显示相关变量
+const vertexDisplayMode = ref(false);
+const vertexMarkers = ref<THREE.Points[]>([]);
+const selectedVertex = reactive({
+  index: -1,
+  position: { x: 0, y: 0, z: 0 },
+  normal: { x: 0, y: 0, z: 0 },
+});
+const vertexLabelVisible = ref(false);
+const vertexLabelPosition = reactive({ x: 0, y: 0 });
+
+// 判定对象及其父链是否实际可见
+const isActuallyVisible = (obj: THREE.Object3D | null): boolean => {
+  let cur: THREE.Object3D | null = obj;
+  while (cur) {
+    if (!cur.visible) return false;
+    cur = cur.parent as THREE.Object3D | null;
+  }
+  return true;
+};
+
+// 区域定义移到全局作用域
+const areaDefinitions = ref([
+  {
+    id: 'area1',
+    name: '正心13',
+    description: '正心1楼',
+    position: { x: 1.3, y: 0.95, z: -4.11435 },
+    radius: 0.5 // 球体半径
+  },
+  {
+    id: 'area2',
+    name: '正心22',
+    description: '正心大教室2楼',
+    position: { x: 3, y: 1.85, z: -2.7 },
+    radius: 0.5 // 球体半径
+  },
+  {
+    id: 'area1',
+    name: '正心11',
+    description: '正心1楼',
+    position: { x: 4.4, y: 0.95, z: -0.7 },
+    radius: 0.5 // 球体半径
+  },
+]);
+
+// 修改虚构热点数据生成函数
+const generateHeatmapPoints = () => {
+  const points = [];
+  
+  // 为每个区域创建热点数据
+  areaDefinitions.value.forEach(area => {
+    // 查找匹配的区域数据获取人数
+    const matchedAreaData = props.areas.find(a => a.name === area.name);
+    const personCount = matchedAreaData?.detected_count || 0;
+    
+    // 基础热点 - 区域中心点
+    points.push({
+      x: area.position.x,
+      y: area.position.y,
+      z: area.position.z,
+      intensity: personCount // 使用实际人数作为强度
+    });
+    
+    // 在区域周围添加几个随机分布点，强度略低
+    const randomPoints = 4;
+    for (let i = 0; i < randomPoints; i++) {
+      // 在区域半径范围内随机生成点
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * area.radius * 0.8;
+      const x = area.position.x + Math.cos(angle) * distance;
+      const z = area.position.z + Math.sin(angle) * distance * 0.5;
+      const y = area.position.y + (Math.random() - 0.5) * 0.3;
+      
+      // 随机强度，但基于人数
+      const intensityFactor = 0.7 + Math.random() * 0.3;
+      points.push({
+        x, y, z,
+        intensity: personCount * intensityFactor
+      });
+    }
+  });
+  
+  return points;
+};
+
+// 替换原有的静态热点数据
+// const heatmapPoints = [...] 替换为:
+const heatmapPoints = ref([]);
 
 // 存储点云对象引用，用于动画
 const pointCloudObjects: THREE.Points[] = []
@@ -76,6 +156,55 @@ const initThreeScene = () => {
   // 创建场景
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x141c2f)
+  // ----- 添加自然光照系统 -----
+  
+  // 1. 添加环境光 - 提供柔和的基础照明
+  const ambientLight = new THREE.AmbientLight(0x404040, 20);
+  scene.add(ambientLight);
+
+  // 2. 添加半球光 - 模拟天空和地面的反射光
+  const hemisphereLight = new THREE.HemisphereLight(
+    0x87CEEB,  // 天空色 - 淡蓝色
+    0x222222,  // 地面色 - 暗灰色
+    3        // 强度
+  );
+  scene.add(hemisphereLight);
+
+  // 3. 添加方向光 - 模拟太阳光
+  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 7);
+  directionalLight.position.set(50, 75, 50);  // 光源位置
+  directionalLight.castShadow = true;         // 启用阴影
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 500;
+  directionalLight.shadow.camera.left = -100;
+  directionalLight.shadow.camera.right = 100;
+  directionalLight.shadow.camera.top = 100;
+  directionalLight.shadow.camera.bottom = -100;
+
+  // // 创建太阳光辅助标记(可选)
+  // const sunSphere = new THREE.Mesh(
+  //   new THREE.SphereGeometry(2, 16, 16),
+  //   new THREE.MeshBasicMaterial({ color: 0xB0C4DE, transparent: true, opacity: 0.1 })
+  // );
+  // sunSphere.position.copy(directionalLight.position);
+  // scene.add(sunSphere);
+  scene.add(directionalLight);
+
+  // ----- 自然光照系统添加完成 -----
+  // 添加环境贴图
+  const cubeTextureLoader = new THREE.CubeTextureLoader();
+  cubeTextureLoader.setPath('/textures/skybox/');
+  const cubeTexture = cubeTextureLoader.load([
+    'px.jpg', 'nx.jpg',
+    'py.jpg', 'ny.jpg',
+    'pz.jpg', 'nz.jpg'
+  ]);
+
+  // 设置为场景背景和环境贴图
+  scene.background = cubeTexture;
+  scene.environment = cubeTexture;
   // 添加地图贴图地面
   const textureLoader = new THREE.TextureLoader();
   textureLoader.load('./ground.png', (texture) => {
@@ -137,8 +266,14 @@ const initThreeScene = () => {
   // 加载OBJ建筑模型
   loadBuildingModel()
   
+  // 添加区域标记平面
+  createAreaMarkers()
+  
   // 添加热力点云
   createHeatmapPointCloud()
+  
+  // 添加后期处理
+  composer = addPostProcessing();
   
   // 渲染动画
   animate()
@@ -190,17 +325,16 @@ const loadBuildingModel = () => {
         object.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             // 创建透明材质
-            const transparentMaterial = new THREE.MeshPhysicalMaterial({
-              color: 0x6b7280,
+            const transparentMaterial = new THREE.MeshStandardMaterial({
+              color: 0xB0C4DE,       // 淡蓝色调
               transparent: true,
-              opacity: 0.4,         // 降低不透明度，使模型更透明
-              roughness: 0.5,       // 较低的粗糙度，增加光泽感
-              metalness: 0.5,       // 轻微的金属感
-              side: THREE.FrontSide, // 双面渲染，确保内部面可见
-              depthWrite: true,    // 避免透明物体的排序问题
-              wireframe: false,      // 是否显示线框，false为实体
-              emissive: 0xffffff,   // 添加自发光颜色 - 白色
-              emissiveIntensity: 10// 自发光强度
+              opacity: 0.5,          // 略微提高不透明度，让光照更明显
+              roughness: 0.5,
+              metalness: 0.005,
+              side: THREE.DoubleSide, 
+              depthWrite: true,      // 启用深度写入以正确处理光照
+              flatShading: false,
+              envMapIntensity: 0.3,  // 减弱环境贴图的影响，让直接光源更明显
             })
             
                 // 为每个网格添加边缘线，强调轮廓
@@ -229,10 +363,10 @@ const loadBuildingModel = () => {
                   // 根据Y坐标调整颜色明度
                   for (let i = 0; i < positionAttribute.count; i++) {
                     const y = positionAttribute.getY(i);
-                    // 根据高度计算颜色因子 (0-1)
-                    const factor = Math.min(Math.max((y + 10) / 20, 0), 1);
-                    // 调整明度和饱和度
-                    color.setRGB(0.4 + factor * 0.2, 0.45 + factor * 0.2, 0.5 + factor * 0.2);
+                    // 使用平方或立方函数创建更平滑的渐变
+                    const factor = Math.pow(Math.min(Math.max((y + 10) / 20, 0), 1), 2);
+                    // 使用更柔和的颜色变化
+                    color.setRGB(0.45 + factor * 0.15, 0.48 + factor * 0.15, 0.52 + factor * 0.15);
                     colors[i * 3] = color.r;
                     colors[i * 3 + 1] = color.g;
                     colors[i * 3 + 2] = color.b;
@@ -270,6 +404,14 @@ const loadBuildingModel = () => {
         // 应用默认材质
         object.traverse((child) => {
           if (child instanceof THREE.Mesh) {
+            // 使用加权法线平滑算法，减少条纹效果
+            if (child.geometry) {
+              // 清除任何现有法线
+              child.geometry.deleteAttribute('normal');
+              
+              // 使用修改后的法线计算方法
+              computeSmoothVertexNormals(child.geometry);
+            }
             child.material = new THREE.MeshPhongMaterial({
               color: 0x6b7280,
               transparent: true,
@@ -280,6 +422,37 @@ const loadBuildingModel = () => {
           }
         })
         
+        // 添加平滑法线计算函数
+        const computeSmoothVertexNormals = (geometry) => {
+          const positions = geometry.getAttribute('position');
+          const normals = new Float32Array(positions.count * 3);
+          
+          // 创建面法线
+          for (let i = 0; i < positions.count; i += 3) {
+            const v1 = new THREE.Vector3().fromBufferAttribute(positions, i);
+            const v2 = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+            const v3 = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+            
+            const cb = new THREE.Vector3().subVectors(v3, v2);
+            const ab = new THREE.Vector3().subVectors(v1, v2);
+            const normal = new THREE.Vector3().crossVectors(cb, ab).normalize();
+            
+            normals[i * 3] = normal.x;
+            normals[i * 3 + 1] = normal.y;
+            normals[i * 3 + 2] = normal.z;
+            
+            normals[(i + 1) * 3] = normal.x;
+            normals[(i + 1) * 3 + 1] = normal.y;
+            normals[(i + 1) * 3 + 2] = normal.z;
+            
+            normals[(i + 2) * 3] = normal.x;
+            normals[(i + 2) * 3 + 1] = normal.y;
+            normals[(i + 2) * 3 + 2] = normal.z;
+          }
+          
+          // 设置新的法线属性
+          geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+        }
         object.scale.set(0.1, 0.1, 0.1)
         scene.add(object)
         loadingError.value = null
@@ -411,24 +584,97 @@ const handleCanvasMouseMove = (event) => {
   // 更新射线投射器
   raycaster.setFromCamera(mouse, camera);
   
-  // 获取与射线相交的所有物体
+  // 获取与射线相交的所有物体（递归）
   const intersects = raycaster.intersectObjects(scene.children, true);
+  // 新增：仅保留“实际可见”的命中结果
+  const visibleIntersects = intersects.filter(i => isActuallyVisible(i.object));
   
-  // 如果有相交的物体
-  if (intersects.length > 0) {
-    // 寻找第一个是Mesh的对象
+  // 如果有相交的可见物体
+  if (visibleIntersects.length > 0) {
+    // 首先检查是否是区域标记
+    let areaMarker = null;
     let meshObject = null;
-    let i = 0;
     
-    while (i < intersects.length && !meshObject) {
-      if (intersects[i].object instanceof THREE.Mesh) {
-        meshObject = intersects[i].object;
+    // 重置所有区域标记的悬停状态
+    modelObjectsMap.value.forEach((object) => {
+      if (object.userData?.isAreaMarker) {
+        object.userData.isHovered = false;
       }
-      i++;
+    });
+    
+    // 遍历所有可见交点找到区域标记或网格对象
+    for (let i = 0; i < visibleIntersects.length; i++) {
+      const obj = visibleIntersects[i].object;
+      
+      // 检查是否是区域标记
+      if (obj.userData && obj.userData.isAreaMarker) {
+        areaMarker = obj;
+        // 设置悬停状态
+        obj.userData.isHovered = true;
+        break; // 区域标记优先级最高
+      }
+      
+      // 如果还没找到网格对象，检查当前对象是否为网格
+      if (!meshObject && obj instanceof THREE.Mesh) {
+        meshObject = obj;
+      }
     }
     
-    if (meshObject) {
-      // 找到相交的网格对象
+    // 优先处理区域标记
+    if (areaMarker) {
+      const id = areaMarker.uuid;
+      
+      // 避免重复处理同一个对象
+      if (hoveredMeshId.value !== id) {
+        // 重置之前的高亮
+        resetHoveredState();
+        
+        // 设置当前悬停ID
+        hoveredMeshId.value = id;
+        
+        // 创建区域标签内容 - 添加区域名称、描述和人数信息
+        const areaName = areaMarker.userData.areaName || '未命名区域';
+        const areaDesc = areaMarker.userData.areaDescription || '';
+        
+        // 获取匹配的区域数据中的人数和温湿度信息
+        let peopleInfo = '';
+        let tempHumidInfo = '';
+        
+        if (areaMarker.userData.matchedAreaData) {
+          const data = areaMarker.userData.matchedAreaData;
+          const detected = data.detected_count || 0;
+          const capacity = data.capacity || '未知';
+          peopleInfo = `<div class="area-people">当前人数: ${detected}/${capacity}</div>`;
+          tempHumidInfo = `<div class="area-climate">
+              ${data.temperature !== undefined ? `温度: ${data.temperature}°C` : ''}
+              ${data.temperature !== undefined && data.humidity !== undefined ? ' | ' : ''}
+              ${data.humidity !== undefined ? `湿度: ${data.humidity}%` : ''}
+          </div>`;
+          
+        } 
+        else {
+          // 即使没有匹配的数据也显示默认人数信息
+          peopleInfo = `<div class="area-people">当前人数: 0/未知</div>`;
+        }
+        
+        // 更新标签内容和位置
+        meshLabelContent.value = `<div class="area-label">
+          <div class="area-name">${areaName}</div>
+          ${areaDesc ? `<div class="area-desc">位置：${areaDesc}</div>` : ''}
+          ${peopleInfo}
+          ${tempHumidInfo}
+        </div>`;
+        
+        meshLabelPosition.x = event.clientX;
+        meshLabelPosition.y = event.clientY - 25;
+        meshLabelVisible.value = true;
+      } else {
+        meshLabelPosition.x = event.clientX;
+        meshLabelPosition.y = event.clientY - 25;
+      }
+    }
+    // 如果不是区域标记但是网格对象
+    else if (meshObject) {
       const id = meshObject.uuid;
       
       // 避免重复处理同一个对象
@@ -444,8 +690,6 @@ const handleCanvasMouseMove = (event) => {
         
         // 获取对象名称用于显示
         let objectName = meshObject.name || '未命名部分';
-        
-        // 遍历结构以获取更完整的对象信息
         const structureItem = modelStructure.value.find(item => item.id === id);
         if (structureItem) {
           objectName = structureItem.name || objectName;
@@ -454,19 +698,25 @@ const handleCanvasMouseMove = (event) => {
         // 更新标签内容和位置
         meshLabelContent.value = objectName;
         meshLabelPosition.x = event.clientX;
-        meshLabelPosition.y = event.clientY - 25; // 稍微向上偏移
+        meshLabelPosition.y = event.clientY - 25;
         meshLabelVisible.value = true;
       } else {
-        // 即使是同一对象，也要更新标签位置
         meshLabelPosition.x = event.clientX;
         meshLabelPosition.y = event.clientY - 25;
       }
     } else {
-      // 没有指向Mesh对象，重置
+      // 没有指向Mesh对象或区域标记，重置
       resetHoveredState();
     }
   } else {
-    // 没有指向任何对象，重置
+    // 重置所有区域标记的悬停状态
+    modelObjectsMap.value.forEach((object) => {
+      if (object.userData?.isAreaMarker) {
+        object.userData.isHovered = false;
+      }
+    });
+    
+    // 没有指向任何可见对象，重置
     resetHoveredState();
   }
 }
@@ -494,72 +744,362 @@ const onWindowResize = () => {
 
 // 更新动画
 const animate = () => {
-  animationFrameId = requestAnimationFrame(animate)
+  animationFrameId = requestAnimationFrame(animate);
   
-  // 更新控制器 - 仅在摄像机动画未进行时允许用户控制
+  // 更新控制器
   if (controls && !cameraAnimationInProgress.value) {
-    controls.update()
+    controls.update();
   }
   
-  // 为点云添加动画效果
+  // 获取当前时间
   const time = Date.now() * 0.001
   
+  // 更新区域标记动画效果
+  // 更新区域标记动画效果
+  modelObjectsMap.value.forEach((object) => {
+    if (object.userData?.isAreaMarker) {
+      const material = object.material;
+      const phase = object.userData.pulsePhase || 0;
+      
+      if (object.userData.isHovered) {
+        // 悬停状态 - 明显的闪烁效果
+        material.opacity = 0.4 + Math.sin(time * 5 + phase) * 0.2;
+        material.color.setRGB(
+          0.6 + Math.sin(time * 3) * 0.4, 
+          0.8 + Math.sin(time * 4 + 1) * 0.2, 
+          1.0
+        );
+        
+        // 更新光晕效果
+        if (object.children[0] && object.children[0].material) {
+          object.children[0].material.opacity = 0.2 + Math.sin(time * 3 + phase) * 0.1;
+          object.children[0].scale.setScalar(1.1 + Math.sin(time * 2) * 0.05);
+        }
+      } else {
+        // 非悬停状态 - 几乎完全透明
+        material.opacity = 0.0001;
+        material.color.setRGB(0.22, 0.74, 0.97); // 恢复原始颜色
+        
+        // 更新光晕效果
+        if (object.children[0] && object.children[0].material) {
+          object.children[0].material.opacity = 0.0001;
+          object.children[0].scale.setScalar(1.1);
+        }
+      }
+    }
+  });
+  
+  // 在animate函数中更新点云动画效果
   pointCloudObjects.forEach((cloud, cloudIndex) => {
-    const geometry = cloud.geometry
-    const positionAttribute = geometry.getAttribute('position')
-    const velocityAttribute = geometry.getAttribute('velocity')
-    const randomnessAttribute = geometry.getAttribute('randomness')
-    const phaseAttribute = geometry.getAttribute('phase')
-    const originalPositions = geometry.userData.originalPositions
+    if (!cloud.geometry || !cloud.material) return;
     
-    // 更新每个点的位置
+    const geometry = cloud.geometry;
+    const positionAttribute = geometry.getAttribute('position');
+    const velocityAttribute = geometry.getAttribute('velocity');
+    const randomnessAttribute = geometry.getAttribute('randomness');
+    const phaseAttribute = geometry.getAttribute('phase');
+    const intensityAttribute = geometry.getAttribute('intensity');
+    const originalPositions = geometry.userData.originalPositions;
+    
+    // 更新材质参数，随时间变化增加云雾效果
+    if (cloud.material.type === 'ShaderMaterial') {
+      // 脉动效果
+      cloud.material.uniforms.pointSize.value = 8.0 + Math.sin(time * 0.3) * 1.0;
+      cloud.material.uniforms.softness.value = 0.05 + Math.sin(time * 0.5) * 0.01;
+    }
+    
+    // 更新每个点的位置，使运动更加流畅连续
     for (let i = 0; i < positionAttribute.count; i++) {
-      const index = i * 3
-      const phase = phaseAttribute.getX(i)
+      const index = i * 3;
+      const phase = phaseAttribute.getX(i);
+      const intensity = intensityAttribute ? intensityAttribute.getX(i) : 1.0;
       
       // 获取速度和随机性参数
-      const vx = velocityAttribute.getX(i)
-      const vy = velocityAttribute.getY(i)
-      const vz = velocityAttribute.getZ(i)
+      const vx = velocityAttribute.getX(i);
+      const vy = velocityAttribute.getY(i);
+      const vz = velocityAttribute.getZ(i);
       
-      const rx = randomnessAttribute.getX(i)
-      const ry = randomnessAttribute.getY(i)
-      const rz = randomnessAttribute.getZ(i)
+      const rx = randomnessAttribute.getX(i);
+      const ry = randomnessAttribute.getY(i);
+      const rz = randomnessAttribute.getZ(i);
       
       // 原始位置
-      const originalX = originalPositions[index]
-      const originalY = originalPositions[index + 1]
-      const originalZ = originalPositions[index + 2]
+      const originalX = originalPositions[index];
+      const originalY = originalPositions[index + 1];
+      const originalZ = originalPositions[index + 2];
       
-      // 计算杂乱运动 - 使用不同频率的正弦波叠加
-      const noiseX = Math.sin(time * 1.7 + phase) * rx  
-      const noiseY = Math.sin(time * 2.3 + phase * 2) * ry 
-      const noiseZ = Math.sin(time * 1.5 + phase * 3) * rz 
+      // 改进运动方程，增加流体感
+      const flowFactor = 3 + intensity * 0.9; // 基于强度的流动因子
       
-      // 随机漂移运动
-      const driftX = vx * Math.sin(time * 0.7 + i * 1) 
-      const driftY = vy * Math.sin(time * 0.9 + i * 0.5) 
-      const driftZ = vz * Math.sin(time * 0.8 + i * 1.5) 
+      // 使用柏林噪声或多层正弦波代替简单的正弦波，创造更自然的流体运动
+      const noiseX = Math.sin(time * 0.7 + phase) * Math.cos(time * 0.4 + phase * 2) * rx * flowFactor;
+      const noiseY = Math.sin(time * 0.9 + phase * 2) * Math.cos(time * 0.5 + phase) * ry * flowFactor;
+      const noiseZ = Math.sin(time * 0.5 + phase * 3) * Math.cos(time * 0.6 + phase * 3) * rz * flowFactor;
       
-      // 更新位置 - 围绕原始位置进行杂乱运动
+      // 缓慢的漂移运动
+      const driftX = vx * Math.sin(time * 0.3 + i * 0.01) * flowFactor;
+      const driftY = vy * Math.sin(time * 0.4 + i * 0.005) * flowFactor;
+      const driftZ = vz * Math.sin(time * 0.35 + i * 0.015) * flowFactor;
+      
+      // 更新位置 - 围绕原始位置进行流体运动
       positionAttribute.setXYZ(
         i,
         originalX + noiseX + driftX,
         originalY + noiseY + driftY,
         originalZ + noiseZ + driftZ
-      )
+      );
     }
     
     // 通知 Three.js 更新位置缓冲区
-    positionAttribute.needsUpdate = true
-  })
-  
-  // 渲染场景
-  if (renderer && scene && camera) {
-    renderer.render(scene, camera)
+    positionAttribute.needsUpdate = true;
+  });
+  // 使用composer替代renderer直接渲染
+  if (composer) {
+    composer.render();
+  } else if (renderer && scene && camera) {
+    renderer.render(scene, camera);
   }
 }
 
+// 切换顶点显示模式
+const toggleVertexDisplay = () => {
+  if (vertexDisplayMode.value) {
+    // 关闭模式 - 移除所有顶点标记
+    removeVertexMarkers();
+    vertexDisplayMode.value = false;
+  } else {
+    // 开启模式 - 显示当前可见模型的顶点
+    displayModelVertices();
+    vertexDisplayMode.value = true;
+  }
+}
+
+// 移除所有顶点标记
+const removeVertexMarkers = () => {
+  vertexMarkers.value.forEach(markers => {
+    scene.remove(markers);
+    if (markers.geometry) markers.geometry.dispose();
+    if (markers.material) markers.material.dispose();
+  });
+  
+  vertexMarkers.value = [];
+  vertexLabelVisible.value = false;
+}
+
+// 显示模型顶点
+const displayModelVertices = () => {
+  // 首先移除现有标记
+  removeVertexMarkers();
+  
+  // 查找所有可见的网格
+  scene.traverse((object) => {
+    if (object instanceof THREE.Mesh && isActuallyVisible(object) && 
+        // 忽略面积过大的平面(如地面)
+        !(object.geometry instanceof THREE.PlaneGeometry && object.geometry.parameters.width > 10)) {
+      
+      // 获取顶点位置
+      const geometry = object.geometry;
+      const positionAttr = geometry.getAttribute('position');
+      
+      // 创建顶点标记几何体
+      const markerGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(positionAttr.count * 3);
+      
+      // 存储原始索引以便后续查询
+      const indices = new Uint32Array(positionAttr.count);
+      
+      // 仅显示唯一顶点，避免重复
+      const uniqueVertices = new Map();
+      
+      for (let i = 0; i < positionAttr.count; i++) {
+        const x = positionAttr.getX(i);
+        const y = positionAttr.getY(i);
+        const z = positionAttr.getZ(i);
+        
+        // 使用顶点位置作为键来检测重复
+        const key = `${Math.round(x*1000)},${Math.round(y*1000)},${Math.round(z*1000)}`;
+        
+        if (!uniqueVertices.has(key)) {
+          const index = uniqueVertices.size;
+          uniqueVertices.set(key, index);
+          
+          // 将顶点转换到世界坐标
+          const vertex = new THREE.Vector3(x, y, z);
+          vertex.applyMatrix4(object.matrixWorld);
+          
+          positions[index*3] = vertex.x;
+          positions[index*3 + 1] = vertex.y;
+          positions[index*3 + 2] = vertex.z;
+          
+          indices[index] = i;
+        }
+      }
+      
+      // 裁剪数组到实际大小
+      const uniqueCount = uniqueVertices.size;
+      markerGeometry.setAttribute('position', 
+        new THREE.BufferAttribute(positions.slice(0, uniqueCount * 3), 3));
+      markerGeometry.setAttribute('originalIndex', 
+        new THREE.BufferAttribute(indices.slice(0, uniqueCount), 1));
+      
+      // 存储对原始几何体和网格的引用
+      markerGeometry.userData = {
+        originalGeometry: geometry,
+        originalMesh: object
+      };
+      
+      // 创建顶点标记材质
+      const markerMaterial = new THREE.PointsMaterial({
+        size: 0.05,
+        color: 0xffff00,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.8,
+        depthTest: true
+      });
+      
+      // 创建点云对象
+      const markers = new THREE.Points(markerGeometry, markerMaterial);
+      markers.name = `顶点标记_${object.name || object.uuid}`;
+      
+      // 添加到场景
+      scene.add(markers);
+      
+      // 存储引用
+      vertexMarkers.value.push(markers);
+      
+      console.log(`为对象 "${object.name || '未命名'}" 添加了 ${uniqueCount} 个顶点标记`);
+    }
+  });
+}
+
+// 处理顶点点击
+const handleVertexClick = (event) => {
+  if (!vertexDisplayMode.value) return;
+  
+  // 计算射线检测
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  
+  // 仅与顶点标记进行交叉检测
+  const intersects = raycaster.intersectObjects(vertexMarkers.value, false);
+  
+  if (intersects.length > 0) {
+    const intersection = intersects[0];
+    const pointIndex = intersection.index;
+    
+    // 获取点云和对应的原始几何体
+    const pointCloud = intersection.object;
+    const markerGeometry = pointCloud.geometry;
+    const positionAttr = markerGeometry.getAttribute('position');
+    const originalIndexAttr = markerGeometry.getAttribute('originalIndex');
+    
+    // 确保索引有效且在范围内
+    if (pointIndex === undefined || pointIndex < 0 || pointIndex >= positionAttr.count) {
+      console.error('无效的点索引:', pointIndex);
+      return;
+    }
+    
+    // 重要：强制刷新射线检测结果
+    raycaster.params.Points.threshold = 0.1;
+    
+    // 打印当前点击的索引，帮助调试
+    console.log('点击顶点索引:', pointIndex, '点所属点云ID:', pointCloud.uuid);
+    
+    // 获取原始顶点索引 - 确保索引获取正确
+    const originalIndex = originalIndexAttr ? originalIndexAttr.getX(pointIndex) : pointIndex;
+    
+    // 获取顶点位置 - 直接从当前点云数据中获取
+    const vertex = new THREE.Vector3();
+    vertex.fromBufferAttribute(positionAttr, pointIndex);
+    
+    // 获取原始网格和几何体
+    const originalGeometry = markerGeometry.userData.originalGeometry;
+    const originalMesh = markerGeometry.userData.originalMesh;
+    
+    // 尝试获取法线信息
+    let normal = { x: 0, y: 0, z: 0 };
+    if (originalGeometry.getAttribute('normal')) {
+      const normalAttr = originalGeometry.getAttribute('normal');
+      // 确保原始索引有效
+      const validNormalIndex = Math.min(originalIndex, normalAttr.count - 1);
+      
+      const normalVec = new THREE.Vector3();
+      normalVec.fromBufferAttribute(normalAttr, validNormalIndex);
+      
+      // 应用旋转矩阵转换法线到世界坐标
+      normalVec.applyQuaternion(originalMesh.quaternion);
+      normal = { 
+        x: parseFloat(normalVec.x.toFixed(4)), 
+        y: parseFloat(normalVec.y.toFixed(4)), 
+        z: parseFloat(normalVec.z.toFixed(4)) 
+      };
+    }
+    
+    // 重要：使用Object.assign进行赋值，确保reactive对象更新
+    Object.assign(selectedVertex, {
+      index: originalIndex,
+      position: { 
+        x: parseFloat(vertex.x.toFixed(4)), 
+        y: parseFloat(vertex.y.toFixed(4)),
+        z: parseFloat(vertex.z.toFixed(4)) 
+      },
+      normal: normal
+    });
+    
+    // 显示顶点标签 - 确保位置正确更新
+    vertexLabelPosition.x = event.clientX;
+    vertexLabelPosition.y = event.clientY;
+    vertexLabelVisible.value = true;
+    
+    // 高亮显示选中的顶点
+    highlightSelectedVertex(pointCloud, pointIndex);
+    
+    // 强制UI更新
+    nextTick(() => {
+      console.log('已更新顶点信息:', JSON.stringify(selectedVertex));
+    });
+  } else {
+    // 点击空白处，隐藏标签
+    vertexLabelVisible.value = false;
+    resetVertexHighlight();
+  }
+}
+
+// 高亮显示选中顶点
+const highlightSelectedVertex = (pointCloud, index) => {
+  // 重置之前的高亮
+  resetVertexHighlight();
+  
+  // 记录当前点云和原始颜色
+  const material = pointCloud.material as THREE.PointsMaterial;
+  
+  // 存储原始颜色
+  material.userData = material.userData || {};
+  material.userData.originalColor = material.color.clone();
+  
+  // 修改为高亮颜色
+  material.color.set(0xff0000); // 红色高亮
+  material.size = 0.08; // 增大选中点的尺寸
+  
+  // 保存点云和索引以便后续重置
+  material.userData.highlightedPointCloud = pointCloud;
+  material.userData.highlightedIndex = index;
+}
+
+// 重置顶点高亮
+const resetVertexHighlight = () => {
+  vertexMarkers.value.forEach(markers => {
+    const material = markers.material as THREE.PointsMaterial;
+    if (material.userData?.originalColor) {
+      material.color.copy(material.userData.originalColor);
+      material.size = 0.05;
+    }
+  });
+}
 
 
 // 组件卸载前清理资源
@@ -598,6 +1138,8 @@ onBeforeUnmount(() => {
   // 清理材质引用
   originalMaterials.value.clear();
   modelObjectsMap.value.clear();
+  // 清理顶点标记
+  removeVertexMarkers();
 })
 
 // 处理双击开始编辑名称
@@ -685,6 +1227,11 @@ const onDocumentMouseClick = (event) => {
 
 // 处理点击事件获取坐标
 const handleCanvasClick = (event) => {
+  // 顶点显示模式下调用顶点点击处理函数
+  if (vertexDisplayMode.value) {
+    handleVertexClick(event);
+    return;
+  }
   if (!heatmapRef.value || !camera || !scene) return
   
   // 计算鼠标在canvas中的归一化坐标（-1到1之间）
@@ -774,7 +1321,7 @@ const createDensityField = (points, resolution = 48) => { // 降低分辨率提�
   const cellSize = bounds.size.clone().divideScalar(resolution);
   
   // 预先计算一些常量来提高循环性能
-  const maxDistanceSquared = 10; // 最大影响距离的平方
+  const maxDistanceSquared = 1.2; // 最大影响距离的平方
   
   // 计算每个体素的密度值
   for (let x = 0; x < resolution; x++) {
@@ -794,8 +1341,8 @@ const createDensityField = (points, resolution = 48) => { // 降低分辨率提�
           
           // 距离截断优化 - 只计算一定距离内的点
           if (distanceSquared < maxDistanceSquared) {
-            // 使用距离衰减函数计算影响值
-            const influence = point.intensity * Math.exp(-distanceSquared / 1);
+            // 使用距离衰减函数计算影响值 - 基于intensity（人数）
+            const influence = 0.4 * point.intensity * Math.exp(-distanceSquared / 1);
             density += influence;
           }
         }
@@ -805,36 +1352,116 @@ const createDensityField = (points, resolution = 48) => { // 降低分辨率提�
       }
     }
   }
-  
+  const smoothedGrid = smoothDensityField(grid, resolution);
   console.log('密度场创建完成');
   return { grid, bounds, resolution, cellSize };
 }
+// 添加密度场平滑函数
+const smoothDensityField = (grid, resolution) => {
+  const smoothed = new Array(grid.length).fill(0);
+  
+  // 对每个体素应用高斯平滑
+  for (let x = 0; x < resolution; x++) {
+    for (let y = 0; y < resolution; y++) {
+      for (let z = 0; z < resolution; z++) {
+        const index = x + y * resolution + z * resolution * resolution;
+        let sum = 0;
+        let weight = 0;
+        
+        // 在3x3x3邻域内进行平滑
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              const nx = Math.min(Math.max(x + dx, 0), resolution - 1);
+              const ny = Math.min(Math.max(y + dy, 0), resolution - 1);
+              const nz = Math.min(Math.max(z + dz, 0), resolution - 1);
+              
+              const nIndex = nx + ny * resolution + nz * resolution * resolution;
+              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+              const gaussWeight = Math.exp(-dist * 0.5); // 高斯权重
+              
+              sum += grid[nIndex] * gaussWeight;
+              weight += gaussWeight;
+            }
+          }
+        }
+        
+        smoothed[index] = sum / weight;
+      }
+    }
+  }
+  
+  return smoothed;
+}
+// 创建自定义着色器材质，替换原来的点云材质
+const createCloudShaderMaterial = () => {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      pointSize: { value: 0.008 }, // 更大的点尺寸
+      softness: { value: 0.5 }, // 点的柔和度
+    },
+    vertexShader: `
+      attribute vec3 color;
+      attribute float intensity;
+      varying vec3 vColor;
+      varying float vIntensity;
+      uniform float pointSize;
+      
+      void main() {
+        vColor = color;
+        vIntensity = intensity;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        // 基于强度和距离调整点大小
+        gl_PointSize = pointSize * (300.0 / -mvPosition.z) * (0.3 + vIntensity * 0.7);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vIntensity;
+      uniform float softness;
+      
+      void main() {
+        // 计算距离中心点的距离
+        vec2 center = vec2(0.5, 0.5);
+        float dist = distance(gl_PointCoord, center);
+        
+        // 创建柔和的圆形点
+        float strength = 1.0 - smoothstep(0.0, 0.5 - softness, dist);
+        
+        // 应用渐变的alpha效果
+        gl_FragColor = vec4(vColor, strength * vIntensity);
+      }
+    `,
+    transparent: true,
+    blending: THREE.NormalBlending,
+    opacity: 0.7, // 添加整体不透明度控制
+    depthTest: true,
+    depthWrite: false
+  });
+};
 
-// 修改后的热力点云创建函数
+// 修改热力点云创建函数
 const createHeatmapPointCloud = () => {
   try {
     console.log('开始创建热力点云');
     
+    // 根据当前区域数据生成热点
+    heatmapPoints.value = generateHeatmapPoints();
+    
     // 确保热点数据存在
-    if (!heatmapPoints || heatmapPoints.length === 0) {
+    if (!heatmapPoints.value || heatmapPoints.value.length === 0) {
       console.warn('热点数据为空');
-      // 添加一些默认热点
     }
     
     // 创建密度场
-    const densityField = createDensityField(heatmapPoints);
+    const densityField = createDensityField(heatmapPoints.value);
     
     // 生成粒子几何体
     const particleGeometry = createParticlesFromDensityField(densityField);
-    // 创建点云材质
-    const particleMaterial = new THREE.PointsMaterial({
-      size: 0.01, // 粒子大小
-      vertexColors: true,
-      transparent: true,
-      opacity: 1,
-      blending: THREE.NormalBlending,
-      sizeAttenuation: true,
-    });
+    
+    // 创建着色器材质替代简单的点材质
+    const particleMaterial = createCloudShaderMaterial();
     
     // 创建点云对象并添加到场景
     const particles = new THREE.Points(particleGeometry, particleMaterial);
@@ -849,19 +1476,16 @@ const createHeatmapPointCloud = () => {
     loadingError.value = '热力图加载失败: ' + error.message;
   }
 }
-
-// 修改粒子创建函数
+// 修改现有的粒子几何体创建函数
 const createParticlesFromDensityField = (densityField) => {
   console.log('开始生成粒子...');
   const { grid, bounds, resolution, cellSize } = densityField;
   
-  // 找到最大密度值，避免除以零
+  // 找到最大密度值
   const maxDensity = Math.max(...grid, 0.001);
-  console.log(`最大密度值: ${maxDensity}`);
   
-  // 根据总密度估计粒子数量，限制最大数量
-  const desiredParticleCount = 100000000 
-  console.log(`目标粒子数量: ${desiredParticleCount}`);
+  // 增加粒子数量以获得更连续的效果
+  const desiredParticleCount = 30000; // 增加粒子数量
   
   // 预分配数组
   const particlePositions = new Float32Array(desiredParticleCount * 3);
@@ -869,11 +1493,12 @@ const createParticlesFromDensityField = (densityField) => {
   const particleVelocity = new Float32Array(desiredParticleCount * 3);
   const particleRandomness = new Float32Array(desiredParticleCount * 3);
   const particlePhases = new Float32Array(desiredParticleCount);
+  const particleIntensities = new Float32Array(desiredParticleCount); // 新增强度属性
   
   let particleIndex = 0;
   
-  // 使用接受-拒绝采样法基于密度分布生成粒子
-  const attempts = Math.min(desiredParticleCount * 3, 10000000); // 限制尝试次数
+  // 使用更密集的采样
+  const attempts = Math.min(desiredParticleCount * 5, 15000000);
   for (let i = 0; i < attempts; i++) {
     // 随机选择一个网格点
     const x = Math.floor(Math.random() * resolution);
@@ -886,14 +1511,12 @@ const createParticlesFromDensityField = (densityField) => {
     // 归一化的密度值
     const normalizedDensity = cellDensity / maxDensity;
     
-    // 添加基础概率确保低密度区域也能生成粒子
-    const baseProbability = 0.001;  // 基础概率，即使密度为0也有10%概率生成粒子
-    const densityWeight = 0.999;    // 密度权重
+    // 提高低密度区域的粒子生成概率，使云图更连续
+    const baseProbability = 0.000000001;  // 增加基础概率
+    const densityWeight = 1;
     
-    // 计算综合概率
     const generationProbability = baseProbability + normalizedDensity * densityWeight;
     
-    // 基于综合概率决定是否在此位置生成粒子
     if (Math.random() < generationProbability) {
       const index = particleIndex * 3;
       
@@ -902,13 +1525,10 @@ const createParticlesFromDensityField = (densityField) => {
       particlePositions[index + 1] = bounds.min.y + (y + Math.random()) * cellSize.y;
       particlePositions[index + 2] = bounds.min.z + (z + Math.random()) * cellSize.z;
     
-      // 设置颜色 - 使用原有代码
-      // 在粒子创建函数中定义固定的密度阈值常量
-      const LOW_DENSITY_THRESHOLD = 20;  // 低密度阈值
-      const MID_DENSITY_THRESHOLD = 35;  // 中密度阈值
+      // 设置颜色 - 使用原有密度阈值
+      const LOW_DENSITY_THRESHOLD = 25;
+      const MID_DENSITY_THRESHOLD = 45;
 
-      // 在颜色设置部分使用原始密度值而非归一化密度值
-      // 设置颜色
       if (cellDensity < LOW_DENSITY_THRESHOLD) {
         // 低密度区域 - 蓝色
         particleColors[index] = 0;
@@ -926,7 +1546,10 @@ const createParticlesFromDensityField = (densityField) => {
         particleColors[index + 2] = 0.0;
       }
       
-      // 设置运动参数 - 使用原有代码
+      // 设置粒子强度，用于着色器
+      particleIntensities[particleIndex] = normalizedDensity * 0.8 + 0.2;
+      
+      // 其他设置保持不变
       particleVelocity[index] = (Math.random() - 0.5) * 0.01;
       particleVelocity[index + 1] = (Math.random() - 0.5) * 0.01;
       particleVelocity[index + 2] = (Math.random() - 0.5) * 0.01;
@@ -943,27 +1566,6 @@ const createParticlesFromDensityField = (densityField) => {
     }
   }
   
-  console.log(`实际生成粒子数: ${particleIndex}`);
-  
-  // 如果没有成功生成粒子，添加一些默认粒子以确保渲染
-  if (particleIndex === 0) {
-    console.warn('没有生成粒子，添加默认粒子');
-    particlePositions[0] = 0;
-    particlePositions[1] = 5;
-    particlePositions[2] = 0;
-    particleColors[0] = 1;
-    particleColors[1] = 1;
-    particleColors[2] = 1;
-    particleVelocity[0] = 0;
-    particleVelocity[1] = 0;
-    particleVelocity[2] = 0;
-    particleRandomness[0] = 0.05;
-    particleRandomness[1] = 0.05;
-    particleRandomness[2] = 0.05;
-    particlePhases[0] = 0;
-    particleIndex = 1;
-  }
-  
   // 构建几何体
   const particleGeometry = new THREE.BufferGeometry();
   particleGeometry.setAttribute('position', new THREE.BufferAttribute(
@@ -976,13 +1578,42 @@ const createParticlesFromDensityField = (densityField) => {
     particleRandomness.slice(0, particleIndex * 3), 3));
   particleGeometry.setAttribute('phase', new THREE.BufferAttribute(
     particlePhases.slice(0, particleIndex), 1));
+  particleGeometry.setAttribute('intensity', new THREE.BufferAttribute(
+    particleIntensities.slice(0, particleIndex), 1)); // 添加强度属性
   
   // 存储原始位置
   particleGeometry.userData.originalPositions = particlePositions.slice(0, particleIndex * 3);
   
   return particleGeometry;
 }
-
+// 添加后期处理效果，使热力云图更加连续平滑
+const addPostProcessing = () => {
+  // 创建渲染合成器 - 直接使用导入的模块名
+  const composer = new EffectComposer(renderer);
+  
+  // 添加渲染通道
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+  
+  // 添加模糊通道使点云更加柔和连续
+  const blurPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.4,  // 强度
+    0.9,  // 半径
+    0.55   // 阈值
+  );
+  composer.addPass(blurPass);
+  
+  // 添加FXAA抗锯齿通道改善边缘
+  const fxaaPass = new ShaderPass(FXAAShader);
+  fxaaPass.uniforms['resolution'].value.set(
+    1 / window.innerWidth, 
+    1 / window.innerHeight
+  );
+  composer.addPass(fxaaPass);
+  
+  return composer;
+}
 onMounted(() => {
   initThreeScene()
   
@@ -1035,7 +1666,22 @@ const calculateBounds = (points) => {
   
   return { min, max, size };
 }
-
+// 添加一个新函数，用于在双击区域标记时同步显示相关模型部分
+const handleAreaMarkerSelection = (areaMarker) => {
+  if (!areaMarker || !areaMarker.userData || !areaMarker.userData.isAreaMarker) {
+    return false; // 不是区域标记，返回false
+  }
+  
+  // 获取关联的模型部分IDs
+  const relatedModelPartIds = areaMarker.userData.relatedModelPartIds || [];
+  
+  console.log(`选中区域标记 "${areaMarker.userData.areaName}"，关联 ${relatedModelPartIds.length} 个模型部分`);
+  
+  // 切换聚焦模式，传入区域标记ID
+  toggleFocusMode(areaMarker.uuid);
+  
+  return true; // 返回true表示已处理区域标记
+};
 // 添加双击事件处理函数
 const handleCanvasDoubleClick = (event) => {
   if (!heatmapRef.value || !camera || !scene || !renderer) return;
@@ -1050,16 +1696,29 @@ const handleCanvasDoubleClick = (event) => {
   
   // 获取与射线相交的所有物体
   const intersects = raycaster.intersectObjects(scene.children, true);
+  const visibleIntersects = intersects.filter(i => isActuallyVisible(i.object));
   
   // 如果有相交的物体且不是在聚焦模式下，则聚焦该物体
-  if (intersects.length > 0 && !focusModeActive.value) {
-    // 查找第一个是Mesh的对象
+  if (visibleIntersects.length > 0 && !focusModeActive.value) {
+    // 首先检查是否命中区域标记
+    for (let i = 0; i < visibleIntersects.length; i++) {
+      const obj = visibleIntersects[i].object;
+      // 检查是否是区域标记
+      if (obj.userData && obj.userData.isAreaMarker) {
+        // 处理区域标记选择
+        if (handleAreaMarkerSelection(obj)) {
+          return; // 已处理区域标记，退出函数
+        }
+      }
+    }
+    
+    // 如果不是区域标记，查找第一个是Mesh的对象
     let meshObject = null;
     let i = 0;
     
-    while (i < intersects.length && !meshObject) {
-      if (intersects[i].object instanceof THREE.Mesh) {
-        meshObject = intersects[i].object;
+    while (i < visibleIntersects.length && !meshObject) {
+      if (visibleIntersects[i].object instanceof THREE.Mesh) {
+        meshObject = visibleIntersects[i].object;
       }
       i++;
     }
@@ -1085,7 +1744,7 @@ const toggleFocusMode = (objectId) => {
     focusModeActive.value = true;
     focusedObjectId.value = objectId;
     
-    // 找到聚焦的对象及其所有子对象
+    // 找到聚焦的对象
     const focusedObject = modelObjectsMap.value.get(objectId);
     if (!focusedObject) {
       console.error('找不到聚焦对象:', objectId);
@@ -1094,15 +1753,31 @@ const toggleFocusMode = (objectId) => {
     
     console.log('聚焦对象:', focusedObject.name || 'unnamed');
     
+    // 检查是否为区域标记
+    const isAreaMarker = focusedObject.userData?.isAreaMarker === true;
+    let relatedModelPartIds = [];
+    
+    // 如果是区域标记，获取关联模型部分ID列表
+    if (isAreaMarker && focusedObject.userData?.relatedModelPartIds) {
+      relatedModelPartIds = focusedObject.userData.relatedModelPartIds;
+      console.log(`区域标记关联了${relatedModelPartIds.length}个模型部分`);
+    }
+    
     // 首先标记所有对象为不可见
-    modelObjectsMap.value.forEach((object, id) => {
-      object.visible = false;
+    modelObjectsMap.value.forEach((object, id) => { 
+      const isCurrentAreaMarker = object.userData?.isAreaMarker === true;
+      const itemIndex = modelStructure.value.findIndex(item => item.id === id); 
       
-      // 更新结构树状态
-      const itemIndex = modelStructure.value.findIndex(item => item.id === id);
-      if (itemIndex >= 0) {
-        modelStructure.value[itemIndex].visible = false;
-      }
+      // 保持所有区域标记可见
+      if (isCurrentAreaMarker) { 
+        object.visible = true; 
+        if (itemIndex >= 0) modelStructure.value[itemIndex].visible = true; 
+        return; 
+      } 
+      
+      // 其他对象默认隐藏
+      object.visible = false; 
+      if (itemIndex >= 0) modelStructure.value[itemIndex].visible = false; 
     });
     
     // 隐藏所有热力图点云
@@ -1110,7 +1785,7 @@ const toggleFocusMode = (objectId) => {
       cloud.visible = false;
     });
     
-    // 然后递归地将聚焦对象及其所有子对象标记为可见
+    // 递归地将聚焦对象及其所有子对象标记为可见
     function makeObjectAndChildrenVisible(obj) {
       if (!obj) return;
       
@@ -1132,18 +1807,47 @@ const toggleFocusMode = (objectId) => {
     // 使聚焦对象及其子对象可见
     makeObjectAndChildrenVisible(focusedObject);
     
-    // 检查聚焦对象的父级，确保它们也是可见的
-    let parent = focusedObject.parent;
-    while (parent) {
-      parent.visible = true;
+    // 如果是区域标记，额外处理关联的模型部分
+    if (isAreaMarker && relatedModelPartIds.length > 0) {
+      // 使所有关联的模型部分可见
+      relatedModelPartIds.forEach(id => {
+        const modelPart = modelObjectsMap.value.get(id);
+        if (modelPart) {
+          makeObjectAndChildrenVisible(modelPart);
+          
+          // 确保模型部分的父链也是可见的
+          let parent = modelPart.parent;
+          while (parent) {
+            parent.visible = true;
+            
+            // 更新结构树状态
+            const itemIndex = modelStructure.value.findIndex(item => item.id === parent.uuid);
+            if (itemIndex >= 0) {
+              modelStructure.value[itemIndex].visible = true;
+            }
+            
+            parent = parent.parent;
+          }
+        }
+      });
       
-      // 更新结构树状态
-      const itemIndex = modelStructure.value.findIndex(item => item.id === parent.uuid);
-      if (itemIndex >= 0) {
-        modelStructure.value[itemIndex].visible = true;
+      console.log(`已显示区域 "${focusedObject.userData.areaName}" 关联的 ${relatedModelPartIds.length} 个模型部分`);
+    }
+    
+    // 如果不是区域标记，检查对象的父级，确保它们也是可见的
+    if (!isAreaMarker) {
+      let parent = focusedObject.parent;
+      while (parent) {
+        parent.visible = true;
+        
+        // 更新结构树状态
+        const itemIndex = modelStructure.value.findIndex(item => item.id === parent.uuid);
+        if (itemIndex >= 0) {
+          modelStructure.value[itemIndex].visible = true;
+        }
+        
+        parent = parent.parent;
       }
-      
-      parent = parent.parent;
     }
     
     // 计算聚焦对象的边界盒以确定其几何中心
@@ -1214,7 +1918,7 @@ const toggleFocusMode = (objectId) => {
   }
 };
 
-// 修改exitFocusMode函数
+// # 修改exitFocusMode函数
 const exitFocusMode = () => {
   if (!focusModeActive.value) return;
   
@@ -1299,6 +2003,153 @@ function easeInOutCubic(t) {
     ? 4 * t * t * t 
     : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
+
+// 创建区域标记球体
+const createAreaMarkers = () => {
+  console.log('创建区域标记球体...');
+  
+  // 使用全局定义的区域信息
+  areaDefinitions.value.forEach(area => {
+    // 查找匹配的区域数据
+    const matchedAreaData = props.areas.find(a => a.name === area.name);
+    
+    // 创建球体几何体
+    const geometry = new THREE.SphereGeometry(area.radius, 32, 32);
+    
+    // 改用BasicMaterial解决黑色问题，不依赖光照
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8, // 蓝色基调
+      transparent: true,
+      opacity: 0,  // 几乎不可见但不为0
+      side: THREE.DoubleSide,
+      depthWrite: false, // 禁用深度写入
+      depthTest: true,   // 保持深度测试
+      blending: THREE.AdditiveBlending, // 改用叠加混合模式
+    });
+    
+    // 创建球体
+    const sphere = new THREE.Mesh(geometry, material);
+    
+    // 设置球体位置
+    sphere.position.set(area.position.x, area.position.y, area.position.z);
+    
+    // 创建光晕效果
+    const glowGeometry = new THREE.SphereGeometry(area.radius * 1.1, 32, 32);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.0001,
+      side: THREE.BackSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    sphere.add(glowMesh);
+    
+    // 查找与description匹配的模型部分
+    const relatedModelParts = [];
+    scene.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.name) {
+        // 使用宽松匹配规则，只要模型名称包含区域描述的关键部分或反之即可
+        if (object.name.toLowerCase().includes(area.description.toLowerCase()) || 
+            area.description.toLowerCase().includes(object.name.toLowerCase())) {
+          relatedModelParts.push(object.uuid);
+        }
+      }
+    });
+    
+    console.log(`区域 ${area.name} (${area.description}) 匹配到 ${relatedModelParts.length} 个模型部分`);
+    
+    // 保存区域信息到球体对象，增加关联模型部分IDs
+    sphere.userData = {
+      isAreaMarker: true,
+      areaId: area.id,
+      areaName: area.name,
+      areaDescription: area.description,
+      matchedAreaData: matchedAreaData || null,
+      pulsePhase: Math.random() * Math.PI * 2,
+      isHovered: false,
+      relatedModelPartIds: relatedModelParts // 存储关联模型ID
+    };
+    
+    // 为调试目的，设置名称
+    sphere.name = `区域标记：${area.name}`;
+    
+    // 将球体添加到场景
+    scene.add(sphere);
+    
+    // 记录到模型结构中
+    const itemId = sphere.uuid;
+    modelObjectsMap.value.set(itemId, sphere);
+    
+    // 添加到结构树中
+    modelStructure.value.push({
+      name: area.name,
+      type: 'AreaMarker',
+      depth: 0,
+      id: itemId,
+      isMesh: true,
+      visible: true,
+      isAreaMarker: true
+    });
+  });
+  
+  console.log(`创建了 ${areaDefinitions.value.length} 个区域标记球体`);
+};
+// 监听区域数据变化，更新热力图
+watch(() => props.areas, (newAreas) => {
+  console.log('areas数据更新:', newAreas);
+  
+  // 更新区域标记数据
+  updateAreaMarkersData(newAreas);
+  
+  // 重新生成热力点并更新热力图
+  updateHeatmapWithNewData();
+}, { deep: true });
+
+// 添加热力图更新函数
+const updateHeatmapWithNewData = () => {
+  // 移除现有的热力点云
+  pointCloudObjects.forEach(cloud => {
+    scene.remove(cloud);
+    if (cloud.geometry) cloud.geometry.dispose();
+    if (cloud.material) cloud.material.dispose();
+  });
+  pointCloudObjects.length = 0;
+  
+  // 重新生成热力点
+  heatmapPoints.value = generateHeatmapPoints();
+  
+  // 重新创建热力点云
+  createHeatmapPointCloud();
+}
+
+// 添加更新区域标记数据的函数
+const updateAreaMarkersData = (areasData) => {
+  if (!areasData || !areasData.length) return;
+  
+  console.log('更新区域标记数据...');
+  
+  // 遍历所有模型对象，找到区域标记
+  modelObjectsMap.value.forEach((object, id) => {
+    // 只处理区域标记
+    if (object.userData?.isAreaMarker) {
+      const areaName = object.userData.areaName;
+      // 使用宽松匹配查找相应区域数据
+      const matchedAreaData = areasData.find(a => 
+        a.name === areaName || 
+        a.name?.includes(areaName) || 
+        areaName?.includes(a.name)
+      );
+      
+      if (matchedAreaData) {
+        console.log(`更新区域[${areaName}]数据:`, matchedAreaData);
+        // 更新标记中存储的区域数据，包括温湿度
+        object.userData.matchedAreaData = matchedAreaData;
+      }
+    }
+  });
+}
 </script>
 
 <template>
@@ -1327,6 +2178,38 @@ function easeInOutCubic(t) {
     <button @click="toggleAutoRotate" class="auto-rotate-btn">
       {{ autoRotateEnabled ? '停止环视' : '自动环视' }}
     </button>
+    <button @click="toggleVertexDisplay" class="vertex-display-btn">
+      {{ vertexDisplayMode ? '隐藏顶点' : '显示顶点' }}
+    </button>
+    
+    <!-- 顶点信息面板 -->
+    <div 
+      v-if="vertexLabelVisible" 
+      class="vertex-label"
+      :style="{
+        left: `${vertexLabelPosition.x}px`,
+        top: `${vertexLabelPosition.y}px`
+      }"
+      :key="`vertex-${selectedVertex.index}-${Date.now()}`"
+    >
+      <div class="vertex-label-title">顶点信息</div>
+      <div class="vertex-info">
+        <span class="vertex-info-label">索引:</span> {{ selectedVertex.index }}
+      </div>
+      <div class="vertex-info">
+        <span class="vertex-info-label">位置:</span> 
+        ({{ selectedVertex.position.x }}, {{ selectedVertex.position.y }}, {{ selectedVertex.position.z }})
+      </div>
+      <div class="vertex-info">
+        <span class="vertex-info-label">法线:</span> 
+        ({{ selectedVertex.normal.x }}, {{ selectedVertex.normal.y }}, {{ selectedVertex.normal.z }})
+      </div>
+    </div>
+    
+    <!-- 顶点模式指示器 -->
+    <div v-if="vertexDisplayMode" class="vertex-mode-indicator">
+      顶点显示模式 - 点击顶点查看详细信息
+    </div>
     <!-- 调试按钮
     <button @click="showDebugInfo = !showDebugInfo" class="debug-toggle">
       {{ showDebugInfo ? '隐藏结构' : '查看模型结构' }}
@@ -1390,7 +2273,7 @@ function easeInOutCubic(t) {
       <button class="close-btn" @click="showCoordinates = false">关闭</button>
     </div>
     
-    <!-- 添加悬停标签 -->
+    <!-- 修改悬停标签 -->
     <div 
       v-if="meshLabelVisible" 
       class="mesh-label"
@@ -1398,8 +2281,8 @@ function easeInOutCubic(t) {
         left: `${meshLabelPosition.x}px`,
         top: `${meshLabelPosition.y}px`
       }"
+      v-html="meshLabelContent"
     >
-      {{ meshLabelContent }}
     </div>
     
     <!-- 在template中添加恢复按钮 -->
@@ -1490,7 +2373,7 @@ function easeInOutCubic(t) {
   font-size: 0.7rem;
   color: #94a3b8;
   position: relative;
-  padding-left: 10px;
+   padding-left: 10px;
 }
 
 .subtitle-text::before {
@@ -1734,7 +2617,7 @@ function easeInOutCubic(t) {
 .coordinates-panel {
   position: absolute;
   top: 100px;
-  left: 20px;
+  left: 500px;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(56, 189, 248, 0.5);
   border-radius: 8px;
@@ -1768,7 +2651,7 @@ function easeInOutCubic(t) {
 /* 在<style>部分添加 */
 .auto-rotate-btn {
   position: absolute;
-  bottom: 20px;
+  bottom: 70px;
   left: 50%;
   transform: translateX(-50%);
   
@@ -1787,13 +2670,37 @@ function easeInOutCubic(t) {
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
 }
 
-/* 添加悬停标签样式 */
+/* 区域标签样式 */
+.area-label {
+  text-align: center;
+}
+
+.area-name {
+  font-weight: bold;
+  color: #4ade80; /* 绿色标识区域 */
+  margin-bottom: 3px;
+}
+
+.area-desc {
+  font-size: 10px;
+  color: #d1fae5;
+  opacity: 0.9;
+}
+
+.area-people {
+  margin-top: 4px;
+  font-weight: 500;
+  color: #fbbf24; /* 琥珀色显示人数信息 */
+  font-size: 12px;
+}
+
+/* 修改悬停标签样式，确保可以容纳更多内容 */
 .mesh-label {
   position: fixed;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(56, 189, 248, 0.8);
   color: #38bdf8;
-  padding: 5px 10px;
+  padding: 8px 12px;
   border-radius: 4px;
   font-size: 12px;
   pointer-events: none;
@@ -1801,6 +2708,8 @@ function easeInOutCubic(t) {
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
   transform: translate(-50%, -100%);
   white-space: nowrap;
+  max-width: 200px;
+  line-height: 1.5;
 }
 
 /* 恢复视图按钮样式 */
@@ -1815,7 +2724,7 @@ function easeInOutCubic(t) {
   border-radius: 4px;
   cursor: pointer;
   z-index: 101;
-  transition: all 0.3s;
+ transition: all 0.3s;
 }
 
 .restore-view-btn:hover {
@@ -1836,5 +2745,81 @@ function easeInOutCubic(t) {
   border-radius: 4px;
   z-index: 100;
   font-size: 0.8rem;
+}
+
+/* 顶点显示按钮样式 */
+.vertex-display-btn {
+  position: absolute;
+  bottom: 70px;
+  left: 1100px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.3s;
+}
+
+.vertex-display-btn:hover {
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+/* 顶点标签样式 */
+.vertex-label {
+  position: fixed;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(244, 201, 63, 0.8);
+  color: #f4c93f;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 0 8px rgba(244, 201, 63, 0.5);
+  transform: translate(10px, 10px);
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+.vertex-label-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+  border-bottom: 1px solid rgba(244, 201, 63, 0.3);
+  padding-bottom: 3px;
+}
+
+.vertex-info {
+  margin: 3px 0;
+  font-family: monospace;
+}
+
+.vertex-info-label {
+  color: #94a3b8;
+  width: 50px;
+  display: inline-block;
+}
+
+/* 顶点模式指示器 */
+.vertex-mode-indicator {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(244, 201, 63, 0.2);
+  border: 1px solid rgba(244, 201, 63, 0.5);
+  color: #f4c93f;
+  padding: 6px 12px;
+  border-radius: 4px;
+  z-index: 100;
+  font-size: 0.8rem;
+}
+.area-climate {
+  margin-top: 4px;
+  color: #60a5fa; /* 蓝色显示温湿度信息 */
+  font-size: 12px;
+  font-weight: 500;
 }
 </style>

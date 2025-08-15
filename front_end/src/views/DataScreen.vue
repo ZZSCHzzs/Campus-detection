@@ -1,11 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch } from 'vue'
+import { computed } from 'vue';
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService, buildingService } from '../services'
 import type { AreaItem, Building, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HistoricalChart2 from '../components/chart-datascreen/HistoricalChart2.vue'
 import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
 import EnvironmentalChart2 from '../components/chart-datascreen/EnvironmentalChart2.vue'
+
+// 添加一个计算属性，将温湿度数据合并到区域数据中
+const areasWithEnvironmentData = computed(() => {
+  if (!areas.value || !nodes.value) return [];
+  
+  return areas.value.map(area => {
+    // 查找与该区域关联的节点（通过bound_node关联）
+    const relatedNode = nodes.value.find(node => node.id === area.bound_node);
+    
+    // 返回合并后的对象
+    return {
+      ...area,
+      temperature: relatedNode?.temperature,
+      humidity: relatedNode?.humidity
+    };
+  });
+});
 
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -309,7 +327,7 @@ function formatTime(value: string) {
 <template>
   <div class="dashboard">
     <!-- 3D Heatmap as background -->
-    <ThreeDHeatMap :areas="areas" class="heatmap-container-fullscreen" />
+    <ThreeDHeatMap :areas="areasWithEnvironmentData" class="heatmap-container-fullscreen" />
 
     <!-- UI Overlay -->s
     <div class="ui-overlay">
