@@ -294,7 +294,7 @@ const fetchSuggestedAreas = async () => {
       loadingSuggested.value = true;
     }
     
-    suggestedAreas.value = await areaService.getSuggestedAreas(selectedBuildingForSuggestion.value, 8);
+    suggestedAreas.value = await areaService.getSuggestedAreas(selectedBuildingForSuggestion.value, 4);
     
     if (isFirstLoad.value) {
       setTimeout(() => {

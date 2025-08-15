@@ -28,7 +28,7 @@ interface LLMRecommendationResponse {
 }
 
 // LLM 基础 URL
-const LLM_BASE_URL = API_BASE_URL + '/api/llm';
+const LLM_BASE_URL = API_BASE_URL + 'api/llm';
 
 /**
  * 发送聊天消息（非流式）

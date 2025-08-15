@@ -386,7 +386,8 @@ class AreaViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def suggest(self, request):
         """获取推荐区域列表"""
-        count = int(request.query_params.get('count', 5))
+        count = int(request.query_params.get('count', 4))
+        building = request.query_params.get('building', 2)
         cache_key = f"suggested_areas_{building}_{count}"
 
         # 尝试从缓存获取
@@ -394,10 +395,8 @@ class AreaViewSet(viewsets.ModelViewSet):
         if cached_data:
             return Response(cached_data)
 
-        # 缓存未命中，查询数据库
-        building = request.query_params.get('building', None)
         if not building or Building.objects.filter(id=building).count() == 0:
-            building = 1
+            building = 2
         areas = Area.objects.filter(type_id=building).select_related('bound_node')
         areas = sorted(areas, key=lambda x: x.bound_node.detected_count if x.bound_node else 0)[:count]
         serializer = AreaSerializer(areas, many=True)

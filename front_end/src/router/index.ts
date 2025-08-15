@@ -10,6 +10,7 @@ import UserView from '../views/UserView.vue';
 import AlertNotice from "../views/AlertNotice.vue";
 import NotFound from "../views/NotFound.vue";
 import TerminalView from '../views/TerminalView.vue';
+import LLMView from '../views/LLMView.vue';
 import { useAuthStore } from '../stores/auth'
 
 const routes: Array<RouteRecordRaw> = [
@@ -25,7 +26,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/ai',
     name: 'AI',
-    component: () => import('../views/LLMView.vue'),
+    component: LLMView,
   },
   {
     path: '/areas',
