@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # 导入CO2传感器模块
-# from sgp30_reader import SGP30Reader
+from sgp30_reader import SGP30Reader
 
 logger = logging.getLogger('system_monitor')
 

@@ -625,8 +625,12 @@ const checkBuzzerStatus = async () => {
   }
 };
 
-// 控制蜂鸣器
+// 控制蜂鸣器（仅本地模式）
 const controlBuzzer = async (action, params = {}) => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
   try {
     loading.value = true;
     
@@ -636,11 +640,7 @@ const controlBuzzer = async (action, params = {}) => {
     };
     
     let result;
-    if (connectionMode.value === 'local') {
-      result = await apiService.localTerminal.controlBuzzer(data);
-    } else {
-      result = await apiService.terminals.controlBuzzer(terminal.id, data);
-    }
+    result = await apiService.localTerminal.controlBuzzer(data);
     
     // 短暂延迟后刷新状态
     setTimeout(() => {
@@ -664,6 +664,83 @@ const startBuzzer = () => controlBuzzer('start', {
   repeat: buzzerForm.repeat 
 });
 const stopBuzzer = () => controlBuzzer('stop');
+
+// 灯光控制状态
+const lightStatus = reactive({
+  node_id: 1,
+  online: false,
+  supports_rotate: true,
+  default_angle: 90,
+  auto_return_time: 3,
+});
+const lightAngle = ref(90);
+const lightOnAngle = ref(130);
+const lightOffAngle = ref(65);
+
+// 获取灯光状态（仅本地模式）
+const fetchLightStatus = async () => {
+  if (connectionMode.value !== 'local') return;
+  try {
+    const { data } = await apiService.localTerminal.getLightStatus(lightStatus.node_id);
+    lightStatus.node_id = data.node_id ?? lightStatus.node_id;
+    lightStatus.online = data.online ?? false;
+    lightStatus.supports_rotate = data.supports_rotate ?? false;
+    lightStatus.default_angle = data.default_angle ?? 90;
+    lightStatus.auto_return_time = data.auto_return_time ?? 3;
+    if (!lightAngle.value) lightAngle.value = lightStatus.default_angle;
+  } catch (e) {
+    console.warn('获取灯光状态失败', e);
+    lightStatus.online = false;
+  }
+};
+
+// 旋转灯光（仅本地模式）
+const rotateLight = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightAngle.value) || lightStatus.default_angle || 90;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送灯光旋转指令：${angle}°，将于${lightStatus.auto_return_time}s自动回正`);
+  } catch (e) {
+    console.error('旋转灯光失败', e);
+    ElMessage.error('旋转灯光失败');
+  }
+};
+
+// 开灯（仅本地模式）
+const turnLightOn = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightOnAngle.value) || 130;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送开灯指令：${angle}°`);
+  } catch (e) {
+    console.error('开灯失败', e);
+    ElMessage.error('开灯失败');
+  }
+};
+
+// 关灯（仅本地模式）
+const turnLightOff = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightOffAngle.value) || 65;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送关灯指令：${angle}°`);
+  } catch (e) {
+    console.error('关灯失败', e);
+    ElMessage.error('关灯失败');
+  }
+};
 
 onMounted(async () => {
   loading.value = true;
@@ -752,13 +829,16 @@ onMounted(async () => {
   }
   // 加载数据后检查蜂鸣器状态
   await checkBuzzerStatus();
+  // 加载灯光状态（仅本地模式时尝试）
+  await fetchLightStatus();
   
-  // 添加蜂鸣器状态轮询
+  // 添加状态轮询
   setInterval(async () => {
     if (isActive.value) {
       await checkBuzzerStatus();
+      await fetchLightStatus();
     }
-  }, 5000); // 每5秒检查一次蜂鸣器状态
+  }, 5000); // 每5秒检查一次状态
 });
 
 // 切换终端
@@ -1579,6 +1659,65 @@ watch(connectionMode, handleModeChange);
                     </el-button>
                   </el-button-group>
                 </div>
+              </div>
+            </div>
+
+            <!-- 灯光控制 -->
+            <div class="hardware-control-section">
+              <div class="hardware-title">
+                <el-icon><MagicStick /></el-icon>
+                <span>灯光控制</span>
+                <el-tag :type="lightStatus.online ? 'success' : 'info'" size="small" class="hardware-status">
+                  {{ lightStatus.online ? '可用' : '不可用' }}
+                </el-tag>
+                <el-tag v-if="!lightStatus.supports_rotate" type="info" size="small" class="hardware-status">
+                  不支持旋转
+                </el-tag>
+              </div>
+
+              <div class="buzzer-controls">
+                <el-form label-width="80px" size="small">
+                  <el-row :gutter="12">
+                    <el-col :span="8">
+                      <el-form-item label="节点ID">
+                        <el-input-number v-model="lightStatus.node_id" :min="0" :step="1" :disabled="connectionMode === 'local' ? !lightStatus.online : false" @change="fetchLightStatus" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="10">
+                      <el-form-item label="角度(°)">
+                        <el-slider v-model="lightAngle" :min="0" :max="180" :step="5" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="6">
+                      <el-form-item label=" ">
+                        <el-button type="primary" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" @click="rotateLight">
+                          <el-icon><MagicStick /></el-icon> 旋转
+                        </el-button>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="12" style="margin-top: 8px;">
+                    <el-col :span="8">
+                      <el-form-item label="开灯角度">
+                        <el-input-number v-model="lightOnAngle" :min="0" :max="180" :step="1" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="关灯角度">
+                        <el-input-number v-model="lightOffAngle" :min="0" :max="180" :step="1" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label=" ">
+                        <el-button type="success" @click="turnLightOn" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false">开灯</el-button>
+                        <el-button type="warning" @click="turnLightOff" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" style="margin-left: 8px;">关灯</el-button>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <div style="text-align:center;color:#909399;">
+                    默认 {{ lightStatus.default_angle }}°，约 {{ lightStatus.auto_return_time }} 秒自动回正
+                  </div>
+                </el-form>
               </div>
             </div>
           </div>

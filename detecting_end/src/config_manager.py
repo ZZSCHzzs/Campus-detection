@@ -13,7 +13,11 @@ class ConfigManager:
     DEFAULT_CONFIG = {
         'mode': 'push',  # 默认为被动接收模式，可选值: push, pull, both
         'interval': 1,   # 主动拉取模式的间隔时间（秒）
-        'nodes': {1: "http://192.168.1.101:81"},  # 摄像头配置
+        # 新的节点结构，数据节点与控制节点分离
+        'nodes': {
+            'data_nodes': {},
+            'control_nodes': {}
+        },
         'save_image': True,   # 是否保存图像
         'preload_model': True,  # 是否预加载模型
         'terminal_id': 1,  # 当前终端的ID
@@ -28,6 +32,11 @@ class ConfigManager:
             'special_effect': 0,
             'hmirror': False,
             'vflip': False,
+        },
+        # 硬件灯光控制默认配置
+        'light_control': {
+            'default_angle': 90,
+            'auto_return_time': 3
         }
     }
     
@@ -52,13 +61,42 @@ class ConfigManager:
         return self.DEFAULT_CONFIG.copy()
     
     def _validate_config(self, config):
-        """验证配置并填充缺失的值"""
+        """验证配置并填充缺失的值，兼容旧版nodes结构"""
         validated = self.DEFAULT_CONFIG.copy()
         
-        # 更新配置
+        # 先直接更新非nodes项
         for key, value in config.items():
-            if key in validated:
+            if key != 'nodes' and key in validated:
                 validated[key] = value
+        
+        # 处理nodes
+        nodes = config.get('nodes', {})
+        # 如果是旧版: {"1": "192.168.1.x"}
+        if isinstance(nodes, dict) and nodes and all(isinstance(v, (str, int)) for v in nodes.values()):
+            data_nodes = {}
+            for k, v in nodes.items():
+                node_id = str(k)
+                # v 可能是完整URL或IP:PORT
+                url_str = str(v)
+                # 存为结构体，便于后续扩展
+                data_nodes[node_id] = {
+                    'type': 'data',
+                    'ip': url_str.replace('http://', '').replace('https://', ''),
+                    'port': 80,
+                    'name': f'节点{node_id}',
+                    'capabilities': ['capture', 'stream', 'status', 'environment']
+                }
+            validated['nodes'] = {
+                'data_nodes': data_nodes,
+                'control_nodes': {}
+            }
+        else:
+            # 新版结构，合并默认值
+            new_nodes = {'data_nodes': {}, 'control_nodes': {}}
+            if isinstance(nodes, dict):
+                new_nodes['data_nodes'] = nodes.get('data_nodes', {}) or {}
+                new_nodes['control_nodes'] = nodes.get('control_nodes', {}) or {}
+            validated['nodes'] = new_nodes
         
         return validated
     

@@ -281,6 +281,14 @@ export const localTerminalCustomMethods = {
     return localApi.post('/api/buzzer/', data);
   },
   
+  // 灯光控制相关方法
+  controlLightRotate: async (data) => {
+      return localApi.post('/api/light/rotate/', data);
+  },
+  getLightStatus: async (nodeId) => {
+      return localApi.get(`/api/light/status/${nodeId}`);
+  },
+  
   // 获取终端状态
   getStatus: async () => {
     return await http.local.get('/api/status');
