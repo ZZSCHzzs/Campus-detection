@@ -4,3 +4,5 @@ campus_detection/__pycache__
 webapi/migrations
 *.pyc
 .env
+/llm/migrations/
+/django.log

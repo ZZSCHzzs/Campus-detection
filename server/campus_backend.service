@@ -1,0 +1,22 @@
+[Unit]
+Description=Gunicorn daemon for Django backend
+After=network.target
+
+[Service]
+ExecStartPre=/bin/mkdir -p /run/gunicorn
+ExecStartPre=/bin/mkdir -p /var/log/gunicorn
+ExecStartPre=/bin/chown -R www-data:www-data /run/gunicorn
+ExecStartPre=/bin/chown -R www-data:www-data /var/log/gunicorn
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/Campus-detection/back_end
+ExecStart=/var/www/Campus-detection/back_end/venv/bin/gunicorn \
+    --access-logfile /var/log/gunicorn/access.log \
+    --error-logfile /var/log/gunicorn/error.log \
+    --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"' \
+    --workers 3 \
+    --bind unix:/run/gunicorn/gunicorn-campus.sock \
+    campus_detection.wsgi:application
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,108 @@
+server {
+    listen 443 ssl;
+    server_name smarthit.top;
+
+    ssl_certificate /etc/letsencrypt/live/smarthit.top/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/smarthit.top/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256...';
+
+    root /var/www/Campus-detection/front_end/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        # 为根路径下的标准资源设置缓存
+        location ~* \.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$ {
+            expires 365d;
+            access_log off;
+            add_header Cache-Control "public, immutable";
+            add_header X-Frame-Options "SAMEORIGIN";
+            # 重要：关闭fallback防止循环匹配
+            try_files $uri =404;
+        }
+    }
+
+    location /api/llm/ {
+        proxy_pass http://127.0.0.1:8001;  
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        gzip off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        chunked_transfer_encoding on;
+        add_header X-Accel-Buffering "no";
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    }
+
+    location /api/ {
+        proxy_pass http://unix:/run/gunicorn/gunicorn-campus.sock:;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /auth/ {
+        proxy_pass http://unix:/run/gunicorn/gunicorn-campus.sock:;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8001;  # Daphne监听端口
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+
+    location /static/ {
+        alias /var/www/Campus-detection/back_end/staticfiles/;
+        expires 30d;
+        access_log off;
+    }
+
+
+    error_log /var/log/nginx/campus_error.log warn;
+    access_log /var/log/nginx/campus_access.log main;
+}
+# HTTP强制跳转
+server {
+    listen 80;
+    server_name smarthit.top;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    server_name m.smarthit.top;
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/m.smarthit.top/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/m.smarthit.top/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+    return 301 https://smarthit.top$request_uri;
+}
+
+# HTTP强制跳转
+server {
+    listen 80;
+    server_name m.smarthit.top;
+    return 301 https://$host$request_uri;
+}

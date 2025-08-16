@@ -82,10 +82,23 @@ export interface ProcessTerminal {
     }
 }
 
+export type BuildingCategory =
+  | 'library'
+  | 'study'
+  | 'teaching'
+  | 'cafeteria'
+  | 'dorm'
+  | 'lab'
+  | 'office'
+  | 'sports'
+  | 'service'
+  | 'other'
+
 export interface Building {
     id: number
     name: string
     description?: string
+    category?: BuildingCategory
     areas_count: number
     areas?: AreaItem[]
 }

@@ -4,6 +4,7 @@ from .models import (
 )
 import json
 
+
 class LLMAnalysisSerializer(serializers.ModelSerializer):
     area_name = serializers.ReadOnlyField(source='area.name')
     area_location = serializers.ReadOnlyField(source='area.type.name')
@@ -16,13 +17,13 @@ class LLMAnalysisSerializer(serializers.ModelSerializer):
                  'alert_status', 'alert_message']
     
     def get_parsed_data(self, obj):
-        """将JSON字符串解析为Python对象"""
         if obj.analysis_data:
             try:
                 return json.loads(obj.analysis_data)
             except json.JSONDecodeError:
                 return None
         return None
+
 
 class UserRecommendationSerializer(serializers.ModelSerializer):
     area_name = serializers.ReadOnlyField(source='area.name')
@@ -33,6 +34,7 @@ class UserRecommendationSerializer(serializers.ModelSerializer):
         model = UserRecommendation
         fields = ['id', 'user', 'username', 'area', 'area_name', 'area_building', 
                  'score', 'reason', 'timestamp', 'clicked']
+
 
 class AlertAnalysisSerializer(serializers.ModelSerializer):
     alert_type = serializers.ReadOnlyField(source='alert.alert_type')
@@ -46,6 +48,7 @@ class AlertAnalysisSerializer(serializers.ModelSerializer):
                  'analysis_text', 'priority_score', 'handling_suggestions', 
                  'potential_causes', 'timestamp']
 
+
 class AreaUsagePatternSerializer(serializers.ModelSerializer):
     area_name = serializers.ReadOnlyField(source='area.name')
     building_name = serializers.ReadOnlyField(source='area.type.name')
@@ -55,6 +58,7 @@ class AreaUsagePatternSerializer(serializers.ModelSerializer):
         fields = ['id', 'area', 'area_name', 'building_name', 'daily_pattern', 
                  'weekly_pattern', 'peak_hours', 'quiet_hours', 
                  'average_duration', 'typical_user_groups', 'last_updated']
+
 
 class GeneratedContentSerializer(serializers.ModelSerializer):
     content_type_display = serializers.ReadOnlyField(source='get_content_type_display')

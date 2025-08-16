@@ -15,6 +15,10 @@ export const areaCustomMethods = {
   getPopularAreas: (count = 5) => 
     customApiCall<AreaItem[]>(`/api/areas/popular/`, 'get', undefined, { count }, true, 30000),
     
+  // 添加获取推荐区域的方法
+  getSuggestedAreas: (buildingId = 2, count = 5) => 
+    customApiCall<AreaItem[]>(`/api/areas/suggest/`, 'get', undefined, { building: buildingId, count }, true, 30000),
+  
   getAreaHistorical: (id: number, params?: any) => 
     customApiCall<HistoricalData[]>(`/api/areas/${id}/historical/`, 'get', undefined, params),
 

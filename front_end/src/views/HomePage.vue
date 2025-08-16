@@ -13,7 +13,11 @@ import {
   User, Monitor, OfficeBuilding, Connection, MapLocation,
   DataAnalysis, Warning, Bell, FirstAidKit, 
   Document, Reading, School, Postcard, Platform, 
-  Management, CreditCard, Trophy, Link
+  Management, CreditCard, Trophy, Link,
+  TrendCharts, HomeFilled, Star, List, Histogram,
+  Refresh, LocationInformation, Position, Odometer,
+  House, Discount, Promotion, ChatLineRound,
+  UserFilled, Avatar, CircleCheckFilled
 } from '@element-plus/icons-vue'
 
 const navigationItems = ref([
@@ -29,6 +33,8 @@ const navigationItems = ref([
 ])
 
 const Hotareas = ref<AreaItem[]>([])
+const suggestedAreas = ref<AreaItem[]>([])
+
 const loading = ref(false)
 const favoriteAreas = ref<AreaItem[]>([])
 const loadingFavorites = ref(false)
@@ -277,6 +283,38 @@ const checkScreenSize = () => {
   isMobile.value = window.innerWidth < 992
 }
 
+// 添加推荐区域相关状态
+const selectedBuildingForSuggestion = ref<number>(2); // 默认使用id=2的建筑
+const loadingSuggested = ref(false);
+
+// 获取推荐区域
+const fetchSuggestedAreas = async () => {
+  try {
+    if (isFirstLoad.value) {
+      loadingSuggested.value = true;
+    }
+    
+    suggestedAreas.value = await areaService.getSuggestedAreas(selectedBuildingForSuggestion.value, 4);
+    
+    if (isFirstLoad.value) {
+      setTimeout(() => {
+        loadingSuggested.value = false;
+      }, 100);
+    }
+  } catch (error) {
+    ElMessage.error('推荐区域数据获取失败');
+    suggestedAreas.value = [];
+    if (isFirstLoad.value) {
+      loadingSuggested.value = false;
+    }
+  }
+}
+
+// 监听建筑选择变化
+const onSuggestionBuildingChange = async () => {
+  await fetchSuggestedAreas();
+}
+
 onMounted(async () => {
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
@@ -287,7 +325,8 @@ onMounted(async () => {
     fetchPublicAlerts(),
     fetchLatestNotices(),
     fetchAllAreas(),
-    fetchBuildings()
+    fetchBuildings(),
+    fetchSuggestedAreas() // 添加获取推荐区域
   ]).catch(() => ElMessage.error('数据获取出错'))
   isFirstLoad.value = false
   
@@ -296,6 +335,7 @@ onMounted(async () => {
     fetchPublicAlerts();
     fetchLatestNotices();
     fetchSummary();
+    fetchSuggestedAreas(); // 定时刷新推荐区域
   }, 30000);
   if (isAuthenticated.value) {
     intervalTimer2 = setInterval(async () => {
@@ -317,22 +357,39 @@ onBeforeUnmount(() => {
   <div class="home-container">
     <el-card class="header-card">
       <div class="header-wrapper">
-        <h1 class="header-title">智慧校园<span class="highlight">空间感知调控</span>系统</h1>
+        <div class="header-title-container">
+          <div class="header-icon-container">
+            <el-icon class="header-icon"><House /></el-icon>
+          </div>
+          <h1 class="header-title">智慧校园<span class="highlight">空间感知调控</span>系统</h1>
+        </div>
+        <div class="divider">
+          <span class="divider-dot"></span>
+          <span class="divider-line"></span>
+          <span class="divider-dot"></span>
+        </div>
         <div class="sub-title">实时监测校园内各区域人员情况与环境数据，保障安全与高效管理</div>
       </div>
     </el-card>
+    
+    <!-- 统计卡片部分 -->
     <el-card class="stats-card mb-20 mt-20">
       <div v-loading="loadingSummary">
         <el-skeleton :rows="1" animated :loading="loadingSummary">
           <template #default>
             <div v-if="Object.values(summary).some(value => value > 0)">
               <el-row :gutter="20">
-                <el-col v-for="(value, key) in summary" :key="key" :span="isMobile ? 12 : 4" :xs="8" :sm="6" :md="4"
-                  :lg="3">
+                <el-col
+                  v-for="(value, key) in summary"
+                  :key="key"
+                  :span="isMobile ? 12 : 4"
+                  :xs="8" :sm="6" :md="4" :lg="3"
+                >
                   <el-statistic :title="STATS_LABELS[key]" :value="value" class="stat-item">
                     <template #suffix>
+                      <!-- 优化后的多样化图标 -->
                       <el-icon v-if="key === 'people_count'" class="stat-icon">
-                        <User />
+                        <UserFilled />
                       </el-icon>
                       <el-icon v-else-if="key === 'nodes_count'" class="stat-icon">
                         <Monitor />
@@ -347,7 +404,7 @@ onBeforeUnmount(() => {
                         <MapLocation />
                       </el-icon>
                       <el-icon v-else-if="key === 'historical_data_count'" class="stat-icon">
-                        <DataAnalysis />
+                        <TrendCharts />
                       </el-icon>
                       <el-icon v-else-if="key === 'notice_count'" class="stat-icon">
                         <Bell />
@@ -356,13 +413,13 @@ onBeforeUnmount(() => {
                         <Warning />
                       </el-icon>
                       <el-icon v-else-if="key === 'users_count'" class="stat-icon">
-                        <User />
+                        <Avatar />
                       </el-icon>
                       <el-icon v-else-if="key === 'nodes_online_count'" class="stat-icon">
-                        <Monitor />
+                        <CircleCheckFilled />
                       </el-icon>
                       <el-icon v-else-if="key === 'terminals_online_count'" class="stat-icon">
-                        <Connection />
+                        <CircleCheckFilled />
                       </el-icon>
                     </template>
                   </el-statistic>
@@ -379,27 +436,68 @@ onBeforeUnmount(() => {
 
     <el-row :gutter="20" class="mt-20">
       <el-col :span="isMobile ? 24 : 16" :xs="24" :sm="24" :md="16" :lg="16">
+        <!-- 热门区域卡片 -->
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title pulse">🏃 热门区域实时排行</span>
+            <div class="card-header">
+              <el-icon class="card-icon hot-icon"><TrendCharts /></el-icon>
+              <span class="card-title">热门区域实时排行</span>
+            </div>
           </template>
           <AreaList :areas="Hotareas" :loading="loading" empty-text="暂无热门区域数据"
             :max-height="Hotareas.length > 8 ? '150px' : 'auto'" />
         </el-card>
+        
+        <!-- 空闲区域推荐卡片 -->
+        <el-card class="dashboard-card">
+          <template #header>
+            <div class="chart-header">
+              <div class="card-header">
+                <el-icon class="card-icon suggest-icon"><Promotion /></el-icon>
+                <span class="card-title">空闲区域推荐</span>
+              </div>
+              <div class="chart-controls">
+                <el-select 
+                  v-model="selectedBuildingForSuggestion" 
+                  placeholder="选择建筑" 
+                  size="small" 
+                  style="width: 120px;"
+                  @change="onSuggestionBuildingChange"
+                >
+                  <el-option
+                    v-for="building in buildings"
+                    :key="building.id"
+                    :label="building.name"
+                    :value="building.id"
+                  />
+                </el-select>
+              </div>
+            </div>
+          </template>
+          <AreaList :areas="suggestedAreas" :loading="loadingSuggested" empty-text="暂无推荐区域数据"
+            :max-height="suggestedAreas.length > 8 ? '150px' : 'auto'" />
+        </el-card>
+        
+        <!-- 收藏区域卡片 -->
         <el-card v-if="isAuthenticated" class="dashboard-card">
           <template #header>
-            <span class="card-title">⭐ 我的收藏区域</span>
+            <div class="card-header">
+              <el-icon class="card-icon favorite-icon"><Star /></el-icon>
+              <span class="card-title">我的收藏区域</span>
+            </div>
           </template>
           <AreaList :areas="favoriteAreas" :loading="loadingFavorites"
             :max-height="favoriteAreas.length > 6 ? '193px' : 'auto'" empty-text="暂无收藏区域" />
         </el-card>
         
-
-        <!-- 替换趋势图表为历史图表 -->
+        <!-- 人员变化趋势卡片 -->
         <el-card class="dashboard-card">
           <template #header>
             <div class="chart-header">
-              <span class="card-title">📈 人员变化趋势</span>
+              <div class="card-header">
+                <el-icon class="card-icon trend-icon"><Histogram /></el-icon>
+                <span class="card-title">人员变化趋势</span>
+              </div>
               <div class="chart-controls">
                 <el-select 
                   v-model="selectedBuildingForHistorical" 
@@ -489,11 +587,14 @@ onBeforeUnmount(() => {
           />
         </el-card>
         
-        <!-- 温湿度图表 -->
+        <!-- 环境数据监测卡片 -->
         <el-card class="dashboard-card">
           <template #header>
             <div class="chart-header">
-              <span class="card-title">🌡️ 环境数据监测</span>
+              <div class="card-header">
+                <el-icon class="card-icon env-icon"><Odometer /></el-icon>
+                <span class="card-title">环境数据监测</span>
+              </div>
               <div class="chart-controls">
                 <el-select 
                   v-model="selectedBuildingForEnvironmental" 
@@ -542,9 +643,13 @@ onBeforeUnmount(() => {
         </el-card>
       </el-col>
       <el-col :span="isMobile ? 24 : 8" :xs="24" :sm="24" :md="8" :lg="8">
+        <!-- 公开告警卡片 -->
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title">⚠️ 公开告警</span>
+            <div class="card-header">
+              <el-icon class="card-icon alert-icon"><Warning /></el-icon>
+              <span class="card-title">公开告警</span>
+            </div>
           </template>
           <div v-loading="loadingAlerts">
             <el-skeleton :rows="2" animated :loading="loadingAlerts">
@@ -584,9 +689,14 @@ onBeforeUnmount(() => {
             </el-skeleton>
           </div>
         </el-card>
+        
+        <!-- 近期通知卡片 -->
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title">📢 近期通知</span>
+            <div class="card-header">
+              <el-icon class="card-icon notice-icon"><ChatLineRound /></el-icon>
+              <span class="card-title">近期通知</span>
+            </div>
           </template>
           <div v-loading="loadingNotices">
             <el-skeleton :rows="2" animated :loading="loadingNotices">
@@ -616,9 +726,13 @@ onBeforeUnmount(() => {
           </div>
         </el-card>
 
+        <!-- 校园资源导航卡片 -->
         <el-card class="dashboard-card">
           <template #header>
-            <span class="card-title">🔗 校园资源导航</span>
+            <div class="card-header">
+              <el-icon class="card-icon nav-header-icon"><Link /></el-icon>
+              <span class="card-title">校园资源导航</span>
+            </div>
           </template>
           <div class="navigation-links">
             <a v-for="item in navigationItems" :key="item.title" :href="item.link" target="_blank" class="nav-link">
@@ -637,12 +751,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-
+/* 改进的标题样式 */
 .header-card {
   text-align: center !important;
   background: linear-gradient(135deg, #f6f9ff 0%, #f0f5ff 100%) !important;
   overflow: hidden;
   position: relative;
+  border: none !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
 }
 
 .header-wrapper {
@@ -651,30 +767,54 @@ onBeforeUnmount(() => {
   padding: 20px 0;
 }
 
+.header-title-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+.header-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #409eff, #007bff);
+  border-radius: 50%;
+  margin-right: 15px;
+  box-shadow: 0 5px 15px rgba(64, 158, 255, 0.3);
+}
+
+.header-icon {
+  font-size: 28px;
+  color: white;
+}
+
 .header-wrapper::before,
 .header-wrapper::after {
   content: "";
   position: absolute;
-  width: 150px;
-  height: 150px;
+  width: 300px;
+  height: 300px;
   border-radius: 50%;
-  background: rgba(64, 158, 255, 0.1);
+  background: rgba(64, 158, 255, 0.05);
   z-index: -1;
 }
 
 .header-wrapper::before {
-  top: -50px;
-  left: -50px;
+  top: -150px;
+  left: -150px;
 }
 
 .header-wrapper::after {
-  bottom: -50px;
-  right: -50px;
+  bottom: -150px;
+  right: -150px;
 }
 
 .header-title {
   font-size: 2.5rem;
-  margin-bottom: 16px;
+  margin: 0;
   background: linear-gradient(90deg, #3352a3, #409EFF);
   -webkit-background-clip: text;
   background-clip: text;
@@ -709,6 +849,27 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 15px 0;
+}
+
+.divider-line {
+  width: 100px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(64, 158, 255, 0.5), transparent);
+}
+
+.divider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #409EFF;
+  margin: 0 8px;
+}
+
 .sub-title {
   font-size: 1.15rem;
   color: #666;
@@ -718,6 +879,87 @@ onBeforeUnmount(() => {
   animation: fadeIn 1s ease-in-out;
 }
 
+/* 卡片标题优化 */
+.card-header {
+  display: flex;
+  align-items: center;
+}
+
+.card-icon {
+  margin-right: 8px;
+  font-size: 20px;
+  padding: 3px;
+  border-radius: 8px;
+  color: white;
+}
+
+.hot-icon {
+  background-color: #f56c6c;
+}
+
+.suggest-icon {
+  background-color: #67c23a;
+}
+
+.favorite-icon {
+  background-color: #e6a23c;
+}
+
+.trend-icon {
+  background-color: #409eff;
+}
+
+.env-icon {
+  background-color: #17a2b8;
+}
+
+.alert-icon {
+  background-color: #dc3545;
+}
+
+.notice-icon {
+  background-color: #6610f2;
+}
+
+.nav-header-icon {
+  background-color: #fd7e14;
+}
+
+.card-title {
+  font-size: 17px !important;
+  font-weight: 600;
+  color: #333;
+  letter-spacing: 0.5px;
+}
+
+/* 改进的卡片样式 */
+.dashboard-card {
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  border: none;
+  transition: all 0.3s;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+.dashboard-card :deep(.el-card__header) {
+  padding: 16px 20px;
+  background: #ffffff !important;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.dashboard-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 20px;
+}
+
+/* 保留现有其他样式 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1030,11 +1272,23 @@ onBeforeUnmount(() => {
 
   .header-title {
     font-size: 1.8rem;
-    margin-bottom: 10px;
+  }
+  
+  .header-icon-container {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .header-icon {
+    font-size: 22px;
   }
 
   .sub-title {
     font-size: 1rem;
+  }
+
+  .divider-line {
+    width: 60px;
   }
 
   .stats-card {
@@ -1092,9 +1346,22 @@ onBeforeUnmount(() => {
   .header-title {
     font-size: 1.5rem;
   }
+  
+  .header-icon-container {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .header-icon {
+    font-size: 18px;
+  }
 
   .sub-title {
     font-size: 0.9rem;
+  }
+
+  .divider-line {
+    width: 40px;
   }
 
   #trend-chart {
