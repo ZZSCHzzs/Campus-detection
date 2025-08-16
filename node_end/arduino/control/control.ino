@@ -182,8 +182,35 @@ void handleRotate() {
 }
 
 void handleStatus() {
-  String response = "{\"current_angle\":" + String(currentAngle) + ",\"wifi_status\":\"connected\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
-  server.send(200, "application/json", response);
+  // 统一结构：
+  // {
+  //   "status":"ok",
+  //   "device":{ "type":"control","ip":"...","rssi":-55,"uptime_ms":12345,"capabilities":["rotate","status_led"] },
+  //   "data":{ "current_angle":90,"rotating":false,"auto_return_ms":1234 }
+  // }
+  String ip = WiFi.localIP().toString();
+  long rssi = WiFi.RSSI();
+  unsigned long now = millis();
+  unsigned long autoRemaining = (autoReturnAt && autoReturnAt > now) ? (autoReturnAt - now) : 0;
+
+  String json = "{";
+  json += "\"status\":\"ok\",";
+  json += "\"device\":{";
+  json +=   "\"type\":\"control\",";
+  json +=   "\"ip\":\"" + ip + "\",";
+  json +=   "\"rssi\":" + String(rssi) + ",";
+  json +=   "\"uptime_ms\":" + String(now) + ",";
+  json +=   "\"capabilities\":[\"rotate\",\"status_led\"]";
+  json += "},";
+  json += "\"data\":{";
+  json +=   "\"current_angle\":" + String(currentAngle) + ",";
+  json +=   "\"rotating\":" + String(rotating ? "true" : "false") + ",";
+  json +=   "\"auto_return_ms\":" + String(autoRemaining);
+  json += "}";
+  json += "}";
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", json);
 }
 
 void handleNotFound() {

@@ -1,4 +1,5 @@
-<script setup>
+<script setup lang="ts">
+
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -95,7 +96,8 @@ const status = reactive({
 const config = reactive({
   mode: 'both',
   interval: 5,
-  nodes: [],
+  data_nodes: [],
+  control_nodes: [],
   save_image: true,
   preload_model: true,
   co2_enabled: true,
@@ -118,12 +120,23 @@ const config = reactive({
 });
 
 // 原始配置（用于重置）
-const originalConfig = reactive({});
+const originalConfig = reactive({} as any);
+
 
 // 新节点信息
-const newNode = reactive({
+const newDataNode = reactive({
   id: '',
-  url: ''
+  name: '',
+  ip: '',
+  port: 80,
+  capabilities: '' // 逗号分隔输入
+});
+const newControlNode = reactive({
+  id: '',
+  name: '',
+  ip: '',
+  port: 80,
+  capabilities: '' // 逗号分隔输入
 });
 
 // 终端日志
@@ -178,7 +191,7 @@ const terminalService = computed(() => {
 const loadTerminalDetails = async () => {
   try {
     if (connectionMode.value === 'local') {
-      const info = await apiService.localTerminal.getInfo();
+      const info : any = await apiService.localTerminal.getInfo();
       terminalDetails.id = info.id || 0;
       terminalDetails.name = info.name || '本地终端';
       terminalDetails.status = true;
@@ -260,11 +273,56 @@ const loadTerminalConfig = async () => {
     config.co2_enabled = configData.co2_enabled !== undefined ? configData.co2_enabled : true;
     config.co2_read_interval = configData.co2_read_interval !== undefined ? configData.co2_read_interval : 30;
 
-    // 转换节点数据格式
-    config.nodes = Object.entries(configData.nodes || {}).map(([id, url]) => ({
-      id: parseInt(id),
-      url
-    }));
+    // 转换节点数据格式（兼容新旧格式）
+    if (configData.nodes) {
+      const parseEntry = (id, value, typeFallback) => {
+        const nodeId = parseInt(id);
+        if (value && typeof value === 'object') {
+          return {
+            id: nodeId,
+            name: value.name || `${typeFallback === 'data' ? '数据' : '控制'}节点${nodeId}`,
+            ip: value.ip || '',
+            port: value.port !== undefined ? Number(value.port) : 80,
+            capabilities: Array.isArray(value.capabilities) ? value.capabilities : []
+          };
+        }
+        // 旧格式 value 为 URL 字符串，尽量解析出 ip/port
+        let ip = '', port = 80;
+        if (typeof value === 'string') {
+          try {
+            const maybeUrl = value.includes('://') ? value : `http://${value}`;
+            const u = new URL(maybeUrl);
+            ip = u.hostname || '';
+            port = u.port ? Number(u.port) : 80;
+          } catch (e) {
+            ip = String(value);
+            port = 80;
+          }
+        }
+        return {
+          id: nodeId,
+          name: `${typeFallback === 'data' ? '数据' : '控制'}节点${nodeId}`,
+          ip,
+          port,
+          capabilities: []
+        };
+      };
+
+      if (configData.nodes.data_nodes || configData.nodes.control_nodes) {
+        // 新格式：按类别划分，条目为对象
+        const dataEntries = Object.entries(configData.nodes.data_nodes || {});
+        const controlEntries = Object.entries(configData.nodes.control_nodes || {});
+        config.data_nodes = dataEntries.map(([id, v]) => parseEntry(id, v, 'data'));
+        config.control_nodes = controlEntries.map(([id, v]) => parseEntry(id, v, 'control'));
+      } else {
+        // 旧格式：全部视为数据节点，值为 URL 字符串
+        config.data_nodes = Object.entries(configData.nodes || {}).map(([id, v]) => parseEntry(id, v, 'data'));
+        config.control_nodes = [];
+      }
+    } else {
+      config.data_nodes = [];
+      config.control_nodes = [];
+    }
 
     // 处理摄像头配置
     if (configData.camera_config) {
@@ -368,34 +426,78 @@ const refreshStatus = async () => {
   }
 };
 
-// 添加节点
-const addNode = () => {
-  if (!newNode.id || !newNode.url) {
-    ElMessage.warning('请输入完整的节点信息');
+// 添加数据节点
+const addDataNode = () => {
+  if (!newDataNode.id || !newDataNode.ip || !newDataNode.port) {
+    ElMessage.warning('请输入完整的节点信息（ID、IP、端口）');
     return;
   }
-
-  const camId = parseInt(newNode.id);
-
-  // 检查ID是否已存在
-  if (config.nodes.some(cam => cam.id === camId)) {
-    ElMessage.warning(`ID ${camId} 已存在`);
+  const nodeId = parseInt(newDataNode.id);
+  if (config.data_nodes.some(n => n.id === nodeId) || config.control_nodes.some(n => n.id === nodeId)) {
+    ElMessage.warning(`ID ${nodeId} 已存在`);
     return;
   }
-
-  config.nodes.push({
-    id: camId,
-    url: newNode.url
-  });
-
-  // 清空输入
-  newNode.id = '';
-  newNode.url = '';
+  const caps = newDataNode.capabilities
+    ? newDataNode.capabilities.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  config.data_nodes.push({ id: nodeId, name: newDataNode.name || `数据节点${nodeId}`, ip: newDataNode.ip, port: Number(newDataNode.port), capabilities: caps });
+  newDataNode.id = '';
+  newDataNode.name = '';
+  newDataNode.ip = '';
+  newDataNode.port = 80;
+  newDataNode.capabilities = '';
 };
 
-// 移除节点
-const removeNode = (index) => {
-  config.nodes.splice(index, 1);
+// 添加控制节点
+const addControlNode = () => {
+  if (!newControlNode.id || !newControlNode.ip || !newControlNode.port) {
+    ElMessage.warning('请输入完整的节点信息（ID、IP、端口）');
+    return;
+  }
+  const nodeId = parseInt(newControlNode.id);
+  if (config.data_nodes.some(n => n.id === nodeId) || config.control_nodes.some(n => n.id === nodeId)) {
+    ElMessage.warning(`ID ${nodeId} 已存在`);
+    return;
+  }
+  const caps = newControlNode.capabilities
+    ? newControlNode.capabilities.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  config.control_nodes.push({ id: nodeId, name: newControlNode.name || `控制节点${nodeId}`, ip: newControlNode.ip, port: Number(newControlNode.port), capabilities: caps });
+  newControlNode.id = '';
+  newControlNode.name = '';
+  newControlNode.ip = '';
+  newControlNode.port = 80;
+  newControlNode.capabilities = '';
+};
+
+// 移除数据节点
+const removeDataNode = (index) => {
+  config.data_nodes.splice(index, 1);
+};
+
+// 移除控制节点
+const removeControlNode = (index) => {
+  config.control_nodes.splice(index, 1);
+};
+
+// 预览数据节点图片（仅本地模式）
+const previewNodeImage = async (nodeId) => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('图片预览仅在本地模式下可用');
+    return;
+  }
+  try {
+    const blob : any = await apiService.localTerminal.getLastImage(nodeId);
+    const imageUrl = URL.createObjectURL(blob);
+    ElMessageBox.alert(`<img src="${imageUrl}" style="max-width: 100%; max-height: 400px;" />`, `节点 ${nodeId} 最后一次图片`, {
+      dangerouslyUseHTMLString: true,
+      customClass: 'image-preview-dialog',
+      confirmButtonText: '关闭'
+    }).finally(() => URL.revokeObjectURL(imageUrl));
+  } catch (error) {
+    console.error('获取节点图片失败:', error);
+    ElMessage.error('获取节点图片失败');
+  }
 };
 
 // 保存配置
@@ -403,16 +505,32 @@ const saveConfig = async () => {
   try {
     loading.value = true;
 
-    // 转换节点格式为对象
-    const nodesObj = {};
-    config.nodes.forEach(cam => {
-      nodesObj[cam.id] = cam.url;
+    // 转换节点格式为对象（新格式，包含详细字段）
+    const dataNodesObj = {} as Record<string, any>;
+    config.data_nodes.forEach(n => {
+      dataNodesObj[n.id] = {
+        type: 'data',
+        ip: n.ip,
+        port: Number(n.port) || 80,
+        name: n.name || `数据节点${n.id}`,
+        capabilities: Array.isArray(n.capabilities) ? n.capabilities : []
+      };
+    });
+    const controlNodesObj = {} as Record<string, any>;
+    config.control_nodes.forEach(n => {
+      controlNodesObj[n.id] = {
+        type: 'control',
+        ip: n.ip,
+        port: Number(n.port) || 80,
+        name: n.name || `控制节点${n.id}`,
+        capabilities: Array.isArray(n.capabilities) ? n.capabilities : []
+      };
     });
 
     const configToSave = {
       mode: config.mode,
-      interval: parseFloat(config.interval),
-      nodes: nodesObj,
+      interval: parseFloat(String(config.interval)),
+      nodes: { data_nodes: dataNodesObj, control_nodes: controlNodesObj },
       save_image: config.save_image,
       preload_model: config.preload_model,
       co2_enabled: config.co2_enabled,
@@ -778,7 +896,7 @@ onMounted(async () => {
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
       if (route.params.id) {
-        terminal.id = parseInt(route.params.id);
+        terminal.id = parseInt(String(route.params.id));
         selectedTerminalId.value = terminal.id;
       } else if (terminalList.value.length > 0) {
         // 否则使用列表中第一个终端
@@ -943,7 +1061,7 @@ const applyConfig = async () => {
   try {
     loading.value = true;
     await sendCommand('change_mode', { mode: config.mode });
-    await sendCommand('set_interval', { interval: parseFloat(config.interval) });
+    await sendCommand('set_interval', { interval: parseFloat(String(config.interval)) });
     ElMessage.success('配置已立即应用');
 
     // 刷新状态
@@ -1478,30 +1596,75 @@ watch(connectionMode, handleModeChange);
                 </template>
                 
                 <div class="node-config">
-                  <div class="node-list-container">
-                    <el-table :data="config.nodes" size="small" height="200px" class="node-table">
-                      <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
-                      <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
-                      <el-table-column label="操作" width="70" align="center">
-                        <template #default="scope">
-                          <el-button type="danger" size="small" @click="removeNode(scope.$index)" circle>
-                            <el-icon>
-                              <Delete />
-                            </el-icon>
-                          </el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
+                  <!-- 数据节点 -->
+                  <div class="node-section">
+                    <div class="node-section-header">数据节点</div>
+                    <div class="node-list-container">
+                      <el-table :data="config.data_nodes" size="small" height="200px" class="node-table">
+                        <el-table-column prop="id" label="ID" width="60" align="center" />
+                        <el-table-column prop="name" label="名称" width="140" show-overflow-tooltip />
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip />
+                        <el-table-column prop="port" label="端口" width="80" align="center" />
+                        <el-table-column label="功能" min-width="160">
+                          <template #default="scope">
+                            <el-tag v-for="cap in (scope.row.capabilities || [])" :key="cap" size="small" style="margin-right:4px">{{ cap }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="140" align="center">
+                          <template #default="scope">
+                            <el-button size="small" @click="previewNodeImage(scope.row.id)" circle :disabled="connectionMode !== 'local'">
+                              <el-icon><Picture /></el-icon>
+                            </el-button>
+                            <el-button type="danger" size="small" @click="removeDataNode(scope.$index)" circle>
+                              <el-icon><Delete /></el-icon>
+                            </el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </div>
+                    <div class="add-node-form">
+                      <el-input v-model="newDataNode.id" placeholder="ID" class="node-id-input" size="small" />
+                      <el-input v-model="newDataNode.name" placeholder="名称" class="node-name-input" size="small" />
+                      <el-input v-model="newDataNode.ip" placeholder="IP" class="node-ip-input" size="small" />
+                      <el-input v-model.number="newDataNode.port" placeholder="端口" class="node-port-input" size="small" />
+                      <el-input v-model="newDataNode.capabilities" placeholder="功能(逗号分隔)" class="node-cap-input" size="small" />
+                      <el-button type="primary" @click="addDataNode" size="small" class="add-button">
+                        <el-icon><Plus /></el-icon>添加数据节点
+                      </el-button>
+                    </div>
                   </div>
-                  <div class="add-node-form">
-                    <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
-                    <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input"
-                      size="small"></el-input>
-                    <el-button type="primary" @click="addNode" size="small" class="add-button">
-                      <el-icon>
-                        <Plus />
-                      </el-icon>添加
-                    </el-button>
+
+                  <!-- 控制节点 -->
+                  <div class="node-section" style="margin-top: 16px;">
+                    <div class="node-section-header">控制节点</div>
+                    <div class="node-list-container">
+                      <el-table :data="config.control_nodes" size="small" height="200px" class="node-table">
+                        <el-table-column prop="id" label="ID" width="60" align="center" />
+                        <el-table-column prop="name" label="名称" width="140" show-overflow-tooltip />
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip />
+                        <el-table-column prop="port" label="端口" width="80" align="center" />
+                        <el-table-column label="功能" min-width="160">
+                          <template #default="scope">
+                            <el-tag v-for="cap in (scope.row.capabilities || [])" :key="cap" size="small" style="margin-right:4px">{{ cap }}</el-tag>
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="url" label="URL" show-overflow-tooltip />
+                        <el-table-column label="操作" width="80" align="center">
+                          <template #default="scope">
+                            <el-button type="danger" size="small" @click="removeControlNode(scope.$index)" circle>
+                              <el-icon><Delete /></el-icon>
+                            </el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </div>
+                    <div class="add-node-form">
+                      <el-input v-model="newControlNode.id" placeholder="ID" class="node-id-input" size="small" />
+                      <el-input v-model="newControlNode.ip" placeholder="节点URL" class="node-url-input" size="small" />
+                      <el-button type="primary" @click="addControlNode" size="small" class="add-button">
+                        <el-icon><Plus /></el-icon>添加控制节点
+                      </el-button>
+                    </div>
                   </div>
                 </div>
               </el-tab-pane>
@@ -1522,7 +1685,7 @@ watch(connectionMode, handleModeChange);
                         <el-form-item label="分辨率">
                           <el-select v-model="config.camera_config.frame_size">
                             <el-option v-for="(size, key) in frameSizes" :key="key" :label="size.label"
-                              :value="parseInt(key)" />
+                              :value="parseInt(String(key))" />
                           </el-select>
                         </el-form-item>
                       </el-col>

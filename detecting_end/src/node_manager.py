@@ -96,7 +96,15 @@ class NodeManager:
                         'status': '未知',
                         'last_capture': None,
                         'detection_count': 0,
-                        'error': None
+                        'error': None,
+                        # 新增的标准化status字段
+                        'last_seen': None,
+                        'device_type': '未知',
+                        'ip': None,
+                        'rssi': None,
+                        'uptime_ms': None,
+                        'capabilities': [],
+                        'data': None,
                     }
         
         logger.info(f"已加载 {len(self.data_nodes)} 个数据节点和 {len(self.control_nodes)} 个控制节点")
@@ -140,7 +148,7 @@ class NodeManager:
             return False
     
     def check_node_connection(self, node_id):
-        """检查节点连接状态"""
+        """检查节点连接状态，并同步 /status 数据"""
         # 首先在数据节点中查找
         node_url = None
         if node_id in self.data_nodes:
@@ -163,7 +171,38 @@ class NodeManager:
         try:
             response = requests.get(f"{node_url}/status", timeout=2)
             if response.status_code == 200:
-                self.update_node_status(node_id, '在线')
+                # 尝试解析标准化JSON；若解析失败，仍按在线处理
+                payload = None
+                try:
+                    payload = response.json()
+                except Exception:
+                    payload = None
+
+                with self.lock:
+                    st = self.node_status.get(node_id, {})
+                    st['status'] = '在线'
+                    st['error'] = None
+                    st['last_seen'] = datetime.datetime.now().isoformat(timespec='seconds')
+
+                    if isinstance(payload, dict):
+                        device = payload.get('device', {}) or {}
+                        data = payload.get('data', None)
+
+                        # 同步标准字段（若不存在则不覆盖）
+                        if 'type' in device:
+                            st['device_type'] = device.get('type') or st.get('device_type', '未知')
+                        if 'ip' in device:
+                            st['ip'] = device.get('ip')
+                        if 'rssi' in device:
+                            st['rssi'] = device.get('rssi')
+                        if 'uptime_ms' in device:
+                            st['uptime_ms'] = device.get('uptime_ms')
+                        if 'capabilities' in device and isinstance(device.get('capabilities'), list):
+                            st['capabilities'] = device.get('capabilities') or []
+
+                        st['data'] = data
+                    self.node_status[node_id] = st
+
                 return True
             else:
                 self.update_node_status(node_id, '错误', f"HTTP错误: {response.status_code}")

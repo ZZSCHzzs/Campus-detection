@@ -389,7 +389,12 @@ export const localTerminalCustomMethods = {
       console.error('自动检测环境失败:', error);
       throw error;
     }
-  }
+  },
+
+  // 获取数据节点最后一次图片（返回Blob）
+  getLastImage: async (nodeId: number) => {
+    return await http.local.get(`/api/image/last/${nodeId}`, {}, { responseType: 'blob' });
+  },
 };
 
 // 汇总服务自定义方法

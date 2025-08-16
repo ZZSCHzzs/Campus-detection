@@ -88,6 +88,13 @@ class SystemMonitor:
             self.last_config = config_manager.get_all()
             self.last_config_hash = self._get_config_hash()
 
+        # 新增：节点状态主动轮询控制
+        self.node_ping_interval = (self.config_manager.get('node_ping_interval', 10)
+                                   if self.config_manager else 10)  # 每个节点轮询间隔(秒)
+        self.node_ping_batch = (self.config_manager.get('node_ping_batch', 3)
+                                if self.config_manager else 3)      # 每周期最多轮询的节点数
+        self._node_last_ping: Dict[Any, float] = {}
+
     def start(self):
         """启动监控线程"""
         if self.is_running:
@@ -192,14 +199,11 @@ class SystemMonitor:
             logger.error(f"更新系统资源信息失败: {str(e)}")
     
     def _update_node_status(self):
-        """更新摄像头状态（适配新版 NodeManager）"""
+        """更新摄像头状态（主动轮询 + 读取缓存）"""
         if not self.node_manager:
             return
         try:
             nodes_status: Dict[Any, str] = {}
-
-            # 优先从 NodeManager 的状态缓存读取
-            status_map = self.node_manager.get_node_status() if hasattr(self.node_manager, 'get_node_status') else {}
 
             # 汇总所有节点ID（数据节点 + 控制节点）
             node_ids = set()
@@ -207,10 +211,26 @@ class SystemMonitor:
                 node_ids.update(self.node_manager.get_data_nodes().keys())
             if hasattr(self.node_manager, 'get_control_nodes'):
                 node_ids.update(self.node_manager.get_control_nodes().keys())
+
+            # 新增：主动轮询到期节点，限制每周期的请求数量
+            now = time.time()
+            polled = 0
+            for node_id in sorted(list(node_ids)):
+                last = self._node_last_ping.get(node_id, 0)
+                if (now - last) >= self.node_ping_interval and polled < self.node_ping_batch:
+                    try:
+                        # 触发 /status 请求与 NodeManager 缓存更新
+                        self.node_manager.check_node_connection(node_id)
+                    except Exception as e:
+                        logger.debug(f"主动轮询节点 {node_id} 失败: {e}")
+                    self._node_last_ping[node_id] = now
+                    polled += 1
+
+            # 读取 NodeManager 的状态缓存并汇总
+            status_map = self.node_manager.get_node_status() if hasattr(self.node_manager, 'get_node_status') else {}
             if not node_ids and status_map:
                 node_ids.update(status_map.keys())
 
-            # 填充状态（未知/在线/离线/错误等）
             for node_id in node_ids:
                 info = status_map.get(node_id, {})
                 status_text = info.get('status', '未知') if isinstance(info, dict) else (str(info) if info else '未知')

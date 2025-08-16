@@ -529,57 +529,56 @@ static int print_reg(char *p, sensor_t *s, uint16_t reg, uint32_t mask) {
 }
 
 static esp_err_t status_handler(httpd_req_t *req) {
-  static char json_response[1024];
-
+  // 统一结构：
+  // {
+  //   "status":"ok",
+  //   "device":{ "type":"data","ip":"...","rssi":-55,"uptime_ms":12345,"capabilities":["stream","capture","environment","control"] },
+  //   "data":{ ...业务字段... }
+  // }
   sensor_t *s = esp_camera_sensor_get();
-  char *p = json_response;
-  *p++ = '{';
 
-  if (s != NULL) {
-    p += sprintf(p, "\"framesize\":%u,", s->status.framesize);
-    p += sprintf(p, "\"quality\":%u,", s->status.quality);
-    p += sprintf(p, "\"brightness\":%d,", s->status.brightness);
-    p += sprintf(p, "\"contrast\":%d,", s->status.contrast);
-    p += sprintf(p, "\"saturation\":%d,", s->status.saturation);
-    p += sprintf(p, "\"special_effect\":%u,", s->status.special_effect);
-    p += sprintf(p, "\"wb_mode\":%u,", s->status.wb_mode);
-    p += sprintf(p, "\"awb\":%u,", s->status.awb);
-    p += sprintf(p, "\"awb_gain\":%u,", s->status.awb_gain);
-    p += sprintf(p, "\"aec\":%u,", s->status.aec);
-    p += sprintf(p, "\"aec2\":%u,", s->status.aec2);
-    p += sprintf(p, "\"ae_level\":%d,", s->status.ae_level);
-    p += sprintf(p, "\"aec_value\":%u,", s->status.aec_value);
-    p += sprintf(p, "\"agc\":%u,", s->status.agc);
-    p += sprintf(p, "\"agc_gain\":%u,", s->status.agc_gain);
-    p += sprintf(p, "\"gainceiling\":%u,", s->status.gainceiling);
-    p += sprintf(p, "\"bpc\":%u,", s->status.bpc);
-    p += sprintf(p, "\"wpc\":%u,", s->status.wpc);
-    p += sprintf(p, "\"raw_gma\":%u,", s->status.raw_gma);
-    p += sprintf(p, "\"lenc\":%u,", s->status.lenc);
-    p += sprintf(p, "\"hmirror\":%u,", s->status.hmirror);
-    p += sprintf(p, "\"dcw\":%u,", s->status.dcw);
-    p += sprintf(p, "\"colorbar\":%u,", s->status.colorbar);
-  }
-
-  // 添加温湿度数据
   float temperature = dht.readTemperature();
   float humidity = dht.readHumidity();
-  
-  if (!isnan(temperature) && !isnan(humidity)) {
-    p += sprintf(p, "\"temperature\":%.2f,", temperature);
-    p += sprintf(p, "\"humidity\":%.2f,", humidity);
+  bool hasEnv = !(isnan(temperature) || isnan(humidity));
+
+  String ip = WiFi.localIP().toString();
+  long rssi = WiFi.RSSI();
+  unsigned long up = millis();
+
+  // 业务数据：挑选关键字段，避免超长
+  String dataJson = "{";
+  dataJson += "\"led_intensity\":" + String(led_duty);
+  if (hasEnv) {
+    dataJson += ",\"temperature\":" + String(temperature, 2);
+    dataJson += ",\"humidity\":" + String(humidity, 2);
   }
-  
-  p += sprintf(p, "\"led_intensity\":%d,", led_duty);
-  p += sprintf(p, "\"xclk\":%d,", 20);
-  p += sprintf(p, "\"pixformat\":%u,", (s ? s->pixformat : (uint8_t)PIXFORMAT_JPEG));
-  
-  *p++ = '}';
-  *p++ = 0;
-  
+  if (s != NULL) {
+    dataJson += ",\"framesize\":" + String(s->status.framesize);
+    dataJson += ",\"quality\":" + String(s->status.quality);
+    dataJson += ",\"brightness\":" + String(s->status.brightness);
+    dataJson += ",\"contrast\":" + String(s->status.contrast);
+    dataJson += ",\"saturation\":" + String(s->status.saturation);
+    dataJson += ",\"hmirror\":" + String(s->status.hmirror);
+    dataJson += ",\"vflip\":" + String(s->status.vflip);
+    dataJson += ",\"pixformat\":" + String((uint8_t)s->pixformat);
+  }
+  dataJson += "}";
+
+  String json = "{";
+  json += "\"status\":\"ok\",";
+  json += "\"device\":{";
+  json +=   "\"type\":\"data\",";
+  json +=   "\"ip\":\"" + ip + "\",";
+  json +=   "\"rssi\":" + String(rssi) + ",";
+  json +=   "\"uptime_ms\":" + String(up) + ",";
+  json +=   "\"capabilities\":[\"stream\",\"capture\",\"environment\",\"control\"]";
+  json += "},";
+  json += "\"data\":" + dataJson;
+  json += "}";
+
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  return httpd_resp_send(req, json_response, strlen(json_response));
+  return httpd_resp_send(req, json.c_str(), json.length());
 }
 
 static esp_err_t environment_handler(httpd_req_t *req) {
