@@ -192,23 +192,30 @@ class SystemMonitor:
             logger.error(f"更新系统资源信息失败: {str(e)}")
     
     def _update_node_status(self):
-        """更新摄像头状态"""
+        """更新摄像头状态（适配新版 NodeManager）"""
         if not self.node_manager:
             return
-            
         try:
-            # 获取摄像头状态
-            nodes_status = {}
-            
-            for node_id, node in self.node_manager.nodes.items():
-                # 检查node是否是对象而不是字符串
-                if hasattr(node, 'is_available') and callable(node.is_available):
-                    nodes_status[node_id] = "在线" if node.is_available() else "离线"
-                elif hasattr(node, 'status'):
-                    nodes_status[node_id] = node.status
-                else:
-                    nodes_status[node_id] = "离线"
-            
+            nodes_status: Dict[Any, str] = {}
+
+            # 优先从 NodeManager 的状态缓存读取
+            status_map = self.node_manager.get_node_status() if hasattr(self.node_manager, 'get_node_status') else {}
+
+            # 汇总所有节点ID（数据节点 + 控制节点）
+            node_ids = set()
+            if hasattr(self.node_manager, 'get_data_nodes'):
+                node_ids.update(self.node_manager.get_data_nodes().keys())
+            if hasattr(self.node_manager, 'get_control_nodes'):
+                node_ids.update(self.node_manager.get_control_nodes().keys())
+            if not node_ids and status_map:
+                node_ids.update(status_map.keys())
+
+            # 填充状态（未知/在线/离线/错误等）
+            for node_id in node_ids:
+                info = status_map.get(node_id, {})
+                status_text = info.get('status', '未知') if isinstance(info, dict) else (str(info) if info else '未知')
+                nodes_status[node_id] = status_text
+
             self.status["nodes"] = nodes_status
         except Exception as e:
             logger.error(f"更新摄像头状态失败: {str(e)}")
@@ -221,31 +228,32 @@ class SystemMonitor:
         """更新CO2数据"""
         if not self.co2_enabled or not self.co2_reader:
             return
-            
+
         current_time = time.time()
-        
+
         # 检查是否到了读取CO2数据的时间
         if current_time - self.co2_last_read_time < self.co2_read_interval:
             return
-            
+
         try:
             # 读取CO2数据
+            prev_level = self.status.get("co2_level", -1)
             co2_ppm = self.co2_reader.get_co2()
-            
+
             if co2_ppm >= 0:  # 有效读数
                 self.status["co2_level"] = co2_ppm
                 self.status["co2_status"] = "正常"
                 logger.debug(f"CO2读数: {co2_ppm} ppm")
-                
-                # 记录显著变化
-                if abs(co2_ppm - self.status.get("co2_level", 0)) > 100:
+
+                # 记录显著变化（对比更新前的上次读数）
+                if prev_level >= 0 and abs(co2_ppm - prev_level) > 100:
                     if self.log_manager:
                         self.log_manager.info(f"CO2浓度变化: {co2_ppm} ppm", source="monitor")
-                        
+
             else:  # 读取失败
                 logger.warning("CO2传感器读取失败，尝试重新初始化")
                 self.status["co2_status"] = "异常"
-                
+
                 # 尝试重新初始化传感器
                 try:
                     self.co2_reader = SGP30Reader()
@@ -254,13 +262,13 @@ class SystemMonitor:
                 except Exception as reinit_error:
                     logger.error(f"CO2传感器重新初始化失败: {str(reinit_error)}")
                     self.co2_enabled = False
-                    
+
             self.co2_last_read_time = current_time
-            
+
         except Exception as e:
             logger.error(f"更新CO2数据失败: {str(e)}")
             self.status["co2_status"] = "异常"
-            
+
             # 如果连续失败，暂时禁用CO2传感器
             if current_time - self.co2_last_read_time > self.co2_read_interval * 3:
                 logger.warning("CO2传感器连续失败，暂时禁用")
@@ -308,37 +316,55 @@ class SystemMonitor:
     
     def _send_ws_status_update(self):
         """通过WebSocket发送状态更新到服务端"""
-        if not self.ws_client or not self.ws_client.is_connected():
+        if not self.ws_client:
             return
-            
+
+        # 兼容不同的连接状态属性/方法
+        try:
+            is_connected = False
+            if hasattr(self.ws_client, 'is_connected') and callable(getattr(self.ws_client, 'is_connected')):
+                is_connected = self.ws_client.is_connected()
+            elif hasattr(self.ws_client, 'connected'):
+                is_connected = bool(getattr(self.ws_client, 'connected'))
+            if not is_connected:
+                return
+        except Exception:
+            return
+
         try:
             status_data = self.get_status()
-            
+
+            # 兼容不同的发送方法
+            send_coro = None
+            if hasattr(self.ws_client, 'send_system_status'):
+                send_coro = self.ws_client.send_system_status(status_data)
+            elif hasattr(self.ws_client, 'send_status'):
+                send_coro = self.ws_client.send_status(status_data)
+            else:
+                logger.warning("WebSocket客户端不支持发送系统状态的方法")
+                return
+
             # 使用线程安全的方式发送WebSocket消息
             try:
                 import asyncio
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                loop.run_until_complete(self.ws_client.send_system_status(status_data))
+                loop.run_until_complete(send_coro)
                 loop.close()
-                
                 logger.debug("通过WebSocket发送状态更新成功")
             except RuntimeError as async_error:
                 if "Event loop is closed" in str(async_error):
-                    # 事件循环已关闭，尝试使用新的事件循环
                     logger.warning("检测到事件循环已关闭，尝试使用新的事件循环")
                     import asyncio
-                    # 创建新的事件循环
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
                     try:
-                        new_loop.run_until_complete(self.ws_client.send_system_status(status_data))
+                        new_loop.run_until_complete(send_coro)
                     finally:
                         new_loop.close()
                 else:
-                    # 其他运行时错误
                     raise
-            
+
         except Exception as e:
             logger.error(f"通过WebSocket发送状态更新失败: {str(e)}")
     
@@ -452,11 +478,6 @@ class SystemMonitor:
     def update_ws_client(self, ws_client):
         """更新WebSocket客户端引用"""
         self.ws_client = ws_client
-    
-    def update_ws_client(self, ws_client):
-        """更新WebSocket客户端引用"""
-        self.ws_client = ws_client
-    
     
     def _get_config_hash(self):
         """获取配置的哈希值，用于检测配置更改"""
