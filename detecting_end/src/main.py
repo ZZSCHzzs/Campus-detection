@@ -21,6 +21,8 @@ from detection_manager import DetectionManager
 from utils import ensure_dirs_exist, fix_ws_url, get_system_info
 # 导入系统监控模块
 from system_monitor import SystemMonitor
+# 导入蜂鸣器管理模块
+from buzzer_manager import BuzzerManager, BuzzerPattern
 
 # 创建Flask应用
 app = Flask(__name__, static_folder=os.path.join(ROOT_DIR, 'static'))
@@ -33,11 +35,12 @@ node_manager = None
 detection_manager = None
 ws_client = None
 system_monitor = None  # 添加系统监控实例
+buzzer_manager = None  # 添加蜂鸣器管理实例
 
 # 初始化应用
 def initialize_app():
     """初始化应用程序"""
-    global config_manager, log_manager, node_manager, detection_manager, ws_client, system_monitor
+    global config_manager, log_manager, node_manager, detection_manager, ws_client, system_monitor, buzzer_manager
     
     # 创建必要的目录，确保它们位于根目录而非src目录下
     ensure_dirs_exist(
@@ -60,6 +63,20 @@ def initialize_app():
     ws_client = init_websocket_client()
     
     log_manager.ws_client = ws_client
+    
+    # 初始化蜂鸣器管理器
+    try:
+        buzzer_manager = BuzzerManager(
+            pin_trigger=2,  # 触发引脚
+            pin_echo=9,     # 回声引脚
+            pin_buzzer=11,  # 蜂鸣器引脚
+            log_manager=log_manager
+        )
+        log_manager.info("蜂鸣器管理器初始化成功")
+    except Exception as e:
+        log_manager.error(f"蜂鸣器管理器初始化失败: {str(e)}")
+        log_manager.error(f"系统将继续运行，但蜂鸣器功能将不可用")
+        buzzer_manager = None
     
     # 初始化检测管理器 - 仅初始化，暂不启动检测线程
     detection_manager = DetectionManager(
@@ -371,6 +388,46 @@ async def handle_ws_command(command_data):
                     {"error": f"获取日志失败: {str(e)}"}, 
                     success=False
                 )
+        # 蜂鸣器控制命令
+        elif command == "buzzer":
+            if not buzzer_manager:
+                await ws_client.send_command_response(command, {"error": "蜂鸣器管理器未初始化"}, success=False)
+                return
+                
+            action = params.get("action")
+            
+            if action == "beep":
+                # 简单鸣叫
+                duration = params.get("duration", 0.5)
+                buzzer_manager.beep(duration)
+                await ws_client.send_command_response(command, {"success": True}, success=True)
+                
+            elif action == "start":
+                # 开始指定模式的鸣叫
+                pattern_name = params.get("pattern", "SINGLE_BEEP")
+                repeat = params.get("repeat", 1)
+                
+                # 获取模式枚举值
+                try:
+                    pattern = BuzzerPattern[pattern_name]
+                except (KeyError, ValueError):
+                    pattern = BuzzerPattern.SINGLE_BEEP
+                    log_manager.warning(f"无效的蜂鸣器模式: {pattern_name}，使用默认模式")
+                
+                # 获取自定义模式
+                custom_pattern = params.get("custom_pattern")
+                
+                # 启动蜂鸣器
+                buzzer_manager.start_buzzer(pattern, repeat, custom_pattern)
+                await ws_client.send_command_response(command, {"success": True}, success=True)
+                
+            elif action == "stop":
+                # 停止鸣叫
+                buzzer_manager.stop_buzzer()
+                await ws_client.send_command_response(command, {"success": True}, success=True)
+                
+            else:
+                await ws_client.send_command_response(command, {"error": f"未知的蜂鸣器操作: {action}"}, success=False)
         
         elif command == "update_config" or command == "change_config":
             # 更新配置
@@ -838,12 +895,74 @@ def heartbeat():
         "uptime": int(time.time() - psutil.boot_time())
     })
 
+# 蜂鸣器API控制接口
+@app.route('/api/buzzer/', methods=['POST'])
+def control_buzzer():
+    """控制蜂鸣器"""
+    if not buzzer_manager:
+        return jsonify({"status": "error", "message": "蜂鸣器管理器未初始化"}), 500
+        
+    try:
+        data = request.json
+        action = data.get('action')
+        
+        if action == "beep":
+            duration = data.get("duration", 0.5)
+            buzzer_manager.beep(duration)
+            return jsonify({"status": "success", "message": f"蜂鸣器鸣叫 {duration} 秒"})
+            
+        elif action == "start":
+            pattern_name = data.get("pattern", "SINGLE_BEEP")
+            repeat = data.get("repeat", 1)
+            
+            # 获取模式枚举值
+            try:
+                pattern = BuzzerPattern[pattern_name]
+            except (KeyError, ValueError):
+                pattern = BuzzerPattern.SINGLE_BEEP
+                log_manager.warning(f"无效的蜂鸣器模式: {pattern_name}，使用默认模式")
+            
+            # 获取自定义模式
+            custom_pattern = data.get("custom_pattern")
+            
+            # 启动蜂鸣器
+            buzzer_manager.start_buzzer(pattern, repeat, custom_pattern)
+            return jsonify({"status": "success", "message": f"蜂鸣器已启动，模式: {pattern_name}"})
+            
+        elif action == "stop":
+            buzzer_manager.stop_buzzer()
+            return jsonify({"status": "success", "message": "蜂鸣器已停止"})
+            
+        else:
+            return jsonify({"status": "error", "message": f"未知的蜂鸣器操作: {action}"}), 400
+            
+    except Exception as e:
+        log_manager.error(f"控制蜂鸣器失败: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# 蜂鸣器状态API接口
+@app.route('/api/buzzer/status/')
+def get_buzzer_status():
+    """获取蜂鸣器状态"""
+    if not buzzer_manager:
+        return jsonify({"available": False, "message": "蜂鸣器管理器未初始化"})
+        
+    return jsonify({
+        "available": True,
+        "active": buzzer_manager.is_active(),
+    })
+
 # 改进清理函数，确保安全关闭WebSocket
 def cleanup():
     """清理资源，确保优雅退出"""
     try:
         log_manager.info("开始清理应用程序资源...")
         
+        # 清理蜂鸣器资源
+        if buzzer_manager:
+            log_manager.info("正在清理蜂鸣器资源...")
+            buzzer_manager.cleanup()
+
         # 确保先停止系统监控
         if system_monitor:
             log_manager.info("停止系统监控...")
