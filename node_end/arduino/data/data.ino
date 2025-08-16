@@ -56,13 +56,12 @@ bool led33State = LOW;
 // 新增：LED33 开机常亮保持与慢闪节拍
 unsigned long led33InitHoldUntil = 0;   // 开机常亮截止时间
 unsigned long led33LastBlink = 0;       // 慢速频闪节拍
-const node_id = 2;
 
 
 // =================== 网络配置 ===================
 const char* ssid = "smarthit";
 const char* password = "smart123";
-const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/" + String(node_id);
+const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/3";
 
 
 // =================== HTTP 服务器配置 ===================
@@ -93,7 +92,7 @@ bool isStreaming = false;
 struct CameraDefaults {
   // 硬件配置
   framesize_t initial_framesize = FRAMESIZE_QVGA;    // 初始分辨率：QVGA(320x240)
-  framesize_t psram_framesize = FRAMESIZE_UXGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
+  framesize_t psram_framesize = FRAMESIZE_SVGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
   framesize_t noram_framesize = FRAMESIZE_SVGA;      // 无PSRAM时分辨率：SVGA(800x600)
   
   // 质量设置
@@ -108,9 +107,9 @@ struct CameraDefaults {
   uint32_t xclk_freq_hz = 20000000;                 // 20MHz时钟频率
   
   // OV2640优化设置
-  int brightness = 1;                               // 亮度 (-2 到 2)
+  int brightness = 0;                               // 亮度 (-2 到 2)
   int contrast = 0;                                 // 对比度 (-2 到 2)
-  int saturation = -2;                              // 饱和度 (-2 到 2)
+  int saturation = 0;                              // 饱和度 (-2 到 2)
   bool vflip = true;                                // 垂直翻转
   bool hmirror = false;                             // 水平镜像
   
