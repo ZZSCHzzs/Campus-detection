@@ -74,7 +74,6 @@ declare module 'vue' {
     HistoricalDataManager: typeof import('./src/components/admin/HistoricalDataManager.vue')['default']
     InfoModal: typeof import('./src/components/layout/InfoModal.vue')['default']
     Jump: typeof import('./src/components/admin/Jump.vue')['default']
-    ModelMappingManager: typeof import('./src/components/ModelMappingManager.vue')['default']
     Navbar: typeof import('./src/components/layout/Navbar.vue')['default']
     NodeManager: typeof import('./src/components/admin/NodeManager.vue')['default']
     NoticeManager: typeof import('./src/components/admin/NoticeManager.vue')['default']

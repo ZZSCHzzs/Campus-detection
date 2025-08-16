@@ -14,6 +14,8 @@ const focusModeActive = ref(false);
 const focusedObjectId = ref<string | null>(null);
 const focusedModelDescription = ref<string | null>(null);
 const showRestoreButton = ref(false);
+// 用于存储聚焦模式下创建的特殊高亮标识
+const focusHighlightMarkers: THREE.Object3D[] = [];
 
 // 摄像头位置相关变量
 const originalCameraPosition = ref<THREE.Vector3 | null>(null);
@@ -100,7 +102,7 @@ const areaDefinitions = ref([
   {
     id: 'area4',
     name: '正心41',
-    description: '正心1楼',
+    description: 't',
     position: { x: 6.1, y: 5, z: 12 },
     radius: 2 // 球体半径
   },
@@ -316,8 +318,9 @@ const initThreeScene = () => {
   // 设置相机
   const { clientWidth, clientHeight } = heatmapRef.value
   camera = new THREE.PerspectiveCamera(45, clientWidth / clientHeight, 0.1, 1000)
-  camera.position.set(0, 60, 80)
+  camera.position.set(0, 20, 70)
   
+
   // 创建渲染器
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setSize(clientWidth, clientHeight)
@@ -335,6 +338,8 @@ const initThreeScene = () => {
   controls.autoRotate = autoRotateEnabled.value  // 根据状态设置自动旋转
   controls.autoRotateSpeed = 1.0  // 设置旋转速度，可以根据需要调整
     
+  // 设置相机朝向的目标点，例如模型的中心区域
+  controls.target.set(0, 10, 0)
 
   // // 添加坐标轴辅助工具
   // const axesHelper = new THREE.AxesHelper(5) // 参数是轴线长度
@@ -343,7 +348,8 @@ const initThreeScene = () => {
 
   // 加载OBJ建筑模型
   loadBuildingModel()
-  
+  // 添加背景建筑模型
+  loadBackgroundModel()
   // 添加区域标记平面
   createAreaMarkers()
   
@@ -366,6 +372,7 @@ const toggleAutoRotate = () => {
     controls.autoRotate = autoRotateEnabled.value;
   }
 }
+
 // 加载OBJ建筑模型
 const loadBuildingModel = () => {
   const mtlLoader = new MTLLoader()
@@ -543,6 +550,89 @@ const loadBuildingModel = () => {
       }
     )
   })
+}
+
+const loadBackgroundModel = () => {
+  const objLoader = new OBJLoader()
+  objLoader.load(
+    './models/background.obj', // <--- 在这里替换为您的背景模型文件路径
+    (object) => {
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          // --- 开始复用主模型的材质逻辑 ---
+          const transparentMaterial = new THREE.MeshStandardMaterial({
+            color: 0xB0C4DE,       // 淡蓝色调
+            transparent: true,
+            opacity: 0.6,
+            roughness: 0.5,
+            metalness: 0.005,
+            side: THREE.DoubleSide,
+            depthWrite: true,
+            flatShading: false,
+            envMapIntensity: 0.3,
+          })
+
+          // 为每个网格添加边缘线，强调轮廓
+          const edges = new THREE.EdgesGeometry(child.geometry, 30); // 30度角阈值
+          const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0x38bdf8,
+            opacity: 0.3,
+            transparent: true
+          });
+          const wireframe = new THREE.LineSegments(edges, lineMaterial);
+          child.add(wireframe); // 将线框添加为子对象
+
+          child.material = transparentMaterial;
+          child.castShadow = true; // 背景模型不投射阴影以优化性能
+          child.receiveShadow = true;
+          child.renderOrder = 3; // 调整渲染顺序
+
+          // 为不同深度的面应用不同透明度
+          if (child.geometry) {
+            const positionAttribute = child.geometry.getAttribute('position');
+            if (positionAttribute) {
+              const colors = new Float32Array(positionAttribute.count * 3);
+              const color = new THREE.Color();
+
+              // 根据Y坐标调整颜色明度
+              for (let i = 0; i < positionAttribute.count; i++) {
+                const y = positionAttribute.getY(i);
+                const factor = Math.pow(Math.min(Math.max((y + 10) / 20, 0), 1), 2);
+                color.setRGB(0.45 + factor * 0.15, 0.48 + factor * 0.15, 0.52 + factor * 0.15);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+              }
+
+              child.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+              transparentMaterial.vertexColors = true; // 启用顶点颜色
+            }
+          }
+          // --- 材质逻辑复用结束 ---
+        }
+      })
+
+      // 缩放和定位背景模型
+      object.scale.set(0.5, 0.5, 0.5) // <--- 根据需要调整缩放
+
+      // 自动居中模型
+      const boundingBox = new THREE.Box3().setFromObject(object)
+      const center = boundingBox.getCenter(new THREE.Vector3())
+      object.position.x = -center.x
+      object.position.z = -center.z
+      object.position.y = -boundingBox.min.y
+
+      // 如果需要，可以在这里手动调整背景模型的最终位置
+      object.position.add(new THREE.Vector3(20, 0, 20));
+
+      scene.add(object)
+      console.log('背景模型加载成功。')
+    },
+    undefined,
+    (error) => {
+      console.error('背景模型加载出错:', error)
+    }
+  )
 }
 
 // 修改收集模型结构函数，同时保存对象引用
@@ -1928,21 +2018,35 @@ const toggleFocusMode = (objectId) => {
       console.log(`记录聚焦模型描述: ${focusedModelDescription.value}`);
     }
     
-    // 首先标记所有对象为不可见
-    modelObjectsMap.value.forEach((object, id) => { 
-      const isCurrentAreaMarker = object.userData?.isAreaMarker === true;
-      const itemIndex = modelStructure.value.findIndex(item => item.id === id); 
+    // 首先标记所有对象为不可见, 并根据新逻辑判断区域标记的可见性
+    modelObjectsMap.value.forEach((object, id) => {
+      const itemIndex = modelStructure.value.findIndex(item => item.id === id);
       
-      // 保持所有区域标记可见
-      if (isCurrentAreaMarker) { 
-        object.visible = true; 
-        if (itemIndex >= 0) modelStructure.value[itemIndex].visible = true; 
-        return; 
-      } 
-      
-      // 其他对象默认隐藏
-      object.visible = false; 
-      if (itemIndex >= 0) modelStructure.value[itemIndex].visible = false; 
+      // 如果是区域标记
+      if (object.userData?.isAreaMarker) {
+        const areaDescription = object.userData.areaDescription || '';
+        // 检查其 description 是否与聚焦模型的 name 一致
+        const isRelated = focusedModelDescription.value && areaDescription === focusedModelDescription.value;
+        
+        // 保持与聚焦模型相关的区域标记可见
+        object.visible = isRelated;
+        if (itemIndex >= 0) {
+          modelStructure.value[itemIndex].visible = isRelated;
+        }
+
+        // 如果匹配，则在此位置创建新的高亮标识
+        if (isRelated) {
+          const marker = createFocusMarker(object.position);
+          scene.add(marker);
+          focusHighlightMarkers.push(marker);
+        }
+      } else {
+        // 其他对象默认隐藏
+        object.visible = false;
+        if (itemIndex >= 0) {
+          modelStructure.value[itemIndex].visible = false;
+        }
+      }
     });
     
     // 隐藏所有热力图点云
@@ -2086,7 +2190,18 @@ const toggleFocusMode = (objectId) => {
 // # 修改exitFocusMode函数
 const exitFocusMode = () => {
   if (!focusModeActive.value) return;
-  
+  // 清除并移除所有聚焦模式下的高亮标识
+  focusHighlightMarkers.forEach(marker => {
+    scene.remove(marker);
+    // 释放资源
+    marker.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        child.material.dispose();
+      }
+    });
+  });
+  focusHighlightMarkers.length = 0; // 清空数组
   // 恢复所有物体的可见性
   modelObjectsMap.value.forEach((object, id) => {
     object.visible = true;
@@ -2277,6 +2392,30 @@ const createAreaMarkers = () => {
   
   console.log(`创建了 ${areaDefinitions.value.length} 个区域标记球体`);
 };
+
+// 添加一个函数来创建新的、更显眼的高亮标识
+const createFocusMarker = (position: THREE.Vector3): THREE.Object3D => {
+  // 创建一个核心的、不透明的、发光的球体
+  const geometry = new THREE.SphereGeometry(0.4, 32, 16); // 半径设为0.4，使其更精致
+
+  // 使用 MeshBasicMaterial，它不受光照影响，颜色恒定，作为标识物更稳定
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffff00,          // 纯黄色，非常醒目
+    transparent: false,       // 关键：必须为 false，确保物体不透明
+    depthTest: true,          // 关键：必须为 true，让物体参与正常的深度排序
+    depthWrite: true,         // 关键：必须为 true，确保它能遮挡后面的物体
+  });
+  const sphere = new THREE.Mesh(geometry, material);
+  
+  // 设置一个较高的渲染顺序，确保它在主模型(renderOrder=1)和背景(renderOrder=3)之后被渲染
+  sphere.renderOrder = 5;
+
+  // 设置标识的位置
+  sphere.position.copy(position);
+
+  return sphere;
+};
+
 // 监听区域数据变化，更新热力图
 watch(() => props.areas, (newAreas) => {
   console.log('areas数据更新:', newAreas);
