@@ -1,11 +1,53 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch } from 'vue'
+import { computed } from 'vue';
 import * as echarts from 'echarts'
 import { areaService, alertService, noticeService, summaryService, nodeService, buildingService } from '../services'
 import type { AreaItem, Building, HistoricalData, SummaryData, HardwareNode } from '../types'
 import HistoricalChart2 from '../components/chart-datascreen/HistoricalChart2.vue'
 import HardwareNodeStatus from '../components/data/HardwareNodeStatus.vue'
 import EnvironmentalChart2 from '../components/chart-datascreen/EnvironmentalChart2.vue'
+
+// 在<script setup>部分添加选中区域的状态
+const selectedAreaId = ref(null);
+// 添加处理区域选择事件的函数
+const handleAreaSelected = (areaId) => {
+  console.log('选中区域ID:', areaId);
+  selectedAreaId.value = areaId;
+  currentAreaIndex.value = areas.value.findIndex(area => area.id === areaId);
+  
+  // 如果找不到对应区域，设置为第一个区域
+  if (currentAreaIndex.value === -1 && areas.value.length > 0) {
+    currentAreaIndex.value = 0;
+  }
+};
+
+// watch监听selectedAreaId变化，更新图表显示
+watch(selectedAreaId, (newId) => {
+  if (newId) {
+    // 如果有新选中的区域，更新currentAreaIndex
+    const index = areas.value.findIndex(area => area.id === newId);
+    if (index !== -1) {
+      currentAreaIndex.value = index;
+    }
+  }
+});
+// 添加一个计算属性，将温湿度数据合并到区域数据中
+const areasWithEnvironmentData = computed(() => {
+  if (!areas.value || !nodes.value) return [];
+  
+  return areas.value.map(area => {
+    // 查找与该区域关联的节点（通过bound_node关联）
+    const relatedNode = nodes.value.find(node => node.id === area.bound_node);
+    
+    // 返回合并后的对象
+    return {
+      ...area,
+      temperature: relatedNode?.temperature,
+      humidity: relatedNode?.humidity
+    };
+  });
+});
 
 const summary = ref<SummaryData>({
   nodes_count: 0,
@@ -309,9 +351,11 @@ function formatTime(value: string) {
 <template>
   <div class="dashboard">
     <!-- 3D Heatmap as background -->
-    <ThreeDHeatMap :areas="areas" class="heatmap-container-fullscreen" />
+    <ThreeDHeatMap :areas="areasWithEnvironmentData" 
+    class="heatmap-container-fullscreen" 
+    @areaSelected="handleAreaSelected" />
 
-    <!-- UI Overlay -->s
+    <!-- UI Overlay -->
     <div class="ui-overlay">
       <div class="fullscreen-toggle" @click="toggleFullScreen">
         <i class="fullscreen-icon" :class="{ 'is-active': isFullscreen }"></i>
@@ -453,7 +497,7 @@ function formatTime(value: string) {
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <EnvironmentalChart2 :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null"
+                <EnvironmentalChart2 :areaId="selectedAreaId || (areas.length > 0 ? areas[currentAreaIndex].id : null)"
                   :dataType="'temperature-humidity'" :hideTitle="true" :hideControls="true" :width="'100%'"
                   :height="'100%'" :styleConfig="{
                     gridLineColor: 'rgba(56, 189, 248, 0.1)',
@@ -490,7 +534,8 @@ function formatTime(value: string) {
             <div ref="chartRef" class="chart-container">
               <div class="tech-corners"></div>
               <div class="chart-inner-container">
-                <HistoricalChart2 :areaId="areas.length > 0 ? areas[currentAreaIndex].id : null" :hideTitle="true"
+                <HistoricalChart2 :areaId="selectedAreaId || (areas.length > 0 ? areas[currentAreaIndex].id : null)" 
+                  :hideTitle="true"
                   :hideControls="true" :width="'100%'" :height="'100%'" :hideDataZoom="true" :hideStatistics="true"
                   :styleConfig="{
                     gridLineColor: 'rgba(56, 189, 248, 0.1)',
