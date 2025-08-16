@@ -2712,9 +2712,7 @@ const createAreaMarkers = () => {
       type: 'AreaMarker',
       depth: 0,
       id: itemId,
-      isMesh: true,
       visible: true,
-      isAreaMarker: true
     });
   });
 
