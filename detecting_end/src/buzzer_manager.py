@@ -2,10 +2,14 @@ import time
 import threading
 from enum import Enum
 from gpiozero import Buzzer, Device
-from gpiozero.pins.pigpio import PiGPIOFactory
 
-# 强制使用 pigpio 引脚工厂（需要 pigpio 守护进程已运行）
-Device.pin_factory = PiGPIOFactory()
+# 优先使用 lgpio 引脚工厂（无需守护进程）
+try:
+    from gpiozero.pins.lgpio import LGPIOFactory
+    Device.pin_factory = LGPIOFactory()
+except Exception:
+    # 回退到默认引脚工厂（例如 RPi.GPIO）
+    pass
 
 class BuzzerPattern(Enum):
     """蜂鸣器模式枚举"""
@@ -39,7 +43,7 @@ class BuzzerManager:
         self._available = True
 
         try:
-            self._buzzer = Buzzer(self.pin_buzzer)  # 基于 pigpio
+            self._buzzer = Buzzer(self.pin_buzzer)
             if self.log_manager:
                 self.log_manager.info(
                     f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer}"
@@ -48,9 +52,11 @@ class BuzzerManager:
             self._buzzer = None
             self._available = False
             if self.log_manager:
-                self.log_manager.error(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认 pigpio 服务已运行: sudo systemctl enable --now pigpio")
+                self.log_manager.error(
+                    f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 lgpio 并具有访问GPIO权限（例如将当前用户加入 gpio 组）"
+                )
             else:
-                print(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。")
+                print(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 lgpio 并具有访问GPIO权限")
 
     def cleanup(self):
         """清理资源"""

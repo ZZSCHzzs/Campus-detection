@@ -1648,7 +1648,6 @@ watch(connectionMode, handleModeChange);
                             <el-tag v-for="cap in (scope.row.capabilities || [])" :key="cap" size="small" style="margin-right:4px">{{ cap }}</el-tag>
                           </template>
                         </el-table-column>
-                        <el-table-column prop="url" label="URL" show-overflow-tooltip />
                         <el-table-column label="操作" width="80" align="center">
                           <template #default="scope">
                             <el-button type="danger" size="small" @click="removeControlNode(scope.$index)" circle>
@@ -1660,7 +1659,10 @@ watch(connectionMode, handleModeChange);
                     </div>
                     <div class="add-node-form">
                       <el-input v-model="newControlNode.id" placeholder="ID" class="node-id-input" size="small" />
-                      <el-input v-model="newControlNode.ip" placeholder="节点URL" class="node-url-input" size="small" />
+                      <el-input v-model="newControlNode.name" placeholder="名称" class="node-name-input" size="small" />
+                      <el-input v-model="newControlNode.ip" placeholder="IP" class="node-ip-input" size="small" />
+                      <el-input v-model.number="newControlNode.port" placeholder="端口" class="node-port-input" size="small" />
+                      <el-input v-model="newControlNode.capabilities" placeholder="功能(逗号分隔)" class="node-cap-input" size="small" />
                       <el-button type="primary" @click="addControlNode" size="small" class="add-button">
                         <el-icon><Plus /></el-icon>添加控制节点
                       </el-button>
