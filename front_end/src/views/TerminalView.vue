@@ -34,7 +34,10 @@ import {
   Delete,
   Plus,
   VideoPlay,
-  VideoPause
+  VideoPause,
+  Bell,
+  Mute,
+  MagicStick,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -585,6 +588,82 @@ const statusRefreshTimer = ref(null);
 // 配置标签页状态
 const activeConfigTab = ref('basic');
 
+// 在 data 部分添加蜂鸣器相关状态
+const buzzerAvailable = ref(false);
+const buzzerActive = ref(false);
+const buzzerForm = reactive({
+  pattern: 'SINGLE_BEEP',
+  duration: 0.5,
+  repeat: 1
+});
+
+// 蜂鸣器模式选项
+const buzzerPatterns = [
+  { value: 'SINGLE_BEEP', label: '单次短鸣', icon: 'Bell' },
+  { value: 'DOUBLE_BEEP', label: '双短鸣', icon: 'Bell' },
+  { value: 'LONG_BEEP', label: '长鸣', icon: 'Bell' },
+  { value: 'SOS', label: 'SOS紧急信号', icon: 'Warning' },
+  { value: 'ALARM', label: '警报信号', icon: 'Warning' },
+];
+
+// 检查蜂鸣器状态
+const checkBuzzerStatus = async () => {
+  try {
+    if (connectionMode.value === 'local') {
+      const { data } = await apiService.localTerminal.getBuzzerStatus();
+      buzzerAvailable.value = data.available;
+      buzzerActive.value = data.active;
+    } else {
+      const { data } = await apiService.terminals.getBuzzerStatus(terminal.id);
+      buzzerAvailable.value = data.available;
+      buzzerActive.value = data.active;
+    }
+  } catch (error) {
+    console.error('获取蜂鸣器状态失败:', error);
+    buzzerAvailable.value = false;
+    buzzerActive.value = false;
+  }
+};
+
+// 控制蜂鸣器
+const controlBuzzer = async (action, params = {}) => {
+  try {
+    loading.value = true;
+    
+    const data = {
+      action,
+      ...params
+    };
+    
+    let result;
+    if (connectionMode.value === 'local') {
+      result = await apiService.localTerminal.controlBuzzer(data);
+    } else {
+      result = await apiService.terminals.controlBuzzer(terminal.id, data);
+    }
+    
+    // 短暂延迟后刷新状态
+    setTimeout(() => {
+      checkBuzzerStatus();
+    }, 500);
+    
+    ElMessage.success(`蜂鸣器命令已发送: ${action}`);
+    return result;
+  } catch (error) {
+    console.error('控制蜂鸣器失败:', error);
+    ElMessage.error('控制蜂鸣器失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 蜂鸣器操作方法
+const beep = () => controlBuzzer('beep', { duration: buzzerForm.duration });
+const startBuzzer = () => controlBuzzer('start', { 
+  pattern: buzzerForm.pattern, 
+  repeat: buzzerForm.repeat 
+});
+const stopBuzzer = () => controlBuzzer('stop');
 
 onMounted(async () => {
   loading.value = true;
@@ -671,6 +750,15 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+  // 加载数据后检查蜂鸣器状态
+  await checkBuzzerStatus();
+  
+  // 添加蜂鸣器状态轮询
+  setInterval(async () => {
+    if (isActive.value) {
+      await checkBuzzerStatus();
+    }
+  }, 5000); // 每5秒检查一次蜂鸣器状态
 });
 
 // 切换终端
@@ -1404,7 +1492,96 @@ watch(connectionMode, handleModeChange);
               </el-tab-pane>
             </el-tabs>
           </div>
+          <!-- 硬件控制面板 -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>
+                <el-icon><MagicStick /></el-icon> 硬件控制
+              </h3>
+            </div>
 
+            <!-- 蜂鸣器控制 -->
+            <div class="hardware-control-section">
+              <div class="hardware-title">
+                <el-icon><Bell /></el-icon>
+                <span>蜂鸣器控制</span>
+                <el-tag :type="buzzerAvailable ? 'success' : 'info'" size="small" class="hardware-status">
+                  {{ buzzerAvailable ? '可用' : '不可用' }}
+                </el-tag>
+                <el-tag v-if="buzzerAvailable && buzzerActive" type="warning" size="small" class="hardware-status">
+                  正在鸣叫
+                </el-tag>
+              </div>
+
+              <div class="buzzer-controls">
+                <el-form :model="buzzerForm" label-width="80px" size="small">
+                  <el-row :gutter="12">
+                    <el-col :span="12">
+                      <el-form-item label="鸣叫模式">
+                        <el-select v-model="buzzerForm.pattern" style="width: 100%">
+                          <el-option v-for="pattern in buzzerPatterns" :key="pattern.value" 
+                            :label="pattern.label" :value="pattern.value">
+                            <div class="option-content">
+                              <el-icon class="option-icon">
+                                <component :is="pattern.icon" />
+                              </el-icon>
+                              <span>{{ pattern.label }}</span>
+                            </div>
+                          </el-option>
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="buzzerForm.pattern === 'SINGLE_BEEP' ? 12 : 6">
+                      <el-form-item :label="buzzerForm.pattern === 'SINGLE_BEEP' ? '持续时间' : '重复次数'">
+                        <el-input-number 
+                          v-if="buzzerForm.pattern === 'SINGLE_BEEP'"
+                          v-model="buzzerForm.duration" 
+                          :min="0.1" 
+                          :max="5" 
+                          :step="0.1"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                        <el-input-number 
+                          v-else
+                          v-model="buzzerForm.repeat" 
+                          :min="1" 
+                          :max="10" 
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="6" v-if="buzzerForm.pattern !== 'SINGLE_BEEP'">
+                      <el-form-item label="持续时间" v-if="buzzerForm.pattern === 'LONG_BEEP'">
+                        <el-input-number 
+                          v-model="buzzerForm.duration" 
+                          :min="0.1" 
+                          :max="5" 
+                          :step="0.1"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </el-form>
+                
+                <div class="buzzer-actions">
+                  <el-button-group>
+                    <el-button type="primary" @click="beep" :disabled="buzzerActive">
+                      <el-icon><Bell /></el-icon> 简单鸣叫
+                    </el-button>
+                    <el-button type="success" @click="startBuzzer" :disabled="buzzerActive">
+                      <el-icon><Warning /></el-icon> 启动模式
+                    </el-button>
+                    <el-button type="danger" @click="stopBuzzer" :disabled="!buzzerActive">
+                      <el-icon><Mute /></el-icon> 停止鸣叫
+                    </el-button>
+                  </el-button-group>
+                </div>
+              </div>
+            </div>
+          </div>
           <!-- CO2数据图表 -->
           <div class="panel-section">
             <div class="section-header">
@@ -2192,5 +2369,48 @@ watch(connectionMode, handleModeChange);
     border-radius: 4px !important;
     margin-bottom: 8px;
   }
+}
+/* 硬件控制部分样式 */
+.hardware-control-section {
+  background-color: #f8f9fb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #ebeef5;
+}
+
+.hardware-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.hardware-title .el-icon {
+  font-size: 18px;
+  color: #409EFF;
+}
+
+.hardware-status {
+  margin-left: auto;
+}
+
+.buzzer-controls {
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 16px;
+  border: 1px solid #ebeef5;
+}
+
+.buzzer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.buzzer-actions .el-button {
+  min-width: 90px;
 }
 </style>
