@@ -761,14 +761,12 @@ void captureAndSendImage() {
     // LED4：成功获取帧后，闪一次（短脉冲约120ms）
     led4PulseUntil = millis() + 120;
 
-    // 获取温湿度数据
+    // 获取温湿度数据（失败时也要上传图像）
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
-    
-    if (isnan(temperature) || isnan(humidity)) {
-        Serial.println("温湿度读取失败");
-        esp_camera_fb_return(fb);
-        return;
+    bool hasEnv = !(isnan(temperature) || isnan(humidity));
+    if (!hasEnv) {
+        Serial.println("温湿度读取失败，将仅上传图像");
     }
 
     WiFiClient client;
@@ -787,13 +785,18 @@ void captureAndSendImage() {
         head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32cam.jpg\"\r\n";
         head += "Content-Type: image/jpeg\r\n\r\n";
         
-        String middle1 = "\r\n--" + boundary + "\r\n";
-        middle1 += "Content-Disposition: form-data; name=\"temperature\"\r\n\r\n";
-        middle1 += String(temperature, 2);
-        
-        String middle2 = "\r\n--" + boundary + "\r\n";
-        middle2 += "Content-Disposition: form-data; name=\"humidity\"\r\n\r\n";
-        middle2 += String(humidity, 2);
+        // 根据有无环境数据有条件添加字段
+        String middle1;
+        String middle2;
+        if (hasEnv) {
+            middle1 = "\r\n--" + boundary + "\r\n";
+            middle1 += "Content-Disposition: form-data; name=\"temperature\"\r\n\r\n";
+            middle1 += String(temperature, 2);
+
+            middle2 = "\r\n--" + boundary + "\r\n";
+            middle2 += "Content-Disposition: form-data; name=\"humidity\"\r\n\r\n";
+            middle2 += String(humidity, 2);
+        }
         
         String tail = "\r\n--" + boundary + "--\r\n";
 
@@ -812,14 +815,18 @@ void captureAndSendImage() {
         }
 
         uint32_t pos = 0;
-        memcpy(buf, head.c_str(), head.length());
+        memcpy(buf + pos, head.c_str(), head.length());
         pos += head.length();
         memcpy(buf + pos, fb->buf, fb->len);
         pos += fb->len;
-        memcpy(buf + pos, middle1.c_str(), middle1.length());
-        pos += middle1.length();
-        memcpy(buf + pos, middle2.c_str(), middle2.length());
-        pos += middle2.length();
+        if (middle1.length() > 0) {
+            memcpy(buf + pos, middle1.c_str(), middle1.length());
+            pos += middle1.length();
+        }
+        if (middle2.length() > 0) {
+            memcpy(buf + pos, middle2.c_str(), middle2.length());
+            pos += middle2.length();
+        }
         memcpy(buf + pos, tail.c_str(), tail.length());
 
         int httpCode = http.POST(buf, totalLen);

@@ -583,8 +583,9 @@ class DataUploadView(APIView):
             hardware_node_id = serializer.validated_data['id']
             detected_count = serializer.validated_data['detected_count']
             timestamp = serializer.validated_data['timestamp']
-            temperature = serializer.validated_data.get['temperature']
-            humidity = serializer.validated_data.get['humidity']
+            # 修复：使用 .get('key') 获取可选字段
+            temperature = serializer.validated_data.get('temperature')
+            humidity = serializer.validated_data.get('humidity')
         except KeyError as e:
             return Response({"error": f"缺失字段: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -593,15 +594,12 @@ class DataUploadView(APIView):
             hardware_node = HardwareNode.objects.get(id=hardware_node_id)
             hardware_node.detected_count = detected_count
             hardware_node.updated_at = timestamp
-            
             # 保存环境数据
             if temperature is not None:
                 hardware_node.temperature = temperature
             if humidity is not None:
                 hardware_node.humidity = humidity
-                
             hardware_node.save()
-            
         except HardwareNode.DoesNotExist:
             return Response({"error": "硬件节点不存在"}, status=status.HTTP_404_NOT_FOUND)
 

@@ -2,13 +2,10 @@ import time
 import threading
 from enum import Enum
 from gpiozero import Buzzer, Device
-try:
-    # 尝试优先使用 lgpio 引脚工厂，避免旧版 RPi.GPIO 的基址报错
-    from gpiozero.pins.lgpio import LGPIOFactory
-    Device.pin_factory = LGPIOFactory()
-except Exception:
-    # 未安装 lgpio 时，gpiozero 会回退到其它可用 pin factory
-    pass
+from gpiozero.pins.pigpio import PiGPIOFactory
+
+# 强制使用 pigpio 引脚工厂（需要 pigpio 守护进程已运行）
+Device.pin_factory = PiGPIOFactory()
 
 class BuzzerPattern(Enum):
     """蜂鸣器模式枚举"""
@@ -39,27 +36,28 @@ class BuzzerManager:
         self._buzzing = False
         self._stop_event = threading.Event()
         self._buzzer_thread = None
+        self._available = True
 
-        # 使用 gpiozero 初始化蜂鸣器
         try:
-            self._buzzer = Buzzer(self.pin_buzzer)  # 默认 BCM 编号
+            self._buzzer = Buzzer(self.pin_buzzer)  # 基于 pigpio
             if self.log_manager:
                 self.log_manager.info(
                     f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer}"
                 )
         except Exception as e:
+            self._buzzer = None
+            self._available = False
             if self.log_manager:
-                self.log_manager.error(f"初始化蜂鸣器管理器失败: {str(e)}")
+                self.log_manager.error(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认 pigpio 服务已运行: sudo systemctl enable --now pigpio")
             else:
-                print(f"初始化蜂鸣器管理器失败: {str(e)}")
-            raise
+                print(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。")
 
     def cleanup(self):
         """清理资源"""
         self.stop_buzzer()
         time.sleep(0.1)
         try:
-            if hasattr(self, "_buzzer"):
+            if getattr(self, "_buzzer", None):
                 self._buzzer.close()
             if self.log_manager:
                 self.log_manager.info("蜂鸣器资源已清理")
@@ -69,6 +67,10 @@ class BuzzerManager:
 
     def beep(self, duration=0.5):
         """使蜂鸣器鸣叫指定时长"""
+        if not self._available or not getattr(self, "_buzzer", None):
+            if self.log_manager:
+                self.log_manager.warning("蜂鸣器不可用，beep 请求已忽略")
+            return
         try:
             self._buzzer.on()
             time.sleep(duration)
@@ -86,6 +88,10 @@ class BuzzerManager:
             repeat: 重复次数
             custom_pattern: 自定义模式列表，每项为(开启时长, 关闭时长)
         """
+        if not self._available or not getattr(self, "_buzzer", None):
+            if self.log_manager:
+                self.log_manager.warning("蜂鸣器不可用，start_buzzer 请求已忽略")
+            return
         # 如果已经在鸣叫，先停止
         if self._buzzing:
             self.stop_buzzer()
@@ -108,6 +114,11 @@ class BuzzerManager:
     
     def stop_buzzer(self):
         """停止蜂鸣器鸣叫"""
+        if not self._available or not getattr(self, "_buzzer", None):
+            # 确保状态复位
+            self._stop_event.set()
+            self._buzzing = False
+            return
         if self._buzzing:
             self._stop_event.set()
             self._buzzing = False
@@ -166,7 +177,8 @@ class BuzzerManager:
                 self.log_manager.error(f"蜂鸣器工作线程异常: {str(e)}")
         finally:
             try:
-                self._buzzer.off()
+                if getattr(self, "_buzzer", None):
+                    self._buzzer.off()
                 self._buzzing = False
             except Exception as e:
                 if self.log_manager:
@@ -179,6 +191,8 @@ class BuzzerManager:
         Args:
             pattern: 模式列表，每项为(开启时长, 关闭时长)
         """
+        if not self._available or not getattr(self, "_buzzer", None):
+            return
         for on_time, off_time in pattern:
             if self._stop_event.is_set():
                 break
@@ -197,4 +211,4 @@ class BuzzerManager:
 
     def is_active(self):
         """返回蜂鸣器是否处于激活状态"""
-        return self._buzzing
+        return bool(self._buzzing and self._available)

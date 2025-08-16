@@ -10,6 +10,7 @@ import json
 from threading import Thread, Event, Lock
 import psutil
 import importlib
+import numpy as np  # 新增：被动接收模式需要
 
 logger = logging.getLogger('detection_manager')
 headers = {
@@ -119,9 +120,9 @@ class DetectionManager:
                    
             except Exception as e:
                 error_msg = f"加载模型失败: {str(e)}"
-                # 使用同步日志记录方法，避免异步问题
+                # 修正：调用 log_manager 的同步记录方法
                 if hasattr(self.log_manager, 'error_sync'):
-                    logger.error_sync(error_msg)
+                    self.log_manager.error_sync(error_msg)
                 else:
                     logger.error(error_msg)
                     
@@ -404,7 +405,12 @@ class DetectionManager:
                         # 通过WebSocket发送环境数据
                         if nodes_data and self.ws_client and self.ws_client.connected:
                             try:
-                                loop = asyncio.get_event_loop()
+                                # 容错：线程中安全获取事件循环
+                                try:
+                                    loop = asyncio.get_event_loop()
+                                except RuntimeError:
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
                                 asyncio.run_coroutine_threadsafe(
                                     self.ws_client.send_nodes_data(nodes_data),
                                     loop
@@ -415,12 +421,10 @@ class DetectionManager:
                     # 处理图像
                     if images_to_process:
                         try:
-                            # 批量分析图像
                             results = self.analyze_images(images_to_process)
-                            
-                            # 上传结果
                             for node_id, detected_count in results.items():
-                                logger.info(f"检测到人数: {detected_count}", f"节点 {node_id}")
+                                # 修复：合并为单条日志
+                                logger.info(f"节点 {node_id} 检测到人数: {detected_count}")
                                 
                                 # 获取节点的环境数据（如果有）
                                 env_data = {}
@@ -584,18 +588,21 @@ class DetectionManager:
         # 使用WebSocket发送数据（如果可用）
         if self.ws_client and self.ws_client.connected:
             try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            asyncio.run_coroutine_threadsafe(
-                self.ws_client.send_nodes_data(nodes_data),
-                loop
-            )
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                asyncio.run_coroutine_threadsafe(
+                    self.ws_client.send_nodes_data(nodes_data),
+                    loop
+                )
+            except Exception:
+                # 发送失败忽略，走回退路径
+                pass
 
-        if self.config_manager.get('save_imgae') == False:
-            # 删除缓存图片文件
+        # 修复：按配置删除临时文件（配置项名称修正为 save_image）
+        if not self.config_manager.get('save_image', True):
             for temp_path in temp_paths:
                 try:
                     if os.path.exists(temp_path):
@@ -627,7 +634,6 @@ class DetectionManager:
         ws_sent = False
         if self.ws_client and getattr(self.ws_client, "is_connected", lambda: False)():
             try:
-                # 组装节点数据格式
                 node_data = {
                     "id": node_id,
                     "detected_count": detected_count,
@@ -638,9 +644,13 @@ class DetectionManager:
                 if "humidity" in data:
                     node_data["humidity"] = data["humidity"]
 
-                # 异步发送
-                import asyncio
-                loop = asyncio.get_event_loop()
+                # 线程中安全获取事件循环
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
                 future = asyncio.run_coroutine_threadsafe(
                     self.ws_client.send_nodes_data([node_data]),
                     loop
@@ -668,12 +678,14 @@ class DetectionManager:
             response = requests.post(api_url, json=data, timeout=5)
             if response.status_code != 201:
                 error_msg = f"上传警告: 状态码 {response.status_code}, 响应: {response.text}"
-                logger.warning(error_msg, f"摄像头 {node_id}")
+                # 修复：单条日志，避免额外参数
+                logger.warning(f"{error_msg} | 摄像头 {node_id}")
                 self.node_manager.update_node_status(node_id, '错误', response.text)
             else:
                 self.node_manager.update_node_status(node_id, '在线')
                 self.node_manager.update_detection_count(node_id, detected_count)
-                logger.detection(f"检测到人数: {detected_count}", f"摄像头 {node_id}")
+                # 修复：单条日志，避免额外参数
+                logger.info(f"摄像头 {node_id} 检测到人数: {detected_count}")
                 self.update_detection_stats(detected_count)
                 with self.status_lock:
                     node_status = self.node_manager.get_node_status()
@@ -686,7 +698,8 @@ class DetectionManager:
             return True
         except Exception as e:
             error_msg = f"上传结果失败: {str(e)}"
-            logger.error(error_msg, f"摄像头 {node_id}")
+            # 修复：单条日志，避免额外参数
+            logger.error(f"{error_msg} | 摄像头 {node_id}")
             self.node_manager.update_node_status(node_id, '离线', str(e))
             return False
 

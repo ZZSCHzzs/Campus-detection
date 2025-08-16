@@ -1115,3 +1115,26 @@ if __name__ == "__main__":
     finally:
         # 确保程序退出时清理资源
         cleanup()
+
+@app.route('/api/image/last/<int:node_id>')
+def get_last_image(node_id):
+    """获取指定数据节点最近一次保存的图片"""
+    try:
+        base_dir = os.path.join(ROOT_DIR, 'captures', f'node_{node_id}')
+        if not os.path.exists(base_dir):
+            return jsonify({'error': '未找到该节点的图片目录'}), 404
+        # 仅筛选常见图片格式
+        files = [f for f in os.listdir(base_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if not files:
+            return jsonify({'error': '未找到该节点的图片'}), 404
+        # 文件名为时间戳(YYYYmmdd_HHMMSS.jpg)，按文件名倒序即可
+        files.sort(reverse=True)
+        latest_file = files[0]
+        file_path = os.path.join(base_dir, latest_file)
+        if not os.path.exists(file_path):
+            return jsonify({'error': '图片文件不存在'}), 404
+        return send_file(file_path, mimetype='image/jpeg')
+    except Exception as e:
+        if log_manager:
+            log_manager.error(f"获取节点 {node_id} 最新图片失败: {str(e)}")
+        return jsonify({'error': '内部错误', 'details': str(e)}), 500

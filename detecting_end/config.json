@@ -5,7 +5,14 @@
         "data_nodes": {
             "2": {
                 "type": "data",
-                "ip": "192.168.1.100",
+                "ip": "192.168.1.101",
+                "port": 80,
+                "name": "数据节点1",
+                "capabilities": ["capture", "stream", "status", "environment"]
+            },
+            "3": {
+                "type": "data",
+                "ip": "192.168.1.102",
                 "port": 80,
                 "name": "数据节点2",
                 "capabilities": ["capture", "stream", "status", "environment"]
