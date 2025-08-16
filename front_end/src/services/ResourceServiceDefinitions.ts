@@ -273,6 +273,14 @@ export const uploadDataCustomMethods = {
 
 // 本地终端服务自定义方法
 export const localTerminalCustomMethods = {
+  // localTerminal 服务
+  getBuzzerStatus: async () => {
+  return localApi.get('/api/buzzer/status/');
+  },
+  controlBuzzer: async (data) => {
+    return localApi.post('/api/buzzer/', data);
+  },
+  
   // 获取终端状态
   getStatus: async () => {
     return await http.local.get('/api/status');
