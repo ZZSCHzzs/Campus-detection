@@ -534,6 +534,20 @@ const areaDefinitions = ref([
     position: { x: -4.46, y: 15.24, z: 12.059 },
     radius: 1 // 球体半径
   },
+  {
+    id: 'area2',
+    name: '正心22',
+    description: 't',
+    position: { x: 8.72, y: 11.5, z: 11.4 },
+    radius: 2 // 球体半径
+  },
+  {
+    id: 'area2',
+    name: '正心22',
+    description: 't',
+    position: { x: 8.72, y: 11.5, z: 11.4 },
+    radius: 2 // 球体半径
+  },
   
 ]);
 
@@ -554,7 +568,7 @@ const initThreeScene = () => {
   // ----- 添加自然光照系统 -----
 
   // 1. 添加环境光 - 提供柔和的基础照明
-  const ambientLight = new THREE.AmbientLight(0x404040, 2);
+  const ambientLight = new THREE.AmbientLight(0x404040, 1);
   scene.add(ambientLight);
 
   // 2. 添加半球光 - 模拟天空和地面的反射光
@@ -566,7 +580,7 @@ const initThreeScene = () => {
   scene.add(hemisphereLight);
 
   // 3. 添加方向光 - 模拟太阳光
-  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 7);
+  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 10);
   directionalLight.position.set(500, 750, 500);  // 光源位置
   directionalLight.castShadow = true;         // 启用阴影
   directionalLight.shadow.mapSize.width = 4096;
@@ -900,7 +914,7 @@ const loadBackgroundModel = () => {
           child.add(wireframe); // 将线框添加为子对象
 
           child.material = transparentMaterial;
-          child.castShadow = false; // 背景模型不投射阴影以优化性能
+          child.castShadow = true; // 背景模型投射阴影以优化性能
           child.receiveShadow = true;
           child.renderOrder = 3; // 调整渲染顺序
 
@@ -1985,7 +1999,7 @@ const generateHeatmapPoints = () => {
     });
 
     // 根据人数生成周围热力点，越多人生成越多点
-    const pointCount = personCount;
+    const pointCount = personCount * 0.001;
 
     // 在中心点周围生成额外的点，形成热力云
     for (let i = 0; i < pointCount; i++) {
@@ -2259,6 +2273,7 @@ const handleAreaMarkerSelection = (areaMarker) => {
   return true; // 返回true表示已处理区域标记
 };
 // 添加双击事件处理函数
+// 修改handleCanvasDoubleClick函数，确保更严格地过滤焦点标记
 const handleCanvasDoubleClick = (event) => {
   if (!heatmapRef.value || !camera || !scene || !renderer) return;
 
@@ -2273,12 +2288,27 @@ const handleCanvasDoubleClick = (event) => {
   // 获取与射线相交的所有物体
   const intersects = raycaster.intersectObjects(scene.children, true);
   const visibleIntersects = intersects.filter(i => isActuallyVisible(i.object));
+  
+  // 增强过滤逻辑，更严格地排除焦点标记
+  const interactiveIntersects = visibleIntersects.filter(i => {
+    // 检查对象本身
+    if (i.object.userData?.isFocusMarker) return false;
+    
+    // 检查当前对象的父级链
+    let parent = i.object.parent;
+    while (parent) {
+      if (parent.userData?.isFocusMarker) return false;
+      parent = parent.parent;
+    }
+    
+    return true;
+  });
 
   // 如果有相交的物体且不是在聚焦模式下，则聚焦该物体
-  if (visibleIntersects.length > 0 && !focusModeActive.value) {
+  if (interactiveIntersects.length > 0 && !focusModeActive.value) {
     // 首先检查是否命中区域标记
-    for (let i = 0; i < visibleIntersects.length; i++) {
-      const obj = visibleIntersects[i].object;
+    for (let i = 0; i < interactiveIntersects.length; i++) {
+      const obj = interactiveIntersects[i].object;
       // 检查是否是区域标记
       if (obj.userData && obj.userData.isAreaMarker) {
         // 处理区域标记选择
@@ -2292,9 +2322,9 @@ const handleCanvasDoubleClick = (event) => {
     let meshObject = null;
     let i = 0;
 
-    while (i < visibleIntersects.length && !meshObject) {
-      if (visibleIntersects[i].object instanceof THREE.Mesh) {
-        meshObject = visibleIntersects[i].object;
+    while (i < interactiveIntersects.length && !meshObject) {
+      if (interactiveIntersects[i].object instanceof THREE.Mesh) {
+        meshObject = interactiveIntersects[i].object;
       }
       i++;
     }
@@ -2712,9 +2742,7 @@ const createAreaMarkers = () => {
       type: 'AreaMarker',
       depth: 0,
       id: itemId,
-      isMesh: true,
       visible: true,
-      isAreaMarker: true
     });
   });
 
@@ -2737,7 +2765,11 @@ const createFocusMarker = (position: THREE.Vector3): THREE.Object3D => {
 
   // 设置一个较高的渲染顺序，确保它在主模型(renderOrder=1)和背景(renderOrder=3)之后被渲染
   sphere.renderOrder = 5;
-
+  // 添加特殊标记，指示这是焦点标记，不应该响应交互事件
+  sphere.userData = {
+    isFocusMarker: true,
+    interactive: false
+  };
   // 设置标识的位置
   sphere.position.copy(position);
 
@@ -3301,14 +3333,14 @@ const updateAreaMarkersData = (areasData) => {
       顶点显示模式 - 点击顶点查看详细信息
     </div>
 
-    <!-- 坐标显示面板 -->
+    <!-- 坐标显示面板
     <div v-if="showCoordinates" class="coordinates-panel">
       <div class="coordinates-title">点击位置坐标</div>
       <div class="coordinates-value">X: {{ selectedPosition.x }}</div>
       <div class="coordinates-value">Y: {{ selectedPosition.y }}</div>
       <div class="coordinates-value">Z: {{ selectedPosition.z }}</div>
       <button class="close-btn" @click="showCoordinates = false">关闭</button>
-    </div>
+    </div> -->
 
     <!-- 修改悬停标签 -->
     <div v-if="meshLabelVisible" class="mesh-label" :style="{
