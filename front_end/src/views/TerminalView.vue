@@ -1,4 +1,5 @@
-<script setup>
+<script setup lang="ts">
+
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -88,14 +89,17 @@ const status = reactive({
   terminal_online: false,
   last_detection: null,
   mode: 'both',
-  terminal_id: null
+  terminal_id: null,
+  // 新增：节点详细映射（来自后端）
+  node_details: {} as Record<string | number, any>
 });
 
 // 终端配置
 const config = reactive({
   mode: 'both',
   interval: 5,
-  nodes: [],
+  data_nodes: [],
+  control_nodes: [],
   save_image: true,
   preload_model: true,
   co2_enabled: true,
@@ -118,12 +122,23 @@ const config = reactive({
 });
 
 // 原始配置（用于重置）
-const originalConfig = reactive({});
+const originalConfig = reactive({} as any);
+
 
 // 新节点信息
-const newNode = reactive({
+const newDataNode = reactive({
   id: '',
-  url: ''
+  name: '',
+  ip: '',
+  port: 80,
+  capabilities: [] as string[]
+});
+const newControlNode = reactive({
+  id: '',
+  name: '',
+  ip: '',
+  port: 80,
+  capabilities: [] as string[]
 });
 
 // 终端日志
@@ -178,7 +193,7 @@ const terminalService = computed(() => {
 const loadTerminalDetails = async () => {
   try {
     if (connectionMode.value === 'local') {
-      const info = await apiService.localTerminal.getInfo();
+      const info : any = await apiService.localTerminal.getInfo();
       terminalDetails.id = info.id || 0;
       terminalDetails.name = info.name || '本地终端';
       terminalDetails.status = true;
@@ -230,7 +245,9 @@ const loadTerminalStatus = async () => {
       terminal_online: data.terminal_online ?? false,
       last_detection: data.last_detection ?? null,
       mode: data.mode ?? 'both',
-      terminal_id: data.terminal_id ?? null
+      terminal_id: data.terminal_id ?? null,
+      // 新增：节点详情
+      node_details: data.node_details || {}
     };
     Object.assign(status, statusData);
     terminal.status = status.model_loaded || status.push_running || status.pull_running;
@@ -260,11 +277,56 @@ const loadTerminalConfig = async () => {
     config.co2_enabled = configData.co2_enabled !== undefined ? configData.co2_enabled : true;
     config.co2_read_interval = configData.co2_read_interval !== undefined ? configData.co2_read_interval : 30;
 
-    // 转换节点数据格式
-    config.nodes = Object.entries(configData.nodes || {}).map(([id, url]) => ({
-      id: parseInt(id),
-      url
-    }));
+    // 转换节点数据格式（兼容新旧格式）
+    if (configData.nodes) {
+      const parseEntry = (id, value, typeFallback) => {
+        const nodeId = parseInt(id);
+        if (value && typeof value === 'object') {
+          return {
+            id: nodeId,
+            name: value.name || `${typeFallback === 'data' ? '数据' : '控制'}节点${nodeId}`,
+            ip: value.ip || '',
+            port: value.port !== undefined ? Number(value.port) : 80,
+            capabilities: Array.isArray(value.capabilities) ? value.capabilities : []
+          };
+        }
+        // 旧格式 value 为 URL 字符串，尽量解析出 ip/port
+        let ip = '', port = 80;
+        if (typeof value === 'string') {
+          try {
+            const maybeUrl = value.includes('://') ? value : `http://${value}`;
+            const u = new URL(maybeUrl);
+            ip = u.hostname || '';
+            port = u.port ? Number(u.port) : 80;
+          } catch (e) {
+            ip = String(value);
+            port = 80;
+          }
+        }
+        return {
+          id: nodeId,
+          name: `${typeFallback === 'data' ? '数据' : '控制'}节点${nodeId}`,
+          ip,
+          port,
+          capabilities: []
+        };
+      };
+
+      if (configData.nodes.data_nodes || configData.nodes.control_nodes) {
+        // 新格式：按类别划分，条目为对象
+        const dataEntries = Object.entries(configData.nodes.data_nodes || {});
+        const controlEntries = Object.entries(configData.nodes.control_nodes || {});
+        config.data_nodes = dataEntries.map(([id, v]) => parseEntry(id, v, 'data'));
+        config.control_nodes = controlEntries.map(([id, v]) => parseEntry(id, v, 'control'));
+      } else {
+        // 旧格式：全部视为数据节点，值为 URL 字符串
+        config.data_nodes = Object.entries(configData.nodes || {}).map(([id, v]) => parseEntry(id, v, 'data'));
+        config.control_nodes = [];
+      }
+    } else {
+      config.data_nodes = [];
+      config.control_nodes = [];
+    }
 
     // 处理摄像头配置
     if (configData.camera_config) {
@@ -368,34 +430,84 @@ const refreshStatus = async () => {
   }
 };
 
-// 添加节点
-const addNode = () => {
-  if (!newNode.id || !newNode.url) {
-    ElMessage.warning('请输入完整的节点信息');
+// 添加数据节点
+const addDataNode = () => {
+  if (!newDataNode.id || !newDataNode.ip || !newDataNode.port) {
+    ElMessage.warning('请输入完整的节点信息（ID、IP、端口）');
     return;
   }
-
-  const camId = parseInt(newNode.id);
-
-  // 检查ID是否已存在
-  if (config.nodes.some(cam => cam.id === camId)) {
-    ElMessage.warning(`ID ${camId} 已存在`);
+  const nodeId = parseInt(newDataNode.id);
+  if (config.data_nodes.some(n => n.id === nodeId) || config.control_nodes.some(n => n.id === nodeId)) {
+    ElMessage.warning(`ID ${nodeId} 已存在`);
     return;
   }
-
-  config.nodes.push({
-    id: camId,
-    url: newNode.url
+  config.data_nodes.push({
+    id: nodeId,
+    name: newDataNode.name || `数据节点${nodeId}`,
+    ip: newDataNode.ip,
+    port: Number(newDataNode.port),
+    capabilities: Array.isArray(newDataNode.capabilities) ? [...newDataNode.capabilities] : []
   });
-
-  // 清空输入
-  newNode.id = '';
-  newNode.url = '';
+  newDataNode.id = '';
+  newDataNode.name = '';
+  newDataNode.ip = '';
+  newDataNode.port = 80;
+  newDataNode.capabilities = [];
 };
 
-// 移除节点
-const removeNode = (index) => {
-  config.nodes.splice(index, 1);
+// 添加控制节点
+const addControlNode = () => {
+  if (!newControlNode.id || !newControlNode.ip || !newControlNode.port) {
+    ElMessage.warning('请输入完整的节点信息（ID、IP、端口）');
+    return;
+  }
+  const nodeId = parseInt(newControlNode.id);
+  if (config.data_nodes.some(n => n.id === nodeId) || config.control_nodes.some(n => n.id === nodeId)) {
+    ElMessage.warning(`ID ${nodeId} 已存在`);
+    return;
+  }
+  config.control_nodes.push({
+    id: nodeId,
+    name: newControlNode.name || `控制节点${nodeId}`,
+    ip: newControlNode.ip,
+    port: Number(newControlNode.port),
+    capabilities: Array.isArray(newControlNode.capabilities) ? [...newControlNode.capabilities] : []
+  });
+  newControlNode.id = '';
+  newControlNode.name = '';
+  newControlNode.ip = '';
+  newControlNode.port = 80;
+  newControlNode.capabilities = [];
+};
+
+// 移除数据节点
+const removeDataNode = (index) => {
+  config.data_nodes.splice(index, 1);
+};
+
+// 移除控制节点
+const removeControlNode = (index) => {
+  config.control_nodes.splice(index, 1);
+};
+
+// 预览数据节点图片（仅本地模式）
+const previewNodeImage = async (nodeId) => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('图片预览仅在本地模式下可用');
+    return;
+  }
+  try {
+    const blob : any = await apiService.localTerminal.getLastImage(nodeId);
+    const imageUrl = URL.createObjectURL(blob);
+    ElMessageBox.alert(`<img src="${imageUrl}" style="max-width: 100%; max-height: 400px;" />`, `节点 ${nodeId} 最后一次图片`, {
+      dangerouslyUseHTMLString: true,
+      customClass: 'image-preview-dialog',
+      confirmButtonText: '关闭'
+    }).finally(() => URL.revokeObjectURL(imageUrl));
+  } catch (error) {
+    console.error('获取节点图片失败:', error);
+    ElMessage.error('获取节点图片失败');
+  }
 };
 
 // 保存配置
@@ -403,16 +515,32 @@ const saveConfig = async () => {
   try {
     loading.value = true;
 
-    // 转换节点格式为对象
-    const nodesObj = {};
-    config.nodes.forEach(cam => {
-      nodesObj[cam.id] = cam.url;
+    // 转换节点格式为对象（新格式，包含详细字段）
+    const dataNodesObj = {} as Record<string, any>;
+    config.data_nodes.forEach(n => {
+      dataNodesObj[n.id] = {
+        type: 'data',
+        ip: n.ip,
+        port: Number(n.port) || 80,
+        name: n.name || `数据节点${n.id}`,
+        capabilities: Array.isArray(n.capabilities) ? n.capabilities : []
+      };
+    });
+    const controlNodesObj = {} as Record<string, any>;
+    config.control_nodes.forEach(n => {
+      controlNodesObj[n.id] = {
+        type: 'control',
+        ip: n.ip,
+        port: Number(n.port) || 80,
+        name: n.name || `控制节点${n.id}`,
+        capabilities: Array.isArray(n.capabilities) ? n.capabilities : []
+      };
     });
 
     const configToSave = {
       mode: config.mode,
-      interval: parseFloat(config.interval),
-      nodes: nodesObj,
+      interval: parseFloat(String(config.interval)),
+      nodes: { data_nodes: dataNodesObj, control_nodes: controlNodesObj },
       save_image: config.save_image,
       preload_model: config.preload_model,
       co2_enabled: config.co2_enabled,
@@ -625,8 +753,12 @@ const checkBuzzerStatus = async () => {
   }
 };
 
-// 控制蜂鸣器
+// 控制蜂鸣器（仅本地模式）
 const controlBuzzer = async (action, params = {}) => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
   try {
     loading.value = true;
     
@@ -636,11 +768,7 @@ const controlBuzzer = async (action, params = {}) => {
     };
     
     let result;
-    if (connectionMode.value === 'local') {
-      result = await apiService.localTerminal.controlBuzzer(data);
-    } else {
-      result = await apiService.terminals.controlBuzzer(terminal.id, data);
-    }
+    result = await apiService.localTerminal.controlBuzzer(data);
     
     // 短暂延迟后刷新状态
     setTimeout(() => {
@@ -664,6 +792,132 @@ const startBuzzer = () => controlBuzzer('start', {
   repeat: buzzerForm.repeat 
 });
 const stopBuzzer = () => controlBuzzer('stop');
+
+// 灯光控制状态
+const lightStatus = reactive({
+  node_id: 1,
+  online: false,
+  supports_rotate: true,
+  default_angle: 90,
+  auto_return_time: 3,
+});
+const lightAngle = ref(90);
+const lightOnAngle = ref(130);
+const lightOffAngle = ref(65);
+
+// 获取灯光状态（仅本地模式）
+const fetchLightStatus = async () => {
+  if (connectionMode.value !== 'local') return;
+  try {
+    const  data : any  = await apiService.localTerminal.getLightStatus(lightStatus.node_id);
+    lightStatus.node_id = data.node_id ?? lightStatus.node_id;
+    lightStatus.online = data.online ?? false;
+    lightStatus.supports_rotate = data.supports_rotate ?? false;
+    lightStatus.default_angle = data.default_angle ?? 90;
+    lightStatus.auto_return_time = data.auto_return_time ?? 3;
+    if (!lightAngle.value) lightAngle.value = lightStatus.default_angle;
+  } catch (e) {
+    console.warn('获取灯光状态失败', e);
+    lightStatus.online = false;
+  }
+};
+
+// 旋转灯光（仅本地模式）
+const rotateLight = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightAngle.value) || lightStatus.default_angle || 90;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送灯光旋转指令：${angle}°，将于${lightStatus.auto_return_time}s自动回正`);
+  } catch (e) {
+    console.error('旋转灯光失败', e);
+    ElMessage.error('旋转灯光失败');
+  }
+};
+
+// 开灯（仅本地模式）
+const turnLightOn = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightOnAngle.value) || 130;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送开灯指令：${angle}°`);
+  } catch (e) {
+    console.error('开灯失败', e);
+    ElMessage.error('开灯失败');
+  }
+};
+
+// 关灯（仅本地模式）
+const turnLightOff = async () => {
+  if (connectionMode.value !== 'local') {
+    ElMessage.warning('硬件控制仅限本地模式');
+    return;
+  }
+  try {
+    const angle = Number(lightOffAngle.value) || 65;
+    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    ElMessage.success(`已发送关灯指令：${angle}°`);
+  } catch (e) {
+    console.error('关灯失败', e);
+    ElMessage.error('关灯失败');
+  }
+};
+
+// 统一的节点功能枚举（值用于后端，label用于前端显示中文）
+const NODE_CAPABILITIES = [
+  { value: 'stream', label: '视频流' },
+  { value: 'capture', label: '截图' },
+  { value: 'environment', label: '环境' },
+  { value: 'control', label: '控制' },
+  { value: 'rotate', label: '旋转' },
+  { value: 'status_led', label: '状态灯' },
+];
+
+const getCapabilityLabel = (cap: string) => {
+  const item = NODE_CAPABILITIES.find(i => i.value === cap);
+  return item ? item.label : cap;
+};
+
+const deviceTypeLabel = (t?: string) => t === 'control' ? '控制节点' : t === 'data' ? '数据节点' : '未知';
+
+const formatUptimeMs = (ms?: number) => {
+  if (!ms && ms !== 0) return '';
+  const sec = Math.floor((ms as number) / 1000);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const parts = [];
+  if (d) parts.push(`${d}天`);
+  if (h) parts.push(`${h}小时`);
+  if (m) parts.push(`${m}分`);
+  parts.push(`${s}秒`);
+  return parts.join(' ');
+};
+
+const getFrameSizeLabel = (framesize?: number) => {
+  if (framesize === undefined || framesize === null) return '';
+  const item = (frameSizes as any)[framesize];
+  return item ? item.label : String(framesize);
+};
+
+// 新增：获取某个节点的详细信息（兼容 number/string 键）
+const getNodeDetail = (id: string | number) => {
+  const details: any = status.node_details || {};
+  if (details[id] !== undefined) return details[id];
+  const asNum = Number(id);
+  if (!Number.isNaN(asNum) && details[asNum] !== undefined) return details[asNum];
+  const asStr = String(id);
+  if (details[asStr] !== undefined) return details[asStr];
+  return {};
+};
 
 onMounted(async () => {
   loading.value = true;
@@ -701,7 +955,7 @@ onMounted(async () => {
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
       if (route.params.id) {
-        terminal.id = parseInt(route.params.id);
+        terminal.id = parseInt(String(route.params.id));
         selectedTerminalId.value = terminal.id;
       } else if (terminalList.value.length > 0) {
         // 否则使用列表中第一个终端
@@ -752,13 +1006,16 @@ onMounted(async () => {
   }
   // 加载数据后检查蜂鸣器状态
   await checkBuzzerStatus();
+  // 加载灯光状态（仅本地模式时尝试）
+  await fetchLightStatus();
   
-  // 添加蜂鸣器状态轮询
+  // 添加状态轮询
   setInterval(async () => {
     if (isActive.value) {
       await checkBuzzerStatus();
+      await fetchLightStatus();
     }
-  }, 5000); // 每5秒检查一次蜂鸣器状态
+  }, 5000); // 每5秒检查一次状态
 });
 
 // 切换终端
@@ -863,7 +1120,7 @@ const applyConfig = async () => {
   try {
     loading.value = true;
     await sendCommand('change_mode', { mode: config.mode });
-    await sendCommand('set_interval', { interval: parseFloat(config.interval) });
+    await sendCommand('set_interval', { interval: parseFloat(String(config.interval)) });
     ElMessage.success('配置已立即应用');
 
     // 刷新状态
@@ -1272,20 +1529,58 @@ watch(connectionMode, handleModeChange);
 
             <el-empty v-if="Object.keys(status.nodes).length === 0" description="暂无节点数据" :image-size="80"></el-empty>
             <div v-else class="node-grid">
-              <div v-for="[id, nodeStatus] in Object.entries(status.nodes)" :key="id" class="node-item"
-                :class="{ 'node-active': nodeStatus === '在线' }">
-                <div class="node-icon">
-                  <el-icon>
-                    <VideoCamera />
-                  </el-icon>
-                </div>
-                <div class="node-info">
-                  <div class="node-id">节点 #{{ id }}</div>
-                  <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
-                    {{ nodeStatus }}
-                  </el-tag>
-                </div>
-              </div>
+              <template v-for="[id, nodeStatus] in Object.entries(status.nodes)" :key="id">
+                <el-tooltip placement="top" effect="dark" :hide-after="0">
+                  <template #content>
+                    <div class="node-tip">
+                      <div class="row"><span class="k">类型</span><span class="v">{{ deviceTypeLabel(getNodeDetail(id)?.device_type) }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.ip"><span class="k">IP</span><span class="v">{{ getNodeDetail(id).ip }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.rssi !== undefined"><span class="k">信号</span><span class="v">{{ getNodeDetail(id).rssi }} dBm</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.last_seen"><span class="k">最近</span><span class="v">{{ getNodeDetail(id).last_seen }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.uptime_ms !== undefined"><span class="k">运行</span><span class="v">{{ formatUptimeMs(getNodeDetail(id).uptime_ms) }}</span></div>
+                      <div class="row" v-if="Array.isArray(getNodeDetail(id)?.capabilities) && getNodeDetail(id).capabilities.length">
+                        <span class="k">功能</span>
+                        <span class="v">
+                          <el-tag v-for="cap in getNodeDetail(id).capabilities" :key="cap" size="small" style="margin-right:4px">{{ getCapabilityLabel(cap) }}</el-tag>
+                        </span>
+                      </div>
+                      <!-- 业务数据关键字段（按类型做友好展示） -->
+                      <template v-if="getNodeDetail(id)?.data">
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'control' && getNodeDetail(id).data.current_angle !== undefined">
+                          <span class="k">角度</span><span class="v">{{ getNodeDetail(id).data.current_angle }}°</span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'control' && getNodeDetail(id).data.rotating !== undefined">
+                          <span class="k">旋转</span><span class="v">{{ getNodeDetail(id).data.rotating ? '进行中' : '停止' }}</span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'data' && (getNodeDetail(id).data.temperature !== undefined || getNodeDetail(id).data.humidity !== undefined)">
+                          <span class="k">环境</span>
+                          <span class="v">
+                            <span v-if="getNodeDetail(id).data.temperature !== undefined">T {{ getNodeDetail(id).data.temperature }}°C</span>
+                            <span v-if="getNodeDetail(id).data.humidity !== undefined" style="margin-left:8px">H {{ getNodeDetail(id).data.humidity }}%</span>
+                          </span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'data' && getNodeDetail(id).data.framesize !== undefined">
+                          <span class="k">分辨率</span><span class="v">{{ getFrameSizeLabel(getNodeDetail(id).data.framesize) }}</span>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <div class="node-item" :class="{ 'node-active': nodeStatus === '在线' }">
+                    <div class="node-icon">
+                      <el-icon>
+                        <VideoCamera />
+                      </el-icon>
+                    </div>
+                    <div class="node-info">
+                      <div class="node-id">节点 #{{ id }}</div>
+                      <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
+                        {{ nodeStatus }}
+                      </el-tag>
+                    </div>
+                  </div>
+                </el-tooltip>
+              </template>
             </div>
           </div>
         </div>
@@ -1398,30 +1693,109 @@ watch(connectionMode, handleModeChange);
                 </template>
                 
                 <div class="node-config">
-                  <div class="node-list-container">
-                    <el-table :data="config.nodes" size="small" height="200px" class="node-table">
-                      <el-table-column prop="id" label="ID" width="60" align="center"></el-table-column>
-                      <el-table-column prop="url" label="URL" show-overflow-tooltip></el-table-column>
-                      <el-table-column label="操作" width="70" align="center">
-                        <template #default="scope">
-                          <el-button type="danger" size="small" @click="removeNode(scope.$index)" circle>
-                            <el-icon>
-                              <Delete />
-                            </el-icon>
-                          </el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
+                  <!-- 数据节点 -->
+                  <div class="node-section">
+                    <div class="node-section-header">数据节点</div>
+                    <div class="node-list-container">
+                      <el-table :data="config.data_nodes" size="small" height="200px" class="node-table">
+                        <el-table-column prop="id" label="ID" width="60" align="center" />
+                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.name" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.ip" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="port" label="端口" width="90" align="center">
+                          <template #default="scope">
+                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="功能" min-width="210">
+                          <template #default="scope">
+                            <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
+                              <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="140" align="center">
+                          <template #default="scope">
+                            <el-button size="small" @click="previewNodeImage(scope.row.id)" circle :disabled="connectionMode !== 'local'">
+                              <el-icon><Picture /></el-icon>
+                            </el-button>
+                            <el-button type="danger" size="small" @click="removeDataNode(scope.$index)" circle>
+                              <el-icon><Delete /></el-icon>
+                            </el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </div>
+                    <div class="add-node-form">
+                      <el-input v-model="newDataNode.id" placeholder="ID" class="node-id-input" size="small" />
+                      <el-input v-model="newDataNode.name" placeholder="名称" class="node-name-input" size="small" />
+                      <el-input v-model="newDataNode.ip" placeholder="IP" class="node-ip-input" size="small" />
+                      <el-input v-model.number="newDataNode.port" placeholder="端口" class="node-port-input" size="small" />
+                      <el-select v-model="newDataNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 180px;">
+                        <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                      </el-select>
+                      <el-button type="primary" @click="addDataNode" size="small" class="add-button">
+                        <el-icon><Plus /></el-icon>添加数据节点
+                      </el-button>
+                    </div>
                   </div>
-                  <div class="add-node-form">
-                    <el-input v-model="newNode.id" placeholder="ID" class="node-id-input" size="small"></el-input>
-                    <el-input v-model="newNode.url" placeholder="节点URL" class="node-url-input"
-                      size="small"></el-input>
-                    <el-button type="primary" @click="addNode" size="small" class="add-button">
-                      <el-icon>
-                        <Plus />
-                      </el-icon>添加
-                    </el-button>
+
+                  <!-- 控制节点 -->
+                  <div class="node-section" style="margin-top: 16px;">
+                    <div class="node-section-header">控制节点</div>
+                    <div class="node-list-container">
+                      <el-table :data="config.control_nodes" size="small" height="200px" class="node-table">
+                        <el-table-column prop="id" label="ID" width="60" align="center" />
+                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.name" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.ip" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="port" label="端口" width="90" align="center">
+                          <template #default="scope">
+                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="功能" min-width="210">
+                          <template #default="scope">
+                            <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
+                              <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="80" align="center">
+                          <template #default="scope">
+                            <el-button type="danger" size="small" @click="removeControlNode(scope.$index)" circle>
+                              <el-icon><Delete /></el-icon>
+                            </el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </div>
+                    <div class="add-node-form">
+                      <el-input v-model="newControlNode.id" placeholder="ID" class="node-id-input" size="small" />
+                      <el-input v-model="newControlNode.name" placeholder="名称" class="node-name-input" size="small" />
+                      <el-input v-model="newControlNode.ip" placeholder="IP" class="node-ip-input" size="small" />
+                      <el-input v-model.number="newControlNode.port" placeholder="端口" class="node-port-input" size="small" />
+                      <el-select v-model="newControlNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 180px;">
+                        <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                      </el-select>
+                      <el-button type="primary" @click="addControlNode" size="small" class="add-button">
+                        <el-icon><Plus /></el-icon>添加控制节点
+                      </el-button>
+                    </div>
                   </div>
                 </div>
               </el-tab-pane>
@@ -1442,7 +1816,7 @@ watch(connectionMode, handleModeChange);
                         <el-form-item label="分辨率">
                           <el-select v-model="config.camera_config.frame_size">
                             <el-option v-for="(size, key) in frameSizes" :key="key" :label="size.label"
-                              :value="parseInt(key)" />
+                              :value="parseInt(String(key))" />
                           </el-select>
                         </el-form-item>
                       </el-col>
@@ -1534,6 +1908,7 @@ watch(connectionMode, handleModeChange);
                     <el-col :span="buzzerForm.pattern === 'SINGLE_BEEP' ? 12 : 6">
                       <el-form-item :label="buzzerForm.pattern === 'SINGLE_BEEP' ? '持续时间' : '重复次数'">
                         <el-input-number 
+                          
                           v-if="buzzerForm.pattern === 'SINGLE_BEEP'"
                           v-model="buzzerForm.duration" 
                           :min="0.1" 
@@ -1568,17 +1943,76 @@ watch(connectionMode, handleModeChange);
                 
                 <div class="buzzer-actions">
                   <el-button-group>
-                    <el-button type="primary" @click="beep" :disabled="buzzerActive">
+                    <el-button type="primary" @click="beep" :disabled="connectionMode !== 'local' || buzzerActive">
                       <el-icon><Bell /></el-icon> 简单鸣叫
                     </el-button>
-                    <el-button type="success" @click="startBuzzer" :disabled="buzzerActive">
+                    <el-button type="success" @click="startBuzzer" :disabled="connectionMode !== 'local' || buzzerActive">
                       <el-icon><Warning /></el-icon> 启动模式
                     </el-button>
-                    <el-button type="danger" @click="stopBuzzer" :disabled="!buzzerActive">
+                    <el-button type="danger" @click="stopBuzzer" :disabled="connectionMode !== 'local'">
                       <el-icon><Mute /></el-icon> 停止鸣叫
                     </el-button>
                   </el-button-group>
                 </div>
+              </div>
+            </div>
+
+            <!-- 灯光控制 -->
+            <div class="hardware-control-section">
+              <div class="hardware-title">
+                <el-icon><MagicStick /></el-icon>
+                <span>灯光控制</span>
+                <el-tag :type="lightStatus.online ? 'success' : 'info'" size="small" class="hardware-status">
+                  {{ lightStatus.online ? '可用' : '不可用' }}
+                </el-tag>
+                <el-tag v-if="!lightStatus.supports_rotate" type="info" size="small" class="hardware-status">
+                  不支持旋转
+                </el-tag>
+              </div>
+
+              <div class="buzzer-controls">
+                <el-form label-width="80px" size="small">
+                  <el-row :gutter="12">
+                    <el-col :span="8">
+                      <el-form-item label="节点ID">
+                        <el-input-number v-model="lightStatus.node_id" :min="0" :step="1" @change="fetchLightStatus" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="10">
+                      <el-form-item label="角度(°)">
+                        <el-slider v-model="lightAngle" :min="0" :max="180" :step="5" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="6">
+                      <el-form-item label=" ">
+                        <el-button type="primary" @click="rotateLight" :disabled="connectionMode !== 'local'">
+                          <el-icon><MagicStick /></el-icon> 旋转
+                        </el-button>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="12" style="margin-top: 8px;">
+                    <el-col :span="8">
+                      <el-form-item label="开灯角度">
+                        <el-input-number v-model="lightOnAngle" :min="0" :max="180" :step="1" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="关灯角度">
+                        <el-input-number v-model="lightOffAngle" :min="0" :max="180" :step="1" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label=" ">
+                        <el-button type="success" @click="turnLightOn" :disabled="connectionMode !== 'local'">开灯</el-button>
+                        <el-button type="warning" @click="turnLightOff" :disabled="connectionMode !== 'local'" style="margin-left: 8px;">关灯</el-button>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <div style="text-align:center;color:#909399;">
+                    默认 {{ lightStatus.default_angle }}°，约 {{ lightStatus.auto_return_time }} 秒自动回正
+                  </div>
+                </el-form>
               </div>
             </div>
           </div>
@@ -1590,6 +2024,7 @@ watch(connectionMode, handleModeChange);
                 </el-icon> CO2浓度监测</h3>
               <el-tag :type="getCO2StatusType(status.co2_status)" size="small" class="status-chip">
                 {{ status.co2_status }}
+
               </el-tag>
             </div>
 
@@ -2155,9 +2590,6 @@ watch(connectionMode, handleModeChange);
   width: 80px;
 }
 
-.node-url-input {
-  flex-grow: 1;
-}
 
 .add-button {
   min-width: 80px;
@@ -2349,7 +2781,10 @@ watch(connectionMode, handleModeChange);
   }
 
   .node-id-input,
-  .node-url-input {
+  .node-name-input,
+  .node-ip-input,
+  .node-port-input,
+  .node-cap-input {
     width: 100%;
   }
 
@@ -2369,6 +2804,25 @@ watch(connectionMode, handleModeChange);
     border-radius: 4px !important;
     margin-bottom: 8px;
   }
+}
+.node-tip {
+  min-width: 220px;
+}
+.node-tip .row {
+  display: flex;
+  align-items: center;
+  margin: 2px 0;
+  font-size: 12px;
+}
+.node-tip .k {
+  color: #909399;
+  width: 52px;
+  flex: 0 0 52px;
+}
+.node-tip .v {
+  color: #303133;
+  flex: 1;
+  word-break: break-all;
 }
 /* 硬件控制部分样式 */
 .hardware-control-section {

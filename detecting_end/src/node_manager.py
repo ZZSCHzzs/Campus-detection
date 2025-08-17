@@ -65,35 +65,71 @@ class NodeManager:
     def __init__(self, config_manager):
         """初始化节点管理器"""
         self.config_manager = config_manager
-        self.nodes = {}  # 存储节点信息
+        self.data_nodes = {}  # 存储数据节点信息
+        self.control_nodes = {}  # 存储控制节点信息
         self.node_status = {}  # 存储节点状态
         self.lock = Lock()
         
         # 从配置中加载节点设置
         self._load_nodes()
         
+    # 新增：统一标准化 node_id 为字符串，避免 int/str 不一致导致的 key 匹配失败
+    def _normalize_node_id(self, node_id):
+        try:
+            return str(node_id)
+        except Exception:
+            return f"{node_id}"
+    
     def _load_nodes(self):
         """从配置中加载节点信息"""
         node_config = self.config_manager.get('nodes', {})
         
         with self.lock:
-            self.nodes = node_config.copy()
-            # 初始化节点状态
-            for node_id in self.nodes:
+            # 兼容旧版本配置格式
+            if isinstance(node_config, dict) and 'data_nodes' in node_config:
+                # 新版结构
+                self.data_nodes = node_config.get('data_nodes', {}).copy()
+                self.control_nodes = node_config.get('control_nodes', {}).copy()
+            else:
+                # 旧版结构：直接是 {id: url} 映射，当作数据节点处理
+                self.data_nodes = node_config.copy()
+                self.control_nodes = {}
+            
+            # 初始化所有节点状态（数据节点和控制节点）
+            all_nodes = list(self.data_nodes.keys()) + list(self.control_nodes.keys())
+            for node_id in all_nodes:
                 if node_id not in self.node_status:
                     self.node_status[node_id] = {
                         'status': '未知',
                         'last_capture': None,
                         'detection_count': 0,
-                        'error': None
+                        'error': None,
+                        # 新增的标准化status字段
+                        'last_seen': None,
+                        'device_type': '未知',
+                        'ip': None,
+                        'rssi': None,
+                        'uptime_ms': None,
+                        'capabilities': [],
+                        'data': None,
                     }
         
-        logger.info(f"已加载{len(self.nodes)}个节点配置")
+        logger.info(f"已加载 {len(self.data_nodes)} 个数据节点和 {len(self.control_nodes)} 个控制节点")
     
     def get_nodes(self):
-        """获取所有节点信息"""
+        """获取所有数据节点信息（向后兼容）"""
         with self.lock:
-            return self.nodes.copy()
+            return self.data_nodes.copy()
+    
+    def get_data_nodes(self):
+        """获取所有数据节点信息"""
+        with self.lock:
+            return self.data_nodes.copy()
+    
+    def get_control_nodes(self):
+        """获取所有控制节点信息"""
+        with self.lock:
+            return self.control_nodes.copy()
     
     def get_node_status(self):
         """获取所有节点状态"""
@@ -102,6 +138,7 @@ class NodeManager:
     
     def update_node_status(self, node_id, status, error=None):
         """更新节点状态"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
             if node_id in self.node_status:
                 self.node_status[node_id]['status'] = status
@@ -111,6 +148,7 @@ class NodeManager:
     
     def update_detection_count(self, node_id, count):
         """更新节点检测计数"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
             if node_id in self.node_status:
                 self.node_status[node_id]['detection_count'] = count
@@ -119,16 +157,62 @@ class NodeManager:
             return False
     
     def check_node_connection(self, node_id):
-        """检查节点连接状态"""
-        if node_id not in self.nodes:
+        """检查节点连接状态，并同步 /status 数据"""
+        node_id = self._normalize_node_id(node_id)
+        # 首先在数据节点中查找
+        node_url = None
+        if node_id in self.data_nodes:
+            node_info = self.data_nodes[node_id]
+            if isinstance(node_info, dict):
+                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                node_url = str(node_info)  # 兼容旧格式
+        elif node_id in self.control_nodes:
+            node_info = self.control_nodes[node_id]
+            if isinstance(node_info, dict):
+                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                node_url = str(node_info)  # 兼容旧格式
+        
+        if not node_url:
             logger.warning(f"未找到节点ID: {node_id}")
             return False
         
-        node_url = self.nodes[node_id]
         try:
             response = requests.get(f"{node_url}/status", timeout=2)
             if response.status_code == 200:
-                self.update_node_status(node_id, '在线')
+                # 尝试解析标准化JSON；若解析失败，仍按在线处理
+                payload = None
+                try:
+                    payload = response.json()
+                except Exception:
+                    payload = None
+
+                with self.lock:
+                    st = self.node_status.get(node_id, {})
+                    st['status'] = '在线'
+                    st['error'] = None
+                    st['last_seen'] = datetime.datetime.now().isoformat(timespec='seconds')
+
+                    if isinstance(payload, dict):
+                        device = payload.get('device', {}) or {}
+                        data = payload.get('data', None)
+
+                        # 同步标准字段（若不存在则不覆盖）
+                        if 'type' in device:
+                            st['device_type'] = device.get('type') or st.get('device_type', '未知')
+                        if 'ip' in device:
+                            st['ip'] = device.get('ip')
+                        if 'rssi' in device:
+                            st['rssi'] = device.get('rssi')
+                        if 'uptime_ms' in device:
+                            st['uptime_ms'] = device.get('uptime_ms')
+                        if 'capabilities' in device and isinstance(device.get('capabilities'), list):
+                            st['capabilities'] = device.get('capabilities') or []
+
+                        st['data'] = data
+                    self.node_status[node_id] = st
+
                 return True
             else:
                 self.update_node_status(node_id, '错误', f"HTTP错误: {response.status_code}")
@@ -139,11 +223,11 @@ class NodeManager:
     
     def apply_node_config(self, node_id):
         """应用节点配置"""
-        if node_id not in self.nodes:
+        node_url = self._get_node_url(node_id)
+        if not node_url:
             logger.warning(f"未找到节点ID: {node_id}")
             return False
         
-        node_url = self.nodes[node_id]
         if not self.check_node_connection(node_id):
             logger.error(f"无法连接到节点: {node_url}")
             return False
@@ -157,6 +241,24 @@ class NodeManager:
         
         logger.info(f"已应用节点{node_id}的配置")
         return True
+    
+    def _get_node_url(self, node_id):
+        """获取节点URL"""
+        node_id = self._normalize_node_id(node_id)
+        # 首先在数据节点中查找
+        if node_id in self.data_nodes:
+            node_info = self.data_nodes[node_id]
+            if isinstance(node_info, dict):
+                return f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                return str(node_info)  # 兼容旧格式
+        elif node_id in self.control_nodes:
+            node_info = self.control_nodes[node_id]
+            if isinstance(node_info, dict):
+                return f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                return str(node_info)  # 兼容旧格式
+        return None
     
     def _configure_node(self, parameter, value, base_url):
         """配置远程节点的参数"""
@@ -176,13 +278,11 @@ class NodeManager:
             return False
     
     def capture_image(self, node_id):
-        """从指定节点捕获一帧图像（支持 image/jpeg 和 MJPEG 流）"""
-        if node_id not in self.nodes:
+        """从指定节点捕获一帧图像（优先使用 /capture，然后尝试 /stream）"""
+        node_url = self._get_node_url(node_id)
+        if not node_url:
             logger.warning(f"未找到节点ID: {node_id}")
             return None
-        
-        node_url = self.nodes[node_id]
-        stream_url = f"http://{node_url}/stream"
 
         headers = {
             "User-Agent": "Mozilla/5.0",
@@ -190,6 +290,27 @@ class NodeManager:
             "Accept": "image/jpeg,*/*"
         }
         
+        # 尝试新的 /capture 路由
+        capture_url = f"{node_url}/capture"
+        try:
+            with requests.Session() as session:
+                logger.info(f"尝试从 {capture_url} 获取图像")
+                response = session.get(capture_url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    content_type = response.headers.get("Content-Type", "")
+                    if "image/jpeg" in content_type:
+                        image_array = np.frombuffer(response.content, dtype=np.uint8)
+                        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                        if image is not None:
+                            logger.info(f"从 {capture_url} 成功获取图像")
+                            self.update_node_status(node_id, '在线')
+                            return image
+        except Exception as e:
+            logger.info(f"从 {capture_url} 获取失败: {e}，尝试使用 /stream")
+        
+        # 如果 /capture 失败，尝试 /stream（兼容旧固件）
+        stream_url = f"{node_url}/stream"
         try:
             with requests.Session() as session:
                 logger.info(f"尝试从 {stream_url} 获取图像")
@@ -254,13 +375,57 @@ class NodeManager:
             self.update_node_status(node_id, '离线', error_msg)
             return None
     
+    def rotate_light(self, node_id, angle=90):
+        """控制节点灯光旋转"""
+        node_id = self._normalize_node_id(node_id)
+        # 首先尝试在控制节点中查找
+        node_url = None
+        if node_id in self.control_nodes:
+            node_info = self.control_nodes[node_id]
+            if isinstance(node_info, dict):
+                # 检查节点是否支持 rotate 功能
+                capabilities = node_info.get('capabilities', [])
+                if 'rotate' not in capabilities:
+                    logger.warning(f"控制节点 {node_id} 不支持灯光旋转功能")
+                    return False
+                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                node_url = str(node_info)  # 兼容旧格式
+        elif node_id in self.data_nodes:
+            # 如果在数据节点中找到，也允许旋转（向后兼容）
+            node_info = self.data_nodes[node_id]
+            if isinstance(node_info, dict):
+                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+            else:
+                node_url = str(node_info)  # 兼容旧格式
+        
+        if not node_url:
+            logger.warning(f"未找到节点ID: {node_id}")
+            return False
+        
+        # 发送旋转命令
+        rotate_url = f"{node_url}/rotate?angle={angle}"
+        try:
+            response = requests.get(rotate_url, timeout=5)
+            if response.status_code == 200:
+                logger.info(f"节点 {node_id} 灯光旋转至 {angle} 度成功")
+                return True
+            else:
+                logger.error(f"节点 {node_id} 灯光旋转失败，状态码: {response.status_code}")
+                return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"节点 {node_id} 灯光旋转请求失败: {e}")
+            return False
+    
     def get_node_info(self, node_id):
         """获取节点信息"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
-            if node_id in self.nodes:
+            node_url = self._get_node_url(node_id)
+            if node_url:
                 return {
                     'id': node_id,
-                    'url': f"http://{self.nodes[node_id]}", # 添加http://前缀
+                    'url': node_url,
                     'status': self.node_status.get(node_id, {})
                 }
             return None

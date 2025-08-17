@@ -56,13 +56,12 @@ bool led33State = LOW;
 // 新增：LED33 开机常亮保持与慢闪节拍
 unsigned long led33InitHoldUntil = 0;   // 开机常亮截止时间
 unsigned long led33LastBlink = 0;       // 慢速频闪节拍
-const node_id = 2;
 
 
 // =================== 网络配置 ===================
 const char* ssid = "smarthit";
 const char* password = "smart123";
-const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/" + String(node_id);
+const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/3";
 
 
 // =================== HTTP 服务器配置 ===================
@@ -93,7 +92,7 @@ bool isStreaming = false;
 struct CameraDefaults {
   // 硬件配置
   framesize_t initial_framesize = FRAMESIZE_QVGA;    // 初始分辨率：QVGA(320x240)
-  framesize_t psram_framesize = FRAMESIZE_UXGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
+  framesize_t psram_framesize = FRAMESIZE_SVGA;      // PSRAM可用时分辨率：UXGA(1600x1200)
   framesize_t noram_framesize = FRAMESIZE_SVGA;      // 无PSRAM时分辨率：SVGA(800x600)
   
   // 质量设置
@@ -108,9 +107,9 @@ struct CameraDefaults {
   uint32_t xclk_freq_hz = 20000000;                 // 20MHz时钟频率
   
   // OV2640优化设置
-  int brightness = 1;                               // 亮度 (-2 到 2)
+  int brightness = 0;                               // 亮度 (-2 到 2)
   int contrast = 0;                                 // 对比度 (-2 到 2)
-  int saturation = -2;                              // 饱和度 (-2 到 2)
+  int saturation = 0;                              // 饱和度 (-2 到 2)
   bool vflip = true;                                // 垂直翻转
   bool hmirror = false;                             // 水平镜像
   
@@ -530,57 +529,56 @@ static int print_reg(char *p, sensor_t *s, uint16_t reg, uint32_t mask) {
 }
 
 static esp_err_t status_handler(httpd_req_t *req) {
-  static char json_response[1024];
-
+  // 统一结构：
+  // {
+  //   "status":"ok",
+  //   "device":{ "type":"data","ip":"...","rssi":-55,"uptime_ms":12345,"capabilities":["stream","capture","environment","control"] },
+  //   "data":{ ...业务字段... }
+  // }
   sensor_t *s = esp_camera_sensor_get();
-  char *p = json_response;
-  *p++ = '{';
 
-  if (s != NULL) {
-    p += sprintf(p, "\"framesize\":%u,", s->status.framesize);
-    p += sprintf(p, "\"quality\":%u,", s->status.quality);
-    p += sprintf(p, "\"brightness\":%d,", s->status.brightness);
-    p += sprintf(p, "\"contrast\":%d,", s->status.contrast);
-    p += sprintf(p, "\"saturation\":%d,", s->status.saturation);
-    p += sprintf(p, "\"special_effect\":%u,", s->status.special_effect);
-    p += sprintf(p, "\"wb_mode\":%u,", s->status.wb_mode);
-    p += sprintf(p, "\"awb\":%u,", s->status.awb);
-    p += sprintf(p, "\"awb_gain\":%u,", s->status.awb_gain);
-    p += sprintf(p, "\"aec\":%u,", s->status.aec);
-    p += sprintf(p, "\"aec2\":%u,", s->status.aec2);
-    p += sprintf(p, "\"ae_level\":%d,", s->status.ae_level);
-    p += sprintf(p, "\"aec_value\":%u,", s->status.aec_value);
-    p += sprintf(p, "\"agc\":%u,", s->status.agc);
-    p += sprintf(p, "\"agc_gain\":%u,", s->status.agc_gain);
-    p += sprintf(p, "\"gainceiling\":%u,", s->status.gainceiling);
-    p += sprintf(p, "\"bpc\":%u,", s->status.bpc);
-    p += sprintf(p, "\"wpc\":%u,", s->status.wpc);
-    p += sprintf(p, "\"raw_gma\":%u,", s->status.raw_gma);
-    p += sprintf(p, "\"lenc\":%u,", s->status.lenc);
-    p += sprintf(p, "\"hmirror\":%u,", s->status.hmirror);
-    p += sprintf(p, "\"dcw\":%u,", s->status.dcw);
-    p += sprintf(p, "\"colorbar\":%u,", s->status.colorbar);
-  }
-
-  // 添加温湿度数据
   float temperature = dht.readTemperature();
   float humidity = dht.readHumidity();
-  
-  if (!isnan(temperature) && !isnan(humidity)) {
-    p += sprintf(p, "\"temperature\":%.2f,", temperature);
-    p += sprintf(p, "\"humidity\":%.2f,", humidity);
+  bool hasEnv = !(isnan(temperature) || isnan(humidity));
+
+  String ip = WiFi.localIP().toString();
+  long rssi = WiFi.RSSI();
+  unsigned long up = millis();
+
+  // 业务数据：挑选关键字段，避免超长
+  String dataJson = "{";
+  dataJson += "\"led_intensity\":" + String(led_duty);
+  if (hasEnv) {
+    dataJson += ",\"temperature\":" + String(temperature, 2);
+    dataJson += ",\"humidity\":" + String(humidity, 2);
   }
-  
-  p += sprintf(p, "\"led_intensity\":%d,", led_duty);
-  p += sprintf(p, "\"xclk\":%d,", 20);
-  p += sprintf(p, "\"pixformat\":%u,", (s ? s->pixformat : (uint8_t)PIXFORMAT_JPEG));
-  
-  *p++ = '}';
-  *p++ = 0;
-  
+  if (s != NULL) {
+    dataJson += ",\"framesize\":" + String(s->status.framesize);
+    dataJson += ",\"quality\":" + String(s->status.quality);
+    dataJson += ",\"brightness\":" + String(s->status.brightness);
+    dataJson += ",\"contrast\":" + String(s->status.contrast);
+    dataJson += ",\"saturation\":" + String(s->status.saturation);
+    dataJson += ",\"hmirror\":" + String(s->status.hmirror);
+    dataJson += ",\"vflip\":" + String(s->status.vflip);
+    dataJson += ",\"pixformat\":" + String((uint8_t)s->pixformat);
+  }
+  dataJson += "}";
+
+  String json = "{";
+  json += "\"status\":\"ok\",";
+  json += "\"device\":{";
+  json +=   "\"type\":\"data\",";
+  json +=   "\"ip\":\"" + ip + "\",";
+  json +=   "\"rssi\":" + String(rssi) + ",";
+  json +=   "\"uptime_ms\":" + String(up) + ",";
+  json +=   "\"capabilities\":[\"stream\",\"capture\",\"environment\",\"control\"]";
+  json += "},";
+  json += "\"data\":" + dataJson;
+  json += "}";
+
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  return httpd_resp_send(req, json_response, strlen(json_response));
+  return httpd_resp_send(req, json.c_str(), json.length());
 }
 
 static esp_err_t environment_handler(httpd_req_t *req) {
@@ -762,14 +760,12 @@ void captureAndSendImage() {
     // LED4：成功获取帧后，闪一次（短脉冲约120ms）
     led4PulseUntil = millis() + 120;
 
-    // 获取温湿度数据
+    // 获取温湿度数据（失败时也要上传图像）
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
-    
-    if (isnan(temperature) || isnan(humidity)) {
-        Serial.println("温湿度读取失败");
-        esp_camera_fb_return(fb);
-        return;
+    bool hasEnv = !(isnan(temperature) || isnan(humidity));
+    if (!hasEnv) {
+        Serial.println("温湿度读取失败，将仅上传图像");
     }
 
     WiFiClient client;
@@ -788,13 +784,18 @@ void captureAndSendImage() {
         head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32cam.jpg\"\r\n";
         head += "Content-Type: image/jpeg\r\n\r\n";
         
-        String middle1 = "\r\n--" + boundary + "\r\n";
-        middle1 += "Content-Disposition: form-data; name=\"temperature\"\r\n\r\n";
-        middle1 += String(temperature, 2);
-        
-        String middle2 = "\r\n--" + boundary + "\r\n";
-        middle2 += "Content-Disposition: form-data; name=\"humidity\"\r\n\r\n";
-        middle2 += String(humidity, 2);
+        // 根据有无环境数据有条件添加字段
+        String middle1;
+        String middle2;
+        if (hasEnv) {
+            middle1 = "\r\n--" + boundary + "\r\n";
+            middle1 += "Content-Disposition: form-data; name=\"temperature\"\r\n\r\n";
+            middle1 += String(temperature, 2);
+
+            middle2 = "\r\n--" + boundary + "\r\n";
+            middle2 += "Content-Disposition: form-data; name=\"humidity\"\r\n\r\n";
+            middle2 += String(humidity, 2);
+        }
         
         String tail = "\r\n--" + boundary + "--\r\n";
 
@@ -813,14 +814,18 @@ void captureAndSendImage() {
         }
 
         uint32_t pos = 0;
-        memcpy(buf, head.c_str(), head.length());
+        memcpy(buf + pos, head.c_str(), head.length());
         pos += head.length();
         memcpy(buf + pos, fb->buf, fb->len);
         pos += fb->len;
-        memcpy(buf + pos, middle1.c_str(), middle1.length());
-        pos += middle1.length();
-        memcpy(buf + pos, middle2.c_str(), middle2.length());
-        pos += middle2.length();
+        if (middle1.length() > 0) {
+            memcpy(buf + pos, middle1.c_str(), middle1.length());
+            pos += middle1.length();
+        }
+        if (middle2.length() > 0) {
+            memcpy(buf + pos, middle2.c_str(), middle2.length());
+            pos += middle2.length();
+        }
         memcpy(buf + pos, tail.c_str(), tail.length());
 
         int httpCode = http.POST(buf, totalLen);

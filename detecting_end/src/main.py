@@ -604,6 +604,33 @@ def control_detection():
     action = request.json.get('action')
     mode = request.json.get('mode')
     
+    # 新增：处理重启命令（HTTP 版本）
+    if action == "restart":
+        try:
+            log_manager.info("收到重启命令（HTTP）...")
+            # 短暂延迟以便响应返回
+            time.sleep(1)
+            os.execv(sys.executable, ['python'] + sys.argv)
+        except Exception as e:
+            log_manager.error(f"重启失败: {str(e)}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+        # 正常情况下 execv 不会返回，这里给出兜底响应
+        return jsonify({"status": "success", "message": "正在重启"})
+
+    # 新增：处理动态设置拉取间隔
+    if action == "set_interval":
+        interval = request.json.get('interval')
+        if not isinstance(interval, (int, float)) or interval <= 0:
+            return jsonify({"status": "error", "message": "无效的间隔值"}), 400
+        detection_manager.update_interval(interval)
+        # 同步到配置文件，确保持久化
+        try:
+            config_manager.set('interval', interval)
+            config_manager.save_config()
+        except Exception as e:
+            log_manager.warning(f"保存间隔到配置失败: {str(e)}")
+        return jsonify({"status": "success", "message": f"拉取间隔已更新为: {interval}秒"})
+    
     # 处理模式切换命令
     if action == "change_mode":
         if mode in ["push", "pull", "both"]:
@@ -944,13 +971,116 @@ def control_buzzer():
 @app.route('/api/buzzer/status/')
 def get_buzzer_status():
     """获取蜂鸣器状态"""
-    if not buzzer_manager:
-        return jsonify({"available": False, "message": "蜂鸣器管理器未初始化"})
+    try:
+        # 对于本地部署，尝试读取硬件状态
+        import platform
+        is_windows = platform.system() == 'Windows'
+        is_linux = platform.system() == 'Linux'
         
-    return jsonify({
-        "available": True,
-        "active": buzzer_manager.is_active(),
-    })
+        # 假设在 Raspberry Pi 或 Linux 环境中，蜂鸣器通常可用
+        # 在 Windows 开发环境中，假设不可用
+        available = is_linux
+        active = False
+        
+        # 这里可以添加实际的硬件检测逻辑
+        # 例如检查 GPIO 引脚状态或相关驱动程序
+        
+        return jsonify({
+            'available': available,
+            'active': active
+        })
+    except Exception as e:
+        logger.error(f"获取蜂鸣器状态失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/light/rotate/', methods=['POST'])
+def control_light_rotate():
+    """控制节点灯光旋转"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '请求数据不能为空'}), 400
+        
+        node_id = data.get('node_id')
+        angle = data.get('angle', 90)  # 默认90度
+        
+        if node_id is None:
+            return jsonify({'error': '缺少节点ID'}), 400
+        
+        # 统一 node_id 类型
+        try:
+            node_id_int = int(node_id)
+        except Exception:
+            # 允许直接传字符串，但 NodeManager 内部已规范化
+            node_id_int = node_id
+        
+        # 验证角度范围
+        if not isinstance(angle, (int, float)) or angle < 0 or angle > 180:
+            return jsonify({'error': '角度必须在 0-180 度之间'}), 400
+        
+        # 调用节点管理器进行灯光旋转
+        success = node_manager.rotate_light(node_id_int, angle)
+        
+        if success:
+            return jsonify({
+                'message': f'节点 {node_id} 灯光旋转至 {angle} 度成功',
+                'node_id': node_id,
+                'angle': angle
+            })
+        else:
+            return jsonify({'error': f'节点 {node_id} 灯光旋转失败'}), 500
+            
+    except Exception as e:
+        logger.error(f"控制灯光旋转失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/light/status/<int:node_id>/')
+def get_light_status(node_id):
+    """获取节点灯光控制状态"""
+    try:
+        # 规范化ID为字符串以匹配配置中的键
+        node_id_str = str(node_id)
+        
+        # 检查节点是否存在
+        node_info = node_manager.get_node_info(node_id)
+        if not node_info:
+            return jsonify({'error': f'节点 {node_id} 不存在'}), 404
+        
+        # 检查节点连接状态
+        is_online = node_manager.check_node_connection(node_id)
+        
+        # 检查节点是否支持灯光控制
+        control_nodes = node_manager.get_control_nodes()
+        data_nodes = node_manager.get_data_nodes()
+        
+        supports_rotate = False
+        if node_id_str in control_nodes:
+            node_config = control_nodes[node_id_str]
+            if isinstance(node_config, dict):
+                capabilities = node_config.get('capabilities', [])
+                supports_rotate = 'rotate' in capabilities
+            else:
+                supports_rotate = True  # 兼容旧格式，默认支持
+        elif node_id_str in data_nodes:
+            supports_rotate = True  # 数据节点也可能支持旋转（向后兼容）
+        
+        # 获取默认角度和自动回正时间配置
+        light_config = config_manager.get('light_control', {})
+        default_angle = light_config.get('default_angle', 90)
+        auto_return_time = light_config.get('auto_return_time', 3)
+        
+        return jsonify({
+            'node_id': node_id,
+            'online': is_online,
+            'supports_rotate': supports_rotate,
+            'default_angle': default_angle,
+            'auto_return_time': auto_return_time,
+            'node_status': node_info.get('status', {})
+        })
+        
+    except Exception as e:
+        logger.error(f"获取节点 {node_id} 灯光状态失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # 改进清理函数，确保安全关闭WebSocket
 def cleanup():
@@ -1022,3 +1152,26 @@ if __name__ == "__main__":
     finally:
         # 确保程序退出时清理资源
         cleanup()
+
+@app.route('/api/image/last/<int:node_id>')
+def get_last_image(node_id):
+    """获取指定数据节点最近一次保存的图片"""
+    try:
+        base_dir = os.path.join(ROOT_DIR, 'captures', f'node_{node_id}')
+        if not os.path.exists(base_dir):
+            return jsonify({'error': '未找到该节点的图片目录'}), 404
+        # 仅筛选常见图片格式
+        files = [f for f in os.listdir(base_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if not files:
+            return jsonify({'error': '未找到该节点的图片'}), 404
+        # 文件名为时间戳(YYYYmmdd_HHMMSS.jpg)，按文件名倒序即可
+        files.sort(reverse=True)
+        latest_file = files[0]
+        file_path = os.path.join(base_dir, latest_file)
+        if not os.path.exists(file_path):
+            return jsonify({'error': '图片文件不存在'}), 404
+        return send_file(file_path, mimetype='image/jpeg')
+    except Exception as e:
+        if log_manager:
+            log_manager.error(f"获取节点 {node_id} 最新图片失败: {str(e)}")
+        return jsonify({'error': '内部错误', 'details': str(e)}), 500

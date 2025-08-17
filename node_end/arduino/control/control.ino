@@ -18,6 +18,10 @@ bool ledState = LOW;
 bool rotating = false;
 bool ledOverride = false;
 
+// 新增：自动回正相关
+unsigned long autoReturnAt = 0;              // 0 表示未调度
+const unsigned long autoReturnDelay = 3000;  // 3s 后回正
+
 void setup() {
   Serial.begin(115200);
 
@@ -54,6 +58,18 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  // 新增：到期自动回正到 90°
+  if (autoReturnAt && millis() >= autoReturnAt && currentAngle != 90 && !rotating) {
+    rotating = true;
+    myServo.write(90);
+    int rotateTime = abs(currentAngle - 90) * 15 / 6; // 与原估算一致
+    currentAngle = 90;
+    delay(rotateTime);
+    rotating = false;
+    autoReturnAt = 0; // 清除调度
+  }
+
   updateLed();
 }
 
@@ -154,6 +170,9 @@ void handleRotate() {
     delay(rotateTime);
     rotating = false; // 旋转结束，LED 恢复慢闪
 
+    // 新增：调度 3 秒后回正到 90°
+    autoReturnAt = millis() + autoReturnDelay;
+
     String response = "{\"status\":\"success\",\"angle\":" + String(angle) + "}";
     server.send(200, "application/json", response);
   } else {
@@ -163,8 +182,35 @@ void handleRotate() {
 }
 
 void handleStatus() {
-  String response = "{\"current_angle\":" + String(currentAngle) + ",\"wifi_status\":\"connected\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
-  server.send(200, "application/json", response);
+  // 统一结构：
+  // {
+  //   "status":"ok",
+  //   "device":{ "type":"control","ip":"...","rssi":-55,"uptime_ms":12345,"capabilities":["rotate","status_led"] },
+  //   "data":{ "current_angle":90,"rotating":false,"auto_return_ms":1234 }
+  // }
+  String ip = WiFi.localIP().toString();
+  long rssi = WiFi.RSSI();
+  unsigned long now = millis();
+  unsigned long autoRemaining = (autoReturnAt && autoReturnAt > now) ? (autoReturnAt - now) : 0;
+
+  String json = "{";
+  json += "\"status\":\"ok\",";
+  json += "\"device\":{";
+  json +=   "\"type\":\"control\",";
+  json +=   "\"ip\":\"" + ip + "\",";
+  json +=   "\"rssi\":" + String(rssi) + ",";
+  json +=   "\"uptime_ms\":" + String(now) + ",";
+  json +=   "\"capabilities\":[\"rotate\",\"status_led\"]";
+  json += "},";
+  json += "\"data\":{";
+  json +=   "\"current_angle\":" + String(currentAngle) + ",";
+  json +=   "\"rotating\":" + String(rotating ? "true" : "false") + ",";
+  json +=   "\"auto_return_ms\":" + String(autoRemaining);
+  json += "}";
+  json += "}";
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", json);
 }
 
 void handleNotFound() {
