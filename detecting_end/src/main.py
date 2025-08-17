@@ -1007,12 +1007,19 @@ def control_light_rotate():
         if node_id is None:
             return jsonify({'error': '缺少节点ID'}), 400
         
+        # 统一 node_id 类型
+        try:
+            node_id_int = int(node_id)
+        except Exception:
+            # 允许直接传字符串，但 NodeManager 内部已规范化
+            node_id_int = node_id
+        
         # 验证角度范围
         if not isinstance(angle, (int, float)) or angle < 0 or angle > 180:
             return jsonify({'error': '角度必须在 0-180 度之间'}), 400
         
         # 调用节点管理器进行灯光旋转
-        success = node_manager.rotate_light(node_id, angle)
+        success = node_manager.rotate_light(node_id_int, angle)
         
         if success:
             return jsonify({
@@ -1031,6 +1038,9 @@ def control_light_rotate():
 def get_light_status(node_id):
     """获取节点灯光控制状态"""
     try:
+        # 规范化ID为字符串以匹配配置中的键
+        node_id_str = str(node_id)
+        
         # 检查节点是否存在
         node_info = node_manager.get_node_info(node_id)
         if not node_info:
@@ -1044,14 +1054,14 @@ def get_light_status(node_id):
         data_nodes = node_manager.get_data_nodes()
         
         supports_rotate = False
-        if node_id in control_nodes:
-            node_config = control_nodes[node_id]
+        if node_id_str in control_nodes:
+            node_config = control_nodes[node_id_str]
             if isinstance(node_config, dict):
                 capabilities = node_config.get('capabilities', [])
                 supports_rotate = 'rotate' in capabilities
             else:
                 supports_rotate = True  # 兼容旧格式，默认支持
-        elif node_id in data_nodes:
+        elif node_id_str in data_nodes:
             supports_rotate = True  # 数据节点也可能支持旋转（向后兼容）
         
         # 获取默认角度和自动回正时间配置

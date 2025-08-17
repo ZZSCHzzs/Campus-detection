@@ -2824,4 +2824,47 @@ watch(connectionMode, handleModeChange);
   flex: 1;
   word-break: break-all;
 }
+/* 硬件控制部分样式 */
+.hardware-control-section {
+  background-color: #f8f9fb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #ebeef5;
+}
+
+.hardware-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.hardware-title .el-icon {
+  font-size: 18px;
+  color: #409EFF;
+}
+
+.hardware-status {
+  margin-left: auto;
+}
+
+.buzzer-controls {
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 16px;
+  border: 1px solid #ebeef5;
+}
+
+.buzzer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.buzzer-actions .el-button {
+  min-width: 90px;
+}
 </style>

@@ -30,7 +30,7 @@
     },
     "save_image": true,
     "preload_model": true,
-    "terminal_id": 3,
+    "terminal_id": 2,
     "server_url": "https://smarthit.top",
     "api_url": "https://smarthit.top/api/upload/",
     "node_config": {

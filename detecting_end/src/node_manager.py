@@ -73,6 +73,13 @@ class NodeManager:
         # 从配置中加载节点设置
         self._load_nodes()
         
+    # 新增：统一标准化 node_id 为字符串，避免 int/str 不一致导致的 key 匹配失败
+    def _normalize_node_id(self, node_id):
+        try:
+            return str(node_id)
+        except Exception:
+            return f"{node_id}"
+    
     def _load_nodes(self):
         """从配置中加载节点信息"""
         node_config = self.config_manager.get('nodes', {})
@@ -131,6 +138,7 @@ class NodeManager:
     
     def update_node_status(self, node_id, status, error=None):
         """更新节点状态"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
             if node_id in self.node_status:
                 self.node_status[node_id]['status'] = status
@@ -140,6 +148,7 @@ class NodeManager:
     
     def update_detection_count(self, node_id, count):
         """更新节点检测计数"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
             if node_id in self.node_status:
                 self.node_status[node_id]['detection_count'] = count
@@ -149,6 +158,7 @@ class NodeManager:
     
     def check_node_connection(self, node_id):
         """检查节点连接状态，并同步 /status 数据"""
+        node_id = self._normalize_node_id(node_id)
         # 首先在数据节点中查找
         node_url = None
         if node_id in self.data_nodes:
@@ -234,6 +244,7 @@ class NodeManager:
     
     def _get_node_url(self, node_id):
         """获取节点URL"""
+        node_id = self._normalize_node_id(node_id)
         # 首先在数据节点中查找
         if node_id in self.data_nodes:
             node_info = self.data_nodes[node_id]
@@ -366,6 +377,7 @@ class NodeManager:
     
     def rotate_light(self, node_id, angle=90):
         """控制节点灯光旋转"""
+        node_id = self._normalize_node_id(node_id)
         # 首先尝试在控制节点中查找
         node_url = None
         if node_id in self.control_nodes:
@@ -407,6 +419,7 @@ class NodeManager:
     
     def get_node_info(self, node_id):
         """获取节点信息"""
+        node_id = self._normalize_node_id(node_id)
         with self.lock:
             node_url = self._get_node_url(node_id)
             if node_url:
