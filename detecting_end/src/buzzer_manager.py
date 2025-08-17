@@ -15,7 +15,7 @@ class BuzzerPattern(Enum):
 class BuzzerManager:
     """蜂鸣器管理类，用于控制连接到树莓派的蜂鸣器"""
     
-    def __init__(self, pin_trigger=2, pin_echo=9, pin_buzzer=11, log_manager=None):
+    def __init__(self, pin_trigger=2, pin_echo=9, pin_buzzer=11, log_manager=None, active_low=False):
         """
         初始化蜂鸣器管理器
         
@@ -24,11 +24,13 @@ class BuzzerManager:
             pin_echo: 回声引脚号
             pin_buzzer: 蜂鸣器引脚号
             log_manager: 日志管理器实例
+            active_low: 是否为低电平触发的蜂鸣器，默认为False（高电平触发）
         """
         self.pin_trigger = pin_trigger
         self.pin_echo = pin_echo
         self.pin_buzzer = pin_buzzer
         self.log_manager = log_manager
+        self.active_low = active_low  # 新增参数，标识蜂鸣器类型
         self._buzzing = False
         self._stop_event = threading.Event()
         self._buzzer_thread = None
@@ -39,10 +41,12 @@ class BuzzerManager:
             GPIO.setup(self.pin_trigger, GPIO.OUT)
             GPIO.setup(self.pin_echo, GPIO.IN)
             GPIO.setup(self.pin_buzzer, GPIO.OUT)
-            GPIO.output(self.pin_buzzer, GPIO.LOW)  # 确保蜂鸣器开始时是关闭状态
+            
+            # 根据蜂鸣器类型设置初始状态（确保开始时不鸣叫）
+            GPIO.output(self.pin_buzzer, GPIO.HIGH if self.active_low else GPIO.LOW)
             
             if self.log_manager:
-                self.log_manager.info(f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer}")
+                self.log_manager.info(f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer}, 低电平触发={active_low}")
             
         except Exception as e:
             if self.log_manager:
@@ -72,9 +76,13 @@ class BuzzerManager:
             duration: 鸣叫时长(秒)
         """
         try:
-            GPIO.output(self.pin_buzzer, GPIO.HIGH)
+            # 根据蜂鸣器类型设置开关状态
+            on_state = GPIO.LOW if self.active_low else GPIO.HIGH
+            off_state = GPIO.HIGH if self.active_low else GPIO.LOW
+            
+            GPIO.output(self.pin_buzzer, on_state)  # 开始鸣叫
             time.sleep(duration)
-            GPIO.output(self.pin_buzzer, GPIO.LOW)
+            GPIO.output(self.pin_buzzer, off_state)  # 停止鸣叫
         except Exception as e:
             if self.log_manager:
                 self.log_manager.error(f"蜂鸣器鸣叫失败: {str(e)}")
@@ -114,9 +122,10 @@ class BuzzerManager:
             self._stop_event.set()
             self._buzzing = False
             
-            # 确保蜂鸣器关闭
+            # 确保蜂鸣器关闭 - 使用正确的关闭状态
             try:
-                GPIO.output(self.pin_buzzer, GPIO.LOW)
+                off_state = GPIO.HIGH if self.active_low else GPIO.LOW
+                GPIO.output(self.pin_buzzer, off_state)
             except Exception as e:
                 if self.log_manager:
                     self.log_manager.error(f"关闭蜂鸣器失败: {str(e)}")
@@ -170,9 +179,10 @@ class BuzzerManager:
             if self.log_manager:
                 self.log_manager.error(f"蜂鸣器工作线程异常: {str(e)}")
         finally:
-            # 确保蜂鸣器关闭
+            # 确保蜂鸣器关闭 - 使用正确的关闭状态
             try:
-                GPIO.output(self.pin_buzzer, GPIO.LOW)
+                off_state = GPIO.HIGH if self.active_low else GPIO.LOW
+                GPIO.output(self.pin_buzzer, off_state)
                 self._buzzing = False
             except Exception as e:
                 if self.log_manager:
@@ -185,13 +195,17 @@ class BuzzerManager:
         Args:
             pattern: 模式列表，每项为(开启时长, 关闭时长)
         """
+        # 根据蜂鸣器类型确定开关状态
+        on_state = GPIO.LOW if self.active_low else GPIO.HIGH
+        off_state = GPIO.HIGH if self.active_low else GPIO.LOW
+        
         for on_time, off_time in pattern:
             if self._stop_event.is_set():
                 break
                 
             # 开启蜂鸣器
             try:
-                GPIO.output(self.pin_buzzer, GPIO.HIGH)
+                GPIO.output(self.pin_buzzer, on_state)
                 time.sleep(on_time)
             except Exception as e:
                 if self.log_manager:
@@ -199,7 +213,7 @@ class BuzzerManager:
             
             # 关闭蜂鸣器
             try:
-                GPIO.output(self.pin_buzzer, GPIO.LOW)
+                GPIO.output(self.pin_buzzer, off_state)
                 time.sleep(off_time)
             except Exception as e:
                 if self.log_manager:
