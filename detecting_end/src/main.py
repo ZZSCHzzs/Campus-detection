@@ -604,6 +604,33 @@ def control_detection():
     action = request.json.get('action')
     mode = request.json.get('mode')
     
+    # 新增：处理重启命令（HTTP 版本）
+    if action == "restart":
+        try:
+            log_manager.info("收到重启命令（HTTP）...")
+            # 短暂延迟以便响应返回
+            time.sleep(1)
+            os.execv(sys.executable, ['python'] + sys.argv)
+        except Exception as e:
+            log_manager.error(f"重启失败: {str(e)}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+        # 正常情况下 execv 不会返回，这里给出兜底响应
+        return jsonify({"status": "success", "message": "正在重启"})
+
+    # 新增：处理动态设置拉取间隔
+    if action == "set_interval":
+        interval = request.json.get('interval')
+        if not isinstance(interval, (int, float)) or interval <= 0:
+            return jsonify({"status": "error", "message": "无效的间隔值"}), 400
+        detection_manager.update_interval(interval)
+        # 同步到配置文件，确保持久化
+        try:
+            config_manager.set('interval', interval)
+            config_manager.save_config()
+        except Exception as e:
+            log_manager.warning(f"保存间隔到配置失败: {str(e)}")
+        return jsonify({"status": "success", "message": f"拉取间隔已更新为: {interval}秒"})
+    
     # 处理模式切换命令
     if action == "change_mode":
         if mode in ["push", "pull", "both"]:

@@ -283,46 +283,46 @@ export const localTerminalCustomMethods = {
   
   // 灯光控制相关方法
   controlLightRotate: async (data) => {
-      return http.local.post('/api/light/rotate/', data);
+      return await http.local.post('/api/light/rotate/', data);
   },
   getLightStatus: async (nodeId) => {
-      return http.local.get(`/api/light/status/${nodeId}`);
+      return await http.local.get(`/api/light/status/${nodeId}`);
   },
   
   // 获取终端状态
   getStatus: async () => {
-    return await http.local.get('/api/status');
+    return await http.local.get('/api/status/');
   },
   
   // 获取配置
   getConfig: async () => {
-    return await http.local.get('/api/config');
+    return await http.local.get('/api/config/');
   },
   
   // 更新配置
   updateConfig: async (config: any) => {
-    return await http.local.post('/api/config', config);
+    return await http.local.post('/api/config/', config);
   },
   
   // 获取日志
   getLogs: async () => {
-    return await http.local.get('/api/logs');
+    return await http.local.get('/api/logs/');
   },
   
   // 发送控制命令
   sendCommand: async (action: string, params = {}) => {
-    return await http.local.post('/api/control', { action, ...params });
+    return await http.local.post('/api/control/', { action, ...params });
   },
   
   // 获取终端信息
   getInfo: async () => {
-    return await http.local.get('/api/info');
+    return await http.local.get('/api/info/');
   },
   
   // 获取环境信息
   getEnvironmentInfo: async (): Promise<EnvironmentInfo> => {
     try {
-      return await http.local.get<EnvironmentInfo>('/api/environment');
+      return await http.local.get<EnvironmentInfo>('/api/environment/');
     } catch (error) {
       ElMessage.warning('未检测到本地终端服务');
       return {
@@ -343,7 +343,7 @@ export const localTerminalCustomMethods = {
   // 检查本地终端是否可用
   checkLocalAvailable: async () => {
     try {
-      await http.local.get('/api/heartbeat', { timeout: 3000 });
+      await http.local.get('/api/heartbeat/', { timeout: 3000 });
       return true;
     } catch (error) {
       console.error('本地终端不可用:', error);

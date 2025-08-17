@@ -47,6 +47,8 @@ class SystemMonitor:
             "terminal_id": 1,  # 默认终端ID
             "co2_level": -1,  # CO2浓度(ppm)，-1表示无效或未检测到
             "co2_status": "未连接",  # CO2传感器状态：正常、异常、未连接
+            # 新增：完整节点详情映射，供前端悬浮展示
+            "node_details": {},
         }
         
         # 帧率计算
@@ -237,6 +239,8 @@ class SystemMonitor:
                 nodes_status[node_id] = status_text
 
             self.status["nodes"] = nodes_status
+            # 新增：暴露完整节点详情映射
+            self.status["node_details"] = status_map or {}
         except Exception as e:
             logger.error(f"更新摄像头状态失败: {str(e)}")
             # 记录更详细的错误信息以便调试

@@ -89,7 +89,9 @@ const status = reactive({
   terminal_online: false,
   last_detection: null,
   mode: 'both',
-  terminal_id: null
+  terminal_id: null,
+  // 新增：节点详细映射（来自后端）
+  node_details: {} as Record<string | number, any>
 });
 
 // 终端配置
@@ -243,7 +245,9 @@ const loadTerminalStatus = async () => {
       terminal_online: data.terminal_online ?? false,
       last_detection: data.last_detection ?? null,
       mode: data.mode ?? 'both',
-      terminal_id: data.terminal_id ?? null
+      terminal_id: data.terminal_id ?? null,
+      // 新增：节点详情
+      node_details: data.node_details || {}
     };
     Object.assign(status, statusData);
     terminal.status = status.model_loaded || status.push_running || status.pull_running;
@@ -881,6 +885,40 @@ const getCapabilityLabel = (cap: string) => {
   return item ? item.label : cap;
 };
 
+const deviceTypeLabel = (t?: string) => t === 'control' ? '控制节点' : t === 'data' ? '数据节点' : '未知';
+
+const formatUptimeMs = (ms?: number) => {
+  if (!ms && ms !== 0) return '';
+  const sec = Math.floor((ms as number) / 1000);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const parts = [];
+  if (d) parts.push(`${d}天`);
+  if (h) parts.push(`${h}小时`);
+  if (m) parts.push(`${m}分`);
+  parts.push(`${s}秒`);
+  return parts.join(' ');
+};
+
+const getFrameSizeLabel = (framesize?: number) => {
+  if (framesize === undefined || framesize === null) return '';
+  const item = (frameSizes as any)[framesize];
+  return item ? item.label : String(framesize);
+};
+
+// 新增：获取某个节点的详细信息（兼容 number/string 键）
+const getNodeDetail = (id: string | number) => {
+  const details: any = status.node_details || {};
+  if (details[id] !== undefined) return details[id];
+  const asNum = Number(id);
+  if (!Number.isNaN(asNum) && details[asNum] !== undefined) return details[asNum];
+  const asStr = String(id);
+  if (details[asStr] !== undefined) return details[asStr];
+  return {};
+};
+
 onMounted(async () => {
   loading.value = true;
 
@@ -1491,20 +1529,58 @@ watch(connectionMode, handleModeChange);
 
             <el-empty v-if="Object.keys(status.nodes).length === 0" description="暂无节点数据" :image-size="80"></el-empty>
             <div v-else class="node-grid">
-              <div v-for="[id, nodeStatus] in Object.entries(status.nodes)" :key="id" class="node-item"
-                :class="{ 'node-active': nodeStatus === '在线' }">
-                <div class="node-icon">
-                  <el-icon>
-                    <VideoCamera />
-                  </el-icon>
-                </div>
-                <div class="node-info">
-                  <div class="node-id">节点 #{{ id }}</div>
-                  <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
-                    {{ nodeStatus }}
-                  </el-tag>
-                </div>
-              </div>
+              <template v-for="[id, nodeStatus] in Object.entries(status.nodes)" :key="id">
+                <el-tooltip placement="top" effect="dark" :hide-after="0">
+                  <template #content>
+                    <div class="node-tip">
+                      <div class="row"><span class="k">类型</span><span class="v">{{ deviceTypeLabel(getNodeDetail(id)?.device_type) }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.ip"><span class="k">IP</span><span class="v">{{ getNodeDetail(id).ip }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.rssi !== undefined"><span class="k">信号</span><span class="v">{{ getNodeDetail(id).rssi }} dBm</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.last_seen"><span class="k">最近</span><span class="v">{{ getNodeDetail(id).last_seen }}</span></div>
+                      <div class="row" v-if="getNodeDetail(id)?.uptime_ms !== undefined"><span class="k">运行</span><span class="v">{{ formatUptimeMs(getNodeDetail(id).uptime_ms) }}</span></div>
+                      <div class="row" v-if="Array.isArray(getNodeDetail(id)?.capabilities) && getNodeDetail(id).capabilities.length">
+                        <span class="k">功能</span>
+                        <span class="v">
+                          <el-tag v-for="cap in getNodeDetail(id).capabilities" :key="cap" size="small" style="margin-right:4px">{{ getCapabilityLabel(cap) }}</el-tag>
+                        </span>
+                      </div>
+                      <!-- 业务数据关键字段（按类型做友好展示） -->
+                      <template v-if="getNodeDetail(id)?.data">
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'control' && getNodeDetail(id).data.current_angle !== undefined">
+                          <span class="k">角度</span><span class="v">{{ getNodeDetail(id).data.current_angle }}°</span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'control' && getNodeDetail(id).data.rotating !== undefined">
+                          <span class="k">旋转</span><span class="v">{{ getNodeDetail(id).data.rotating ? '进行中' : '停止' }}</span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'data' && (getNodeDetail(id).data.temperature !== undefined || getNodeDetail(id).data.humidity !== undefined)">
+                          <span class="k">环境</span>
+                          <span class="v">
+                            <span v-if="getNodeDetail(id).data.temperature !== undefined">T {{ getNodeDetail(id).data.temperature }}°C</span>
+                            <span v-if="getNodeDetail(id).data.humidity !== undefined" style="margin-left:8px">H {{ getNodeDetail(id).data.humidity }}%</span>
+                          </span>
+                        </div>
+                        <div class="row" v-if="getNodeDetail(id)?.device_type === 'data' && getNodeDetail(id).data.framesize !== undefined">
+                          <span class="k">分辨率</span><span class="v">{{ getFrameSizeLabel(getNodeDetail(id).data.framesize) }}</span>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <div class="node-item" :class="{ 'node-active': nodeStatus === '在线' }">
+                    <div class="node-icon">
+                      <el-icon>
+                        <VideoCamera />
+                      </el-icon>
+                    </div>
+                    <div class="node-info">
+                      <div class="node-id">节点 #{{ id }}</div>
+                      <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
+                        {{ nodeStatus }}
+                      </el-tag>
+                    </div>
+                  </div>
+                </el-tooltip>
+              </template>
             </div>
           </div>
         </div>
@@ -1832,6 +1908,7 @@ watch(connectionMode, handleModeChange);
                     <el-col :span="buzzerForm.pattern === 'SINGLE_BEEP' ? 12 : 6">
                       <el-form-item :label="buzzerForm.pattern === 'SINGLE_BEEP' ? '持续时间' : '重复次数'">
                         <el-input-number 
+                          
                           v-if="buzzerForm.pattern === 'SINGLE_BEEP'"
                           v-model="buzzerForm.duration" 
                           :min="0.1" 
@@ -2728,47 +2805,23 @@ watch(connectionMode, handleModeChange);
     margin-bottom: 8px;
   }
 }
-/* 硬件控制部分样式 */
-.hardware-control-section {
-  background-color: #f8f9fb;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
-  border: 1px solid #ebeef5;
+.node-tip {
+  min-width: 220px;
 }
-
-.hardware-title {
+.node-tip .row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  font-weight: 500;
-  color: #2c3e50;
+  margin: 2px 0;
+  font-size: 12px;
 }
-
-.hardware-title .el-icon {
-  font-size: 18px;
-  color: #409EFF;
+.node-tip .k {
+  color: #909399;
+  width: 52px;
+  flex: 0 0 52px;
 }
-
-.hardware-status {
-  margin-left: auto;
-}
-
-.buzzer-controls {
-  background-color: #fff;
-  border-radius: 6px;
-  padding: 16px;
-  border: 1px solid #ebeef5;
-}
-
-.buzzer-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 16px;
-}
-
-.buzzer-actions .el-button {
-  min-width: 90px;
+.node-tip .v {
+  color: #303133;
+  flex: 1;
+  word-break: break-all;
 }
 </style>
