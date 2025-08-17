@@ -283,10 +283,10 @@ export const localTerminalCustomMethods = {
   
   // 灯光控制相关方法
   controlLightRotate: async (data) => {
-      return localApi.post('/api/light/rotate/', data);
+      return http.local.post('/api/light/rotate/', data);
   },
   getLightStatus: async (nodeId) => {
-      return localApi.get(`/api/light/status/${nodeId}`);
+      return http.local.get(`/api/light/status/${nodeId}`);
   },
   
   // 获取终端状态

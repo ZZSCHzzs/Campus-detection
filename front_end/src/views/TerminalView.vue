@@ -129,14 +129,14 @@ const newDataNode = reactive({
   name: '',
   ip: '',
   port: 80,
-  capabilities: '' // 逗号分隔输入
+  capabilities: [] as string[]
 });
 const newControlNode = reactive({
   id: '',
   name: '',
   ip: '',
   port: 80,
-  capabilities: '' // 逗号分隔输入
+  capabilities: [] as string[]
 });
 
 // 终端日志
@@ -437,15 +437,18 @@ const addDataNode = () => {
     ElMessage.warning(`ID ${nodeId} 已存在`);
     return;
   }
-  const caps = newDataNode.capabilities
-    ? newDataNode.capabilities.split(',').map(s => s.trim()).filter(Boolean)
-    : [];
-  config.data_nodes.push({ id: nodeId, name: newDataNode.name || `数据节点${nodeId}`, ip: newDataNode.ip, port: Number(newDataNode.port), capabilities: caps });
+  config.data_nodes.push({
+    id: nodeId,
+    name: newDataNode.name || `数据节点${nodeId}`,
+    ip: newDataNode.ip,
+    port: Number(newDataNode.port),
+    capabilities: Array.isArray(newDataNode.capabilities) ? [...newDataNode.capabilities] : []
+  });
   newDataNode.id = '';
   newDataNode.name = '';
   newDataNode.ip = '';
   newDataNode.port = 80;
-  newDataNode.capabilities = '';
+  newDataNode.capabilities = [];
 };
 
 // 添加控制节点
@@ -459,15 +462,18 @@ const addControlNode = () => {
     ElMessage.warning(`ID ${nodeId} 已存在`);
     return;
   }
-  const caps = newControlNode.capabilities
-    ? newControlNode.capabilities.split(',').map(s => s.trim()).filter(Boolean)
-    : [];
-  config.control_nodes.push({ id: nodeId, name: newControlNode.name || `控制节点${nodeId}`, ip: newControlNode.ip, port: Number(newControlNode.port), capabilities: caps });
+  config.control_nodes.push({
+    id: nodeId,
+    name: newControlNode.name || `控制节点${nodeId}`,
+    ip: newControlNode.ip,
+    port: Number(newControlNode.port),
+    capabilities: Array.isArray(newControlNode.capabilities) ? [...newControlNode.capabilities] : []
+  });
   newControlNode.id = '';
   newControlNode.name = '';
   newControlNode.ip = '';
   newControlNode.port = 80;
-  newControlNode.capabilities = '';
+  newControlNode.capabilities = [];
 };
 
 // 移除数据节点
@@ -799,7 +805,7 @@ const lightOffAngle = ref(65);
 const fetchLightStatus = async () => {
   if (connectionMode.value !== 'local') return;
   try {
-    const { data } = await apiService.localTerminal.getLightStatus(lightStatus.node_id);
+    const  data : any  = await apiService.localTerminal.getLightStatus(lightStatus.node_id);
     lightStatus.node_id = data.node_id ?? lightStatus.node_id;
     lightStatus.online = data.online ?? false;
     lightStatus.supports_rotate = data.supports_rotate ?? false;
@@ -858,6 +864,21 @@ const turnLightOff = async () => {
     console.error('关灯失败', e);
     ElMessage.error('关灯失败');
   }
+};
+
+// 统一的节点功能枚举（值用于后端，label用于前端显示中文）
+const NODE_CAPABILITIES = [
+  { value: 'stream', label: '视频流' },
+  { value: 'capture', label: '截图' },
+  { value: 'environment', label: '环境' },
+  { value: 'control', label: '控制' },
+  { value: 'rotate', label: '旋转' },
+  { value: 'status_led', label: '状态灯' },
+];
+
+const getCapabilityLabel = (cap: string) => {
+  const item = NODE_CAPABILITIES.find(i => i.value === cap);
+  return item ? item.label : cap;
 };
 
 onMounted(async () => {
@@ -1602,12 +1623,26 @@ watch(connectionMode, handleModeChange);
                     <div class="node-list-container">
                       <el-table :data="config.data_nodes" size="small" height="200px" class="node-table">
                         <el-table-column prop="id" label="ID" width="60" align="center" />
-                        <el-table-column prop="name" label="名称" width="140" show-overflow-tooltip />
-                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip />
-                        <el-table-column prop="port" label="端口" width="80" align="center" />
-                        <el-table-column label="功能" min-width="160">
+                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
                           <template #default="scope">
-                            <el-tag v-for="cap in (scope.row.capabilities || [])" :key="cap" size="small" style="margin-right:4px">{{ cap }}</el-tag>
+                            <el-input v-model="scope.row.name" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.ip" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="port" label="端口" width="90" align="center">
+                          <template #default="scope">
+                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="功能" min-width="210">
+                          <template #default="scope">
+                            <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
+                              <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                            </el-select>
                           </template>
                         </el-table-column>
                         <el-table-column label="操作" width="140" align="center">
@@ -1627,7 +1662,9 @@ watch(connectionMode, handleModeChange);
                       <el-input v-model="newDataNode.name" placeholder="名称" class="node-name-input" size="small" />
                       <el-input v-model="newDataNode.ip" placeholder="IP" class="node-ip-input" size="small" />
                       <el-input v-model.number="newDataNode.port" placeholder="端口" class="node-port-input" size="small" />
-                      <el-input v-model="newDataNode.capabilities" placeholder="功能(逗号分隔)" class="node-cap-input" size="small" />
+                      <el-select v-model="newDataNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 180px;">
+                        <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                      </el-select>
                       <el-button type="primary" @click="addDataNode" size="small" class="add-button">
                         <el-icon><Plus /></el-icon>添加数据节点
                       </el-button>
@@ -1640,12 +1677,26 @@ watch(connectionMode, handleModeChange);
                     <div class="node-list-container">
                       <el-table :data="config.control_nodes" size="small" height="200px" class="node-table">
                         <el-table-column prop="id" label="ID" width="60" align="center" />
-                        <el-table-column prop="name" label="名称" width="140" show-overflow-tooltip />
-                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip />
-                        <el-table-column prop="port" label="端口" width="80" align="center" />
-                        <el-table-column label="功能" min-width="160">
+                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
                           <template #default="scope">
-                            <el-tag v-for="cap in (scope.row.capabilities || [])" :key="cap" size="small" style="margin-right:4px">{{ cap }}</el-tag>
+                            <el-input v-model="scope.row.name" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                          <template #default="scope">
+                            <el-input v-model="scope.row.ip" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column prop="port" label="端口" width="90" align="center">
+                          <template #default="scope">
+                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="功能" min-width="210">
+                          <template #default="scope">
+                            <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
+                              <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                            </el-select>
                           </template>
                         </el-table-column>
                         <el-table-column label="操作" width="80" align="center">
@@ -1662,7 +1713,9 @@ watch(connectionMode, handleModeChange);
                       <el-input v-model="newControlNode.name" placeholder="名称" class="node-name-input" size="small" />
                       <el-input v-model="newControlNode.ip" placeholder="IP" class="node-ip-input" size="small" />
                       <el-input v-model.number="newControlNode.port" placeholder="端口" class="node-port-input" size="small" />
-                      <el-input v-model="newControlNode.capabilities" placeholder="功能(逗号分隔)" class="node-cap-input" size="small" />
+                      <el-select v-model="newControlNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 180px;">
+                        <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
+                      </el-select>
                       <el-button type="primary" @click="addControlNode" size="small" class="add-button">
                         <el-icon><Plus /></el-icon>添加控制节点
                       </el-button>
@@ -1813,13 +1866,13 @@ watch(connectionMode, handleModeChange);
                 
                 <div class="buzzer-actions">
                   <el-button-group>
-                    <el-button type="primary" @click="beep" :disabled="buzzerActive">
+                    <el-button type="primary" @click="beep" :disabled="connectionMode !== 'local' || buzzerActive">
                       <el-icon><Bell /></el-icon> 简单鸣叫
                     </el-button>
-                    <el-button type="success" @click="startBuzzer" :disabled="buzzerActive">
+                    <el-button type="success" @click="startBuzzer" :disabled="connectionMode !== 'local' || buzzerActive">
                       <el-icon><Warning /></el-icon> 启动模式
                     </el-button>
-                    <el-button type="danger" @click="stopBuzzer" :disabled="!buzzerActive">
+                    <el-button type="danger" @click="stopBuzzer" :disabled="connectionMode !== 'local'">
                       <el-icon><Mute /></el-icon> 停止鸣叫
                     </el-button>
                   </el-button-group>
@@ -1845,17 +1898,17 @@ watch(connectionMode, handleModeChange);
                   <el-row :gutter="12">
                     <el-col :span="8">
                       <el-form-item label="节点ID">
-                        <el-input-number v-model="lightStatus.node_id" :min="0" :step="1" :disabled="connectionMode === 'local' ? !lightStatus.online : false" @change="fetchLightStatus" />
+                        <el-input-number v-model="lightStatus.node_id" :min="0" :step="1" @change="fetchLightStatus" />
                       </el-form-item>
                     </el-col>
                     <el-col :span="10">
                       <el-form-item label="角度(°)">
-                        <el-slider v-model="lightAngle" :min="0" :max="180" :step="5" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" />
+                        <el-slider v-model="lightAngle" :min="0" :max="180" :step="5" />
                       </el-form-item>
                     </el-col>
                     <el-col :span="6">
                       <el-form-item label=" ">
-                        <el-button type="primary" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" @click="rotateLight">
+                        <el-button type="primary" @click="rotateLight" :disabled="connectionMode !== 'local'">
                           <el-icon><MagicStick /></el-icon> 旋转
                         </el-button>
                       </el-form-item>
@@ -1874,8 +1927,8 @@ watch(connectionMode, handleModeChange);
                     </el-col>
                     <el-col :span="8">
                       <el-form-item label=" ">
-                        <el-button type="success" @click="turnLightOn" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false">开灯</el-button>
-                        <el-button type="warning" @click="turnLightOff" :disabled="connectionMode === 'local' ? (!lightStatus.online || !lightStatus.supports_rotate) : false" style="margin-left: 8px;">关灯</el-button>
+                        <el-button type="success" @click="turnLightOn" :disabled="connectionMode !== 'local'">开灯</el-button>
+                        <el-button type="warning" @click="turnLightOff" :disabled="connectionMode !== 'local'" style="margin-left: 8px;">关灯</el-button>
                       </el-form-item>
                     </el-col>
                   </el-row>
@@ -1894,6 +1947,7 @@ watch(connectionMode, handleModeChange);
                 </el-icon> CO2浓度监测</h3>
               <el-tag :type="getCO2StatusType(status.co2_status)" size="small" class="status-chip">
                 {{ status.co2_status }}
+
               </el-tag>
             </div>
 
@@ -2459,9 +2513,6 @@ watch(connectionMode, handleModeChange);
   width: 80px;
 }
 
-.node-url-input {
-  flex-grow: 1;
-}
 
 .add-button {
   min-width: 80px;
@@ -2653,7 +2704,10 @@ watch(connectionMode, handleModeChange);
   }
 
   .node-id-input,
-  .node-url-input {
+  .node-name-input,
+  .node-ip-input,
+  .node-port-input,
+  .node-cap-input {
     width: 100%;
   }
 

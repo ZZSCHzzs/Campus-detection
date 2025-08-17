@@ -55,8 +55,6 @@ class BuzzerManager:
                 self.log_manager.error(
                     f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 lgpio 并具有访问GPIO权限（例如将当前用户加入 gpio 组）"
                 )
-            else:
-                print(f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 lgpio 并具有访问GPIO权限")
 
     def cleanup(self):
         """清理资源"""
@@ -110,9 +108,9 @@ class BuzzerManager:
         # 创建并启动蜂鸣器线程
         self._buzzer_thread = threading.Thread(
             target=self._buzzer_worker,
-            args=(pattern, repeat, custom_pattern)
+            args=(pattern, repeat, custom_pattern),
+            daemon=True
         )
-        self._buzzer_thread.daemon = True
         self._buzzer_thread.start()
         
         if self.log_manager:
@@ -120,13 +118,12 @@ class BuzzerManager:
     
     def stop_buzzer(self):
         """停止蜂鸣器鸣叫"""
+        # 即便不可用也复位内部状态
+        self._stop_event.set()
         if not self._available or not getattr(self, "_buzzer", None):
-            # 确保状态复位
-            self._stop_event.set()
             self._buzzing = False
             return
         if self._buzzing:
-            self._stop_event.set()
             self._buzzing = False
             try:
                 self._buzzer.off()
