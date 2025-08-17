@@ -1034,7 +1034,7 @@ def control_light_rotate():
         logger.error(f"控制灯光旋转失败: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/light/status/<int:node_id>')
+@app.route('/api/light/status/<int:node_id>/')
 def get_light_status(node_id):
     """获取节点灯光控制状态"""
     try:
