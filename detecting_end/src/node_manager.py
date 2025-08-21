@@ -65,9 +65,9 @@ class NodeManager:
     def __init__(self, config_manager):
         """初始化节点管理器"""
         self.config_manager = config_manager
-        self.data_nodes = {}  # 存储数据节点信息
-        self.control_nodes = {}  # 存储控制节点信息
-        self.node_status = {}  # 存储节点状态
+        self.data_nodes = {}  # 存储数据节点信息（key 统一为 str）
+        self.control_nodes = {}  # 存储控制节点信息（key 统一为 str）
+        self.node_status = {}  # 存储节点状态（key 统一为 str）
         self.lock = Lock()
         
         # 从配置中加载节点设置
@@ -87,32 +87,41 @@ class NodeManager:
         with self.lock:
             # 兼容旧版本配置格式
             if isinstance(node_config, dict) and 'data_nodes' in node_config:
-                # 新版结构
-                self.data_nodes = node_config.get('data_nodes', {}).copy()
-                self.control_nodes = node_config.get('control_nodes', {}).copy()
+                # 新版结构，标准化键为字符串
+                raw_data = node_config.get('data_nodes', {}) or {}
+                raw_ctrl = node_config.get('control_nodes', {}) or {}
+                self.data_nodes = {self._normalize_node_id(k): v for k, v in raw_data.items()}
+                self.control_nodes = {self._normalize_node_id(k): v for k, v in raw_ctrl.items()}
             else:
-                # 旧版结构：直接是 {id: url} 映射，当作数据节点处理
-                self.data_nodes = node_config.copy()
+                # 旧版结构：直接是 {id: url} 映射，当作数据节点处理，标准化键为字符串
+                self.data_nodes = {self._normalize_node_id(k): v for k, v in (node_config or {}).items()}
                 self.control_nodes = {}
             
-            # 初始化所有节点状态（数据节点和控制节点）
+            # 初始化/迁移所有节点状态（数据节点和控制节点），使用标准化后的键
+            new_status = {}
             all_nodes = list(self.data_nodes.keys()) + list(self.control_nodes.keys())
-            for node_id in all_nodes:
-                if node_id not in self.node_status:
-                    self.node_status[node_id] = {
-                        'status': '未知',
-                        'last_capture': None,
-                        'detection_count': 0,
-                        'error': None,
-                        # 新增的标准化status字段
-                        'last_seen': None,
-                        'device_type': '未知',
-                        'ip': None,
-                        'rssi': None,
-                        'uptime_ms': None,
-                        'capabilities': [],
-                        'data': None,
-                    }
+            for nid in all_nodes:
+                # 迁移旧 key（若存在）
+                prev = self.node_status.get(nid)
+                if prev is None:
+                    # 可能旧的 int 键
+                    prev = self.node_status.get(nid if isinstance(nid, int) else None)
+                
+                st = dict(prev or {})
+                st.setdefault('status', '未知')
+                st.setdefault('last_capture', None)
+                st.setdefault('detection_count', 0)
+                st.setdefault('error', None)
+                st.setdefault('last_seen', None)
+                # 根据归属设置默认类型
+                st.setdefault('device_type', 'data' if nid in self.data_nodes else ('control' if nid in self.control_nodes else '未知'))
+                st.setdefault('ip', None)
+                st.setdefault('rssi', None)
+                st.setdefault('uptime_ms', None)
+                st.setdefault('capabilities', [])
+                st.setdefault('data', None)
+                new_status[nid] = st
+            self.node_status = new_status
         
         logger.info(f"已加载 {len(self.data_nodes)} 个数据节点和 {len(self.control_nodes)} 个控制节点")
     
@@ -132,7 +141,7 @@ class NodeManager:
             return self.control_nodes.copy()
     
     def get_node_status(self):
-        """获取所有节点状态"""
+        """获取所有节点状态（详细信息，供前端 node_details 使用）"""
         with self.lock:
             return self.node_status.copy()
     
@@ -140,21 +149,35 @@ class NodeManager:
         """更新节点状态"""
         node_id = self._normalize_node_id(node_id)
         with self.lock:
-            if node_id in self.node_status:
-                self.node_status[node_id]['status'] = status
-                self.node_status[node_id]['error'] = error
-                return True
-            return False
+            if node_id not in self.node_status:
+                # 若不存在则初始化，确保后续能被前端读到
+                self.node_status[node_id] = {
+                    'status': '未知',
+                    'last_capture': None,
+                    'detection_count': 0,
+                    'error': None,
+                    'last_seen': None,
+                    'device_type': 'data' if node_id in self.data_nodes else ('control' if node_id in self.control_nodes else '未知'),
+                    'ip': None,
+                    'rssi': None,
+                    'uptime_ms': None,
+                    'capabilities': [],
+                    'data': None,
+                }
+            self.node_status[node_id]['status'] = status
+            self.node_status[node_id]['error'] = error
+            return True
     
     def update_detection_count(self, node_id, count):
         """更新节点检测计数"""
         node_id = self._normalize_node_id(node_id)
         with self.lock:
-            if node_id in self.node_status:
-                self.node_status[node_id]['detection_count'] = count
-                self.node_status[node_id]['last_capture'] = datetime.datetime.now().strftime("%H:%M:%S")
-                return True
-            return False
+            if node_id not in self.node_status:
+                # 确保存在
+                self.update_node_status(node_id, '在线')
+            self.node_status[node_id]['detection_count'] = count
+            self.node_status[node_id]['last_capture'] = datetime.datetime.now().strftime("%H:%M:%S")
+            return True
     
     def check_node_connection(self, node_id):
         """检查节点连接状态，并同步 /status 数据"""
@@ -164,13 +187,13 @@ class NodeManager:
         if node_id in self.data_nodes:
             node_info = self.data_nodes[node_id]
             if isinstance(node_info, dict):
-                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+                node_url = f"http://{node_info.get('ip','')}:{node_info.get('port', 80)}"
             else:
                 node_url = str(node_info)  # 兼容旧格式
         elif node_id in self.control_nodes:
             node_info = self.control_nodes[node_id]
             if isinstance(node_info, dict):
-                node_url = f"http://{node_info['ip']}:{node_info.get('port', 80)}"
+                node_url = f"http://{node_info.get('ip','')}:{node_info.get('port', 80)}"
             else:
                 node_url = str(node_info)  # 兼容旧格式
         
@@ -190,9 +213,14 @@ class NodeManager:
 
                 with self.lock:
                     st = self.node_status.get(node_id, {})
+                    # 若不存在则初始化
+                    if not st:
+                        st = {}
                     st['status'] = '在线'
                     st['error'] = None
                     st['last_seen'] = datetime.datetime.now().isoformat(timespec='seconds')
+                    # 补充默认类型（如果尚未设置）
+                    st.setdefault('device_type', 'data' if node_id in self.data_nodes else ('control' if node_id in self.control_nodes else '未知'))
 
                     if isinstance(payload, dict):
                         device = payload.get('device', {}) or {}

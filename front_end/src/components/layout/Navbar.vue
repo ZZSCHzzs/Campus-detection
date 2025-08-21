@@ -234,7 +234,7 @@ const content = ref([
     title: '云小瞻',
     path: '/ai',
     icon: 'MagicStick',
-    hideOnMobile: false,
+    hideOnMobile: true,
   },
   {
     index: '2',
@@ -269,7 +269,6 @@ const content = ref([
     title: '终端管理',
     path: '/terminal',
     icon: 'Monitor',
-    adminOnly: true,
     hideOnMobile: true
   }
 ])

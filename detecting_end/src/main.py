@@ -535,6 +535,20 @@ def get_status():
         'pull_running': detection_status.get('pull_running', False),
         'mode': detection_status.get('mode', 'both')
     })
+    
+    # 新增：对齐前端期望的节点字段
+    try:
+        node_details = node_manager.get_node_status()  # 详细信息
+        # 简化状态映射：{ id: '在线' | '离线' | '错误' | '未知' }
+        nodes_map = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+        status['node_details'] = node_details
+        status['nodes'] = nodes_map
+    except Exception as e:
+        log_manager.error(f"构建节点状态返回值失败: {str(e)}")
+        # 兜底字段，防止前端报错
+        status.setdefault('node_details', {})
+        status.setdefault('nodes', {})
+    
     return jsonify(status)
 
 # API路由 - 系统信息

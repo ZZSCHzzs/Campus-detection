@@ -52,12 +52,14 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'djoser',
     'channels',
-    'django_celery_beat',  # 使用 Celery Beat 进行定时任务
+    'django_celery_beat',
+    'drf_spectacular',
 ]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {
@@ -257,3 +259,10 @@ CACHES = {
 # Pydantic 配置
 import pydantic.v1.config
 pydantic.v1.config.PYDANTIC_VALIDATOR_REUSE = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "慧感云瞻 项目API接口文档",
+    "DESCRIPTION": "接口文档",
+    "VERSION": "1.0.0",
+}
+

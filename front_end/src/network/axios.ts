@@ -158,7 +158,7 @@ export const defaultApi = apiCore.createInstance('default', {
 
 // 创建本地API实例
 export const localApi = apiCore.createInstance('local', {
-  baseURL: 'http://localhost:5000',
+  baseURL: 'http://192.168.1.100:5000',
   timeout: 5000,
   mode: ApiMode.LOCAL
 });

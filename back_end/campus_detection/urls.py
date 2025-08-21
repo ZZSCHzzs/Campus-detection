@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from webapi.views import *
+from drf_spectacular.views import SpectacularAPIView
 
 router = DefaultRouter()
 router.register(r'users', CustomUserViewSet)
@@ -27,4 +28,5 @@ urlpatterns = [
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
     path('api/llm/', include('llm.urls')),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
 ]

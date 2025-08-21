@@ -1577,6 +1577,14 @@ watch(connectionMode, handleModeChange);
                       <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
                         {{ nodeStatus }}
                       </el-tag>
+                      <!-- 新增：数据节点上次检测结果直接展示 -->
+                      <div
+                        class="node-last-detect"
+                        v-if="getNodeDetail(id)?.device_type === 'data' && getNodeDetail(id)?.detection_count !== undefined"
+                      >
+                        上次：{{ getNodeDetail(id).detection_count }} 人
+                        <span v-if="getNodeDetail(id)?.last_capture"> · {{ getNodeDetail(id).last_capture }}</span>
+                      </div>
                     </div>
                   </div>
                 </el-tooltip>
@@ -2473,15 +2481,11 @@ watch(connectionMode, handleModeChange);
   flex: 1;
 }
 
-.node-id {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #2c3e50;
-  margin-bottom: 3px;
-}
-
-.node-status {
-  font-size: 0.7rem;
+/* 新增：上次检测结果样式 */
+.node-last-detect {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #606266;
 }
 
 /* 配置表单样式 */
