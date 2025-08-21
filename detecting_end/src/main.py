@@ -37,6 +37,7 @@ ws_client = None
 system_monitor = None  # 添加系统监控实例
 buzzer_manager = None  # 添加蜂鸣器管理实例
 
+logger = logging.getLogger('main')
 # 初始化应用
 def initialize_app():
     """初始化应用程序"""
@@ -55,6 +56,9 @@ def initialize_app():
     
     # 初始化日志管理器，使用根目录下的日志目录
     log_manager = LogManager(log_dir=os.path.join(ROOT_DIR, 'logs'), max_memory_logs=1000)
+
+    # 将标准 logging 输出桥接到 LogManager 的内存与 WS
+    log_manager.attach_bridge()
     
     # 初始化摄像头管理器
     node_manager = NodeManager(config_manager)
@@ -72,10 +76,8 @@ def initialize_app():
             pin_buzzer=11,  # 蜂鸣器引脚
             log_manager=log_manager
         )
-        log_manager.info("蜂鸣器管理器初始化成功")
     except Exception as e:
-        log_manager.error(f"蜂鸣器管理器初始化失败: {str(e)}")
-        log_manager.error(f"系统将继续运行，但蜂鸣器功能将不可用")
+        logger.error(f"蜂鸣器初始化失败: {str(e)}，系统将继续运行，但蜂鸣器功能将不可用")
         buzzer_manager = None
     
     # 初始化检测管理器 - 仅初始化，暂不启动检测线程
@@ -100,13 +102,13 @@ def initialize_app():
     )
     system_monitor.start()
     
-    log_manager.info("应用程序初始化完成")
+    logger.info("应用程序初始化完成")
     
     # 等待一段时间，确保所有组件就绪
     time.sleep(2)
     
     # 系统初始化完成后，启动检测线程
-    log_manager.info("系统准备就绪，开始启动检测线程...")
+    logger.info("系统准备就绪，开始启动检测线程...")
     detection_manager.start_detection()
     
     return True
@@ -139,29 +141,29 @@ def init_websocket_client():
             def exception_handler(loop, context):
                 exception = context.get('exception')
                 if exception:
-                    log_manager.error(f'WebSocket异常: {str(exception)}')
+                    logger.error(f'WebSocket异常: {str(exception)}')
                     import traceback
-                    log_manager.error(f'异常详情: {traceback.format_exc()}')
+                    logger.error(f'异常详情: {traceback.format_exc()}')
                 else:
-                    log_manager.error(f'WebSocket异常: {context.get("message", "未知错误")}')
+                    logger.error(f'WebSocket异常: {context.get("message", "未知错误")}')
                 
                 # 当客户端仍在运行时，尝试重启客户端连接
                 if client.running:
-                    log_manager.info("正在尝试重新连接WebSocket服务器...")
+                    logger.info("正在尝试重新连接WebSocket服务器...")
                     try:
                         # 创建任务重启连接
                         loop.create_task(client.stop())
                         loop.create_task(client.start())
                     except Exception as e:
-                        log_manager.error(f"重新连接WebSocket失败: {str(e)}")
-            
+                        logger.error(f"重新连接WebSocket失败: {str(e)}")
+
             loop.set_exception_handler(exception_handler)
             
             async def run_client():
                 try:
                     connected = await client.start()
                     if connected:
-                        log_manager.info('WebSocket连接成功')
+                        logger.info('WebSocket连接成功')
 
                         # 发送初始状态
                         try:
@@ -240,8 +242,6 @@ async def handle_ws_command(command_data):
     command = command_data.get('command')
     params = command_data.get('params', {})
     
-    log_manager.info(f"接收到WebSocket命令: {command}, 参数: {params}")
-    
     try:
         if command == "start":
             # 开始指定模式的检测
@@ -280,7 +280,7 @@ async def handle_ws_command(command_data):
             success = (mode == "push" and push_success) or (mode == "pull" and pull_success) or (mode == "both" and (push_success or pull_success))
                  
             # 添加验证，确保状态正确更新
-            log_manager.info(f"停止后状态: push_running={detection_manager.push_running}, pull_running={detection_manager.pull_running}")
+            logger.info(f"停止后状态: push_running={detection_manager.push_running}, pull_running={detection_manager.pull_running}")
             
             # 发送更新后的状态
             status_data = detection_manager.get_system_status()
@@ -303,14 +303,14 @@ async def handle_ws_command(command_data):
             if mode in ["push", "pull", "both"]:
                 detection_manager.change_mode(mode)
             else:
-                log_manager.warning(f"无效的模式: {mode}")
+                logger.warning(f"无效的模式: {mode}")
         
         elif command == "set_interval":
             interval = params.get("interval")
             if isinstance(interval, (int, float)) and interval > 0:
                 detection_manager.update_interval(interval)
             else:
-                log_manager.warning(f"无效的间隔值: {interval}")        
+                logger.warning(f"无效的间隔值: {interval}")        
         
         elif command == "update_nodes":
             nodes = params.get("nodes")
@@ -323,10 +323,10 @@ async def handle_ws_command(command_data):
                 node_manager._load_nodes()
                 
             else:
-                log_manager.warning(f"无效的摄像头配置: {nodes}")
+                logger.warning(f"无效的摄像头配置: {nodes}")
         
         elif command == "restart":
-            log_manager.info("正在重启服务...")
+            logger.info("正在重启服务...")
             time.sleep(2)  # 模拟重启延迟
             os.execv(sys.executable, ['python'] + sys.argv)
         
@@ -346,17 +346,17 @@ async def handle_ws_command(command_data):
                 # 确保所有值都是可序列化的
                 config_data = make_json_serializable(config_data)
                 
-                log_manager.info(f"返回配置数据: {len(str(config_data))} 字节")
+                logger.info(f"返回配置数据: {len(str(config_data))} 字节")
                 
                 # 通过WebSocket发送配置
                 send_success = await ws_client.send_command_response(command, config_data, success=True)
                 if not send_success:
-                    log_manager.warning("通过WebSocket发送配置失败")
-                                
+                    logger.warning("通过WebSocket发送配置失败")
+
             except Exception as e:
-                log_manager.error(f"处理get_config命令失败: {str(e)}")
-                log_manager.error(f"异常堆栈: {traceback.format_exc()}")
-                
+                logger.error(f"处理get_config命令失败: {str(e)}")
+                logger.error(f"异常堆栈: {traceback.format_exc()}")
+
                 # 发送错误响应
                 await ws_client.send_command_response(
                     command, 
@@ -370,18 +370,18 @@ async def handle_ws_command(command_data):
                 # 获取最近的日志
                 count = params.get("count", 100)  # 默认获取100条日志
                 logs_data = log_manager.get_logs(count)
-                
-                log_manager.info(f"返回 {len(logs_data)} 条日志数据")
-                
+
+                logger.info(f"返回 {len(logs_data)} 条日志数据")
+
                 # 通过WebSocket发送日志批次
                 send_success = await ws_client.send_command_response(command, logs_data, success=True)
                 if not send_success:
-                    log_manager.warning("通过WebSocket发送日志失败")
-                                
+                    logger.warning("通过WebSocket发送日志失败")
+
             except Exception as e:
-                log_manager.error(f"处理get_logs命令失败: {str(e)}")
-                log_manager.error(f"异常堆栈: {traceback.format_exc()}")
-                
+                logger.error(f"处理get_logs命令失败: {str(e)}")
+                logger.error(f"异常堆栈: {traceback.format_exc()}")
+
                 # 发送错误响应
                 await ws_client.send_command_response(
                     command, 
@@ -443,23 +443,23 @@ async def handle_ws_command(command_data):
             changed = config_manager.update(config_data)
             if changed:
                 config_manager.save_config()
-                log_manager.info("配置已更新并保存")
+                logger.info("配置已更新并保存")
                 
                 # 如果摄像头配置变更，重新加载摄像头
                 if 'nodes' in config_data:
                     node_manager._load_nodes()
-                    log_manager.info("摄像头配置已重新加载")
-                
+                    logger.info("摄像头配置已重新加载")
+
                 # 如果模式变更，应用新模式
                 if 'mode' in config_data and config_data['mode'] != old_config.get('mode'):
                     detection_manager.change_mode(config_data['mode'])
-                    log_manager.info(f"检测模式已更改为: {config_data['mode']}")
-                
+                    logger.info(f"检测模式已更改为: {config_data['mode']}")
+
                 # 如果拉取间隔变更，更新
                 if 'interval' in config_data and config_data['interval'] != old_config.get('interval'):
                     detection_manager.update_interval(config_data['interval'])
-                    log_manager.info(f"拉取间隔已更新为: {config_data['interval']}秒")
-                                
+                    logger.info(f"拉取间隔已更新为: {config_data['interval']}秒")
+
                 # 发送更新后的状态
                 status_data = detection_manager.get_system_status()
                 status_data['terminal_id'] = config_manager.get('terminal_id')
@@ -471,14 +471,14 @@ async def handle_ws_command(command_data):
                 await ws_client.send_command_response(command, {"success": True, "changed": False}, success=True)
         
         else:
-            log_manager.warning(f"未知的WebSocket命令: {command}")
+            logger.warning(f"未知的WebSocket命令: {command}")
 
             await ws_client.send_command_response(command, {"error": f"未知的命令: {command}"}, success=False)
             
     except Exception as e:
         error_msg = f"执行WebSocket命令 {command} 时出错: {str(e)}"
-        log_manager.error(error_msg)
-        log_manager.error(f"异常堆栈: {traceback.format_exc()}")
+        logger.error(error_msg)
+        logger.error(f"异常堆栈: {traceback.format_exc()}")
 
         
         # 发送错误响应
@@ -493,7 +493,7 @@ async def handle_ws_command(command_data):
             status_data['terminal_id'] = config_manager.get('terminal_id')
             await ws_client.send_status(status_data)
         except Exception as status_err:
-            log_manager.error(f"发送状态更新失败: {str(status_err)}")
+            logger.error(f"发送状态更新失败: {str(status_err)}")
 
 # 新增函数: 确保数据可JSON序列化
 def make_json_serializable(obj):
@@ -986,25 +986,15 @@ def control_buzzer():
 def get_buzzer_status():
     """获取蜂鸣器状态"""
     try:
-        # 对于本地部署，尝试读取硬件状态
-        import platform
-        is_windows = platform.system() == 'Windows'
-        is_linux = platform.system() == 'Linux'
-        
-        # 假设在 Raspberry Pi 或 Linux 环境中，蜂鸣器通常可用
-        # 在 Windows 开发环境中，假设不可用
-        available = is_linux
-        active = False
-        
-        # 这里可以添加实际的硬件检测逻辑
-        # 例如检查 GPIO 引脚状态或相关驱动程序
-        
+        # 优先使用蜂鸣器管理器的真实状态
+        available = bool(buzzer_manager and getattr(buzzer_manager, "_available", False))
+        active = bool(buzzer_manager and buzzer_manager.is_active())
         return jsonify({
             'available': available,
             'active': active
         })
     except Exception as e:
-        logger.error(f"获取蜂鸣器状态失败: {e}")
+        log_manager.error(f"获取蜂鸣器状态失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/light/rotate/', methods=['POST'])
@@ -1043,9 +1033,8 @@ def control_light_rotate():
             })
         else:
             return jsonify({'error': f'节点 {node_id} 灯光旋转失败'}), 500
-            
     except Exception as e:
-        logger.error(f"控制灯光旋转失败: {e}")
+        log_manager.error(f"控制灯光旋转失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/light/status/<int:node_id>/')
@@ -1093,7 +1082,7 @@ def get_light_status(node_id):
         })
         
     except Exception as e:
-        logger.error(f"获取节点 {node_id} 灯光状态失败: {e}")
+        log_manager.error(f"获取节点 {node_id} 灯光状态失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 # 改进清理函数，确保安全关闭WebSocket

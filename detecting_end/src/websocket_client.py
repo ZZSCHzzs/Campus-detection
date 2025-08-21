@@ -296,23 +296,28 @@ class TerminalWebSocketClient:
             # 调用命令处理回调
             if self.on_command:
                 try:
-                    # 增加详细日志，确保命令处理过程可追踪
-                    logger.info(f"正在处理命令: {command} 开始")
                     await self.on_command({
                         'command': command,
                         'params': params
                     })
-                    logger.info(f"命令处理完成: {command}")
                 except Exception as e:
                     logger.error(f"执行命令回调时出错: {str(e)}")
                     # 添加异常堆栈信息以便调试
                     import traceback
                     logger.error(f"异常堆栈: {traceback.format_exc()}")
         elif message_type == 'status' or message_type == 'new_log' or message_type == 'logs_batch':
-            # 这些是服务端返回的状态更新和日志信息，只需记录日志，不需要特殊处理
-            # 避免处理这些消息时又向服务端发送数据，造成循环
             logger.debug(f"收到服务端状态/日志反馈: {message_type}")
-            
+        elif message_type == 'command_response':
+            # 根据布尔值显示“成功/失败”
+            success = data.get('success')
+            if success is None:
+                success = (data.get('result') is True)
+            status_text = '成功' if success else '失败'
+            logger.info(f"命令响应（{data.get('command')}): {status_text}")
+        elif message_type == 'connection_status':
+            status = data.get('status')
+            id = data.get('terminal_id')
+            logger.info(f"连接状态: {status}, ID: {id}")
         else:
             # 其他消息类型
             logger.info(f"收到消息: {data}")

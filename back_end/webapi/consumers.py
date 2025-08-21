@@ -52,55 +52,9 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         
         logger.info(f"客户端已连接到终端 {self.terminal_id} 的WebSocket - {self.client_info[0]}:{self.client_info[1]}")
         
-        # 添加: 启动连接心跳检查任务 
+        # 启动连接心跳检查任务 
         self.heartbeat_check_task = asyncio.create_task(self.heartbeat_check_loop())
-        
-        # 如果不是检测端连接，主动发送最新日志
-        if not self.is_detector:
-            # 从缓存获取最新日志并发送
-            cache_key = f"terminal:{self.terminal_id}:logs"
-            cached_logs = cache.get(cache_key)
-            if cached_logs:
-                await self.send(text_data=json.dumps({
-                    'type': 'logs_batch',
-                    'logs': cached_logs[:100],  # 最多发送100条日志
-                    'timestamp': timezone.now().isoformat()
-                }))
-        
-        # 如果是新的检测端连接，主动请求状态更新
-        # 延迟2秒发送，确保检测端准备好接收命令
-        await asyncio.sleep(2)
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                'type': 'send_command',
-                'command': 'get_status',
-                'params': {},
-                'timestamp': timezone.now().isoformat()
-            }
-        )
-        
-        # 同时请求配置信息
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                'type': 'send_command',
-                'command': 'get_config',
-                'params': {},
-                'timestamp': timezone.now().isoformat()
-            }
-        )
-        
-        # 同时请求日志信息
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                'type': 'send_command',
-                'command': 'get_logs',
-                'params': {'count': 100},  # 请求最近100条日志
-                'timestamp': timezone.now().isoformat()
-            }
-        )
+
     
     async def disconnect(self, close_code):
         """处理WebSocket断开连接"""
@@ -381,7 +335,6 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 'message': {
                     'type': 'command_response',
                     'command': command,
-                    'result': result,
                     'success': success,
                     'timestamp': timezone.now().isoformat()
                 }

@@ -71,21 +71,26 @@ class SystemMonitor:
         self.co2_enabled = config_manager.get('co2_enabled', True) if config_manager else True
         self.co2_last_read_time = 0
         self.co2_read_interval = config_manager.get('co2_read_interval', 30) if config_manager else 30  # CO2读取间隔（秒）
-        
+        self.co2_fail_count = 0  # 连续失败计数
+
         if self.co2_enabled:
             try:
-                self.co2_reader = SGP30Reader()
-                self.status["co2_status"] = "正常"
-                logger.info("CO2传感器初始化成功")
-                if self.log_manager:
-                    self.log_manager.info("CO2传感器初始化成功", source="monitor")
+                # 传入统一日志管理器
+                self.co2_reader = SGP30Reader(log_manager=self.log_manager)
+                if hasattr(self.co2_reader, 'is_available') and not self.co2_reader.is_available():
+                    # 硬件/依赖不可用时直接标记未连接并禁用
+                    self.status["co2_status"] = "未连接"
+                    self.co2_enabled = False
+                    logger.warning("CO2传感器不可用，监控已禁用")
+                else:
+                    self.status["co2_status"] = "正常"
+                    logger.info("CO2传感器初始化成功")
             except Exception as e:
                 logger.error(f"CO2传感器初始化失败: {str(e)}")
                 self.status["co2_status"] = "异常"
                 self.co2_enabled = False
-                if self.log_manager:
-                    self.log_manager.error(f"CO2传感器初始化失败: {str(e)}", source="monitor")
-        
+                logger.error(f"CO2传感器初始化失败: {str(e)}")
+
         if config_manager:
             self.last_config = config_manager.get_all()
             self.last_config_hash = self._get_config_hash()
@@ -253,6 +258,13 @@ class SystemMonitor:
         if not self.co2_enabled or not self.co2_reader:
             return
 
+        # 若传感器运行中变为不可用，直接禁用
+        if hasattr(self.co2_reader, 'is_available') and not self.co2_reader.is_available():
+            self.status["co2_status"] = "未连接"
+            self.co2_enabled = False
+            self._safe_log('warning', "CO2传感器不可用，停止后续读取")
+            return
+
         current_time = time.time()
 
         # 检查是否到了读取CO2数据的时间
@@ -267,38 +279,35 @@ class SystemMonitor:
             if co2_ppm >= 0:  # 有效读数
                 self.status["co2_level"] = co2_ppm
                 self.status["co2_status"] = "正常"
+                self.co2_fail_count = 0
                 logger.debug(f"CO2读数: {co2_ppm} ppm")
 
-                # 记录显著变化（对比更新前的上次读数）
+                # 记录显著变化
                 if prev_level >= 0 and abs(co2_ppm - prev_level) > 100:
-                    if self.log_manager:
-                        self.log_manager.info(f"CO2浓度变化: {co2_ppm} ppm", source="monitor")
+                    self._safe_log('info', f"CO2浓度变化: {co2_ppm} ppm")
 
             else:  # 读取失败
-                logger.warning("CO2传感器读取失败，尝试重新初始化")
+                self.co2_fail_count += 1
                 self.status["co2_status"] = "异常"
+                logger.warning(f"CO2传感器读取失败（连续{self.co2_fail_count}次）")
 
-                # 尝试重新初始化传感器
-                try:
-                    self.co2_reader = SGP30Reader()
-                    self.status["co2_status"] = "正常"
-                    logger.info("CO2传感器重新初始化成功")
-                except Exception as reinit_error:
-                    logger.error(f"CO2传感器重新初始化失败: {str(reinit_error)}")
+                # 连续失败达到阈值后禁用，不再尝试重建
+                if self.co2_fail_count >= 3:
                     self.co2_enabled = False
-
+                    self.status["co2_status"] = "未连接"
+                    self._safe_log('warning', "CO2传感器连续失败，已禁用监控")
+            # 更新时间戳
             self.co2_last_read_time = current_time
 
         except Exception as e:
             logger.error(f"更新CO2数据失败: {str(e)}")
             self.status["co2_status"] = "异常"
-
-            # 如果连续失败，暂时禁用CO2传感器
-            if current_time - self.co2_last_read_time > self.co2_read_interval * 3:
-                logger.warning("CO2传感器连续失败，暂时禁用")
+            self.co2_fail_count += 1
+            if self.co2_fail_count >= 3:
                 self.co2_enabled = False
                 self.status["co2_status"] = "未连接"
-    
+                self._safe_log('warning', "CO2传感器连续失败，已禁用监控")
+
     def _update_frame_rate(self):
         """更新帧率计算"""
         current_time = time.time()

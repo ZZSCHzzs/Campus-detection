@@ -28,12 +28,14 @@ class ColoredFormatter(logging.Formatter):
     """彩色日志格式化器"""
     
     def format(self, record):
+        # 先获取原始消息用于判定
+        raw_msg = record.getMessage()
         # 获取日志级别对应的颜色
         if record.levelno == logging.DEBUG:
             color = COLORS['debug']
         elif record.levelno == logging.INFO:
-            # 检查是否是检测日志
-            if record.getMessage().startswith('Detection'):
+            # 修正：支持 [Detection] 前缀 或 标记字段
+            if raw_msg.startswith('[Detection]') or getattr(record, 'is_detection', False):
                 color = COLORS['detection']
             else:
                 color = COLORS['info']
@@ -69,6 +71,21 @@ class LogManager:
         self.logger = logging.getLogger('log_manager')
         self.logger.info("日志管理器初始化完成")
     
+    # 新增：统一的内存日志追加方法
+    def _append_memory_log(self, level, message, source=None):
+        log_entry = {
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'level': level,
+            'message': message,
+            'source': source or 'system',
+            'color_class': CSS_COLORS.get(level, '')
+        }
+        with self.lock:
+            if len(self.memory_logs) >= self.max_memory_logs:
+                self.memory_logs.pop()  # 移除最老的
+            self.memory_logs.insert(0, log_entry)  # 新日志放前面
+        return log_entry
+
     def _setup_logger(self):
         """设置日志记录器"""
         # 获取根日志记录器
@@ -99,24 +116,11 @@ class LogManager:
     
     def log(self, level, message, source=None):
         """记录日志并通过WebSocket发送（如果可用）"""
-        # 创建日志条目，添加CSS颜色类
-        log_entry = {
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'level': level,
-            'message': message,
-            'source': source or 'system',
-            'color_class': CSS_COLORS.get(level, '')  # 添加CSS颜色类
-        }
+        # 先写内存
+        self._append_memory_log(level, message, source)
         
-        # 更新内存中的日志列表
-        with self.lock:
-            if len(self.memory_logs) >= self.max_memory_logs:
-                self.memory_logs.pop()  # 移除最老的日志
-            self.memory_logs.insert(0, log_entry)  # 新日志添加到开头
-        
-        # 写入日志文件
+        # 写入日志文件（走标准 logging）
         logger = logging.getLogger('System')
-        
         if level == 'debug':
             logger.debug(f"{message}")
         elif level == 'info':
@@ -128,11 +132,22 @@ class LogManager:
         elif level == 'detection':
             logger.info(f"[Detection] {message}")
         
-        
-        # 如果WebSocket客户端可用且已连接，通过WebSocket发送日志
-        if self.ws_client and hasattr(self.ws_client, 'is_connected') and self.ws_client.is_connected():
+        # 通过 WebSocket 发送（兼容属性或方法）
+        connected = False
+        if self.ws_client:
+            if hasattr(self.ws_client, 'is_connected'):
+                try:
+                    connected = bool(self.ws_client.is_connected())
+                except Exception:
+                    connected = False
+            elif hasattr(self.ws_client, 'connected'):
+                try:
+                    connected = bool(getattr(self.ws_client, 'connected'))
+                except Exception:
+                    connected = False
+        if connected:
             self._send_log_to_websocket(level, message, source)
-    
+
     def _send_log_to_websocket(self, level, message, source=None):
         """安全地通过WebSocket发送日志，处理异步问题"""
         try:
@@ -197,12 +212,9 @@ class LogManager:
     
     def debug(self, message, source=None):
         """记录调试级别日志"""
-        self._log('debug', message, source)
-        
-        # 如果WebSocket客户端连接且不在安静模式，发送日志
-        if self.ws_client and self.ws_client.is_connected() and not self.quiet_mode:
-            self._send_log_to_server('debug', message, source)
-    
+        # 修复：使用统一入口 self.log，移除未定义属性引用
+        self.log('debug', message, source)
+
     def get_logs(self, count=None):
         """获取最近的日志"""
         with self.lock:
@@ -236,20 +248,10 @@ class LogManager:
     def _log_sync(self, level, message, source=None):
         """同步记录日志的内部方法，不使用asyncio"""
         try:
-            # 创建日志条目
-            log_entry = {
-                'timestamp': datetime.now().isoformat(),
-                'level': level,
-                'message': message,
-                'source': source or 'system'
-            }
-            
-            # 将日志添加到内存缓存
-            self.memory_logs.append(log_entry)
-            if len(self.memory_logs) > self.max_memory_logs:
-                self.memory_logs.pop(0)
-            
-            # 使用系统日志记录器记录日志
+            # 写入内存（带锁）
+            self._append_memory_log(level, message, source)
+
+            # 使用内部记录器写入标准日志
             if level == 'info':
                 self.logger.info(f"[{source or 'system'}] {message}")
             elif level == 'error':
@@ -258,7 +260,54 @@ class LogManager:
                 self.logger.warning(f"[{source or 'system'}] {message}")
             elif level == 'debug':
                 self.logger.debug(f"[{source or 'system'}] {message}")
-            
         except Exception as e:
-            # 如果记录日志失败，至少尝试使用系统日志记录这个错误
             self.logger.error(f"记录日志失败: {str(e)}, 原始消息: {message}")
+
+    # 新增：把标准 logging 的记录转入 LogManager 的桥接 Handler（避免递归）
+    class StandardLoggingBridge(logging.Handler):
+        def __init__(self, manager: "LogManager"):
+            super().__init__()
+            self.manager = manager
+
+        def emit(self, record: logging.LogRecord):
+            try:
+                # 忽略来自 LogManager 自己或 System 的日志，避免环回
+                if record.name in ('log_manager', 'System'):
+                    return
+                msg = record.getMessage()
+                lvlno = record.levelno
+                if lvlno >= logging.ERROR:
+                    lvl = 'error'
+                elif lvlno >= logging.WARNING:
+                    lvl = 'warning'
+                elif lvlno >= logging.INFO:
+                    lvl = 'info'
+                else:
+                    lvl = 'debug'
+                # 仅写入内存并尝试 WS，不再回写 logging，防止递归
+                self.manager._append_memory_log(lvl, msg, source=record.name)
+                # WS 尝试发送（按当前连接状态）
+                connected = False
+                wc = self.manager.ws_client
+                if wc:
+                    if hasattr(wc, 'is_connected'):
+                        try:
+                            connected = bool(wc.is_connected())
+                        except Exception:
+                            connected = False
+                    elif hasattr(wc, 'connected'):
+                        try:
+                            connected = bool(getattr(wc, 'connected'))
+                        except Exception:
+                            connected = False
+                if connected:
+                    self.manager._send_log_to_websocket(lvl, msg, source=record.name)
+            except Exception:
+                pass
+
+    def attach_bridge(self):
+        """将桥接 Handler 安装到根 logger（幂等）"""
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, LogManager.StandardLoggingBridge) for h in root_logger.handlers):
+            root_logger.addHandler(LogManager.StandardLoggingBridge(self))
+

@@ -1,15 +1,9 @@
 import time
 import threading
 from enum import Enum
-from gpiozero import Buzzer, Device
+import logging
 
-# 优先使用 lgpio 引脚工厂（无需守护进程）
-try:
-    from gpiozero.pins.lgpio import LGPIOFactory
-    Device.pin_factory = LGPIOFactory()
-except Exception:
-    # 回退到默认引脚工厂（例如 RPi.GPIO）
-    pass
+logger = logging.getLogger('buzzer_manager')
 
 class BuzzerPattern(Enum):
     """蜂鸣器模式枚举"""
@@ -43,18 +37,33 @@ class BuzzerManager:
         self._available = True
 
         try:
-            # 设置active_high=False表示蜂鸣器为低电平触发
-            self._buzzer = Buzzer(self.pin_buzzer, active_high=False)
-            if self.log_manager:
-                self.log_manager.info(
-                    f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer} (低电平触发)"
+            # 懒加载 gpiozero 相关依赖
+            try:
+                from gpiozero import Buzzer as _GpioZeroBuzzer, Device as _GpioZeroDevice
+                try:
+                    from gpiozero.pins.lgpio import LGPIOFactory as _LGPIOFactory
+                    _GpioZeroDevice.pin_factory = _LGPIOFactory()
+                except Exception:
+                    pass
+            except Exception as import_err:
+                # 硬件库缺失，禁用蜂鸣器
+                self._buzzer = None
+                self._available = False
+                logger.warning(
+                    f"未检测到gpiozero库，蜂鸣器已禁用（Windows或无GPIO环境可忽略）：{str(import_err)}"
                 )
+                return
+
+            # 设置active_high=False表示蜂鸣器为低电平触发
+            self._buzzer = _GpioZeroBuzzer(self.pin_buzzer, active_high=False)
+            logger.info(
+                f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer} (低电平触发)"
+            )
         except Exception as e:
             self._buzzer = None
             self._available = False
-            if self.log_manager:
-                self.log_manager.error(
-                    f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 lgpio 并具有访问GPIO权限（例如将当前用户加入 gpio 组）"
+            logger.error(
+                    f"初始化蜂鸣器管理器失败: {str(e)}；已禁用蜂鸣器。请确认系统已安装 gpiozero/lgpio 并具有GPIO权限"
                 )
 
     def cleanup(self):
@@ -64,25 +73,28 @@ class BuzzerManager:
         try:
             if getattr(self, "_buzzer", None):
                 self._buzzer.close()
-            if self.log_manager:
-                self.log_manager.info("蜂鸣器资源已清理")
+            logger.info("蜂鸣器资源已清理")
         except Exception as e:
-            if self.log_manager:
-                self.log_manager.error(f"清理蜂鸣器资源失败: {str(e)}")
+            logger.error(f"清理蜂鸣器资源失败: {str(e)}")
 
     def beep(self, duration=0.5):
         """使蜂鸣器鸣叫指定时长"""
         if not self._available or not getattr(self, "_buzzer", None):
-            if self.log_manager:
-                self.log_manager.warning("蜂鸣器不可用，beep 请求已忽略")
+            logger.warning("蜂鸣器不可用，beep 请求已忽略")
             return
         try:
             self._buzzer.on()
             time.sleep(duration)
             self._buzzer.off()
         except Exception as e:
-            if self.log_manager:
-                self.log_manager.error(f"蜂鸣器鸣叫失败: {str(e)}")
+            logger.error(f"蜂鸣器鸣叫失败: {str(e)}")
+            return
+        try:
+            self._buzzer.on()
+            time.sleep(duration)
+            self._buzzer.off()
+        except Exception as e:
+            logger.error(f"蜂鸣器鸣叫失败: {str(e)}")
 
     def start_buzzer(self, pattern=BuzzerPattern.SINGLE_BEEP, repeat=1, custom_pattern=None):
         """
@@ -94,8 +106,7 @@ class BuzzerManager:
             custom_pattern: 自定义模式列表，每项为(开启时长, 关闭时长)
         """
         if not self._available or not getattr(self, "_buzzer", None):
-            if self.log_manager:
-                self.log_manager.warning("蜂鸣器不可用，start_buzzer 请求已忽略")
+            logger.warning("蜂鸣器不可用，start_buzzer 请求已忽略")
             return
         # 如果已经在鸣叫，先停止
         if self._buzzing:
@@ -113,10 +124,9 @@ class BuzzerManager:
             daemon=True
         )
         self._buzzer_thread.start()
-        
-        if self.log_manager:
-            self.log_manager.info(f"蜂鸣器已启动 - 模式: {pattern.name}, 重复次数: {repeat}")
-    
+
+        logger.info(f"蜂鸣器已启动 - 模式: {pattern.name}, 重复次数: {repeat}")
+
     def stop_buzzer(self):
         """停止蜂鸣器鸣叫"""
         # 即便不可用也复位内部状态
@@ -129,10 +139,8 @@ class BuzzerManager:
             try:
                 self._buzzer.off()
             except Exception as e:
-                if self.log_manager:
-                    self.log_manager.error(f"关闭蜂鸣器失败: {str(e)}")
-            if self.log_manager:
-                self.log_manager.info("蜂鸣器已停止")
+                logger.error(f"关闭蜂鸣器失败: {str(e)}")
+            logger.info("蜂鸣器已停止")
 
     def _buzzer_worker(self, pattern, repeat, custom_pattern=None):
         """
@@ -177,16 +185,14 @@ class BuzzerManager:
                     time.sleep(0.5)
                     
         except Exception as e:
-            if self.log_manager:
-                self.log_manager.error(f"蜂鸣器工作线程异常: {str(e)}")
+            logger.error(f"蜂鸣器工作线程异常: {str(e)}")
         finally:
             try:
                 if getattr(self, "_buzzer", None):
                     self._buzzer.off()
                 self._buzzing = False
             except Exception as e:
-                if self.log_manager:
-                    self.log_manager.error(f"关闭蜂鸣器失败: {str(e)}")
+                logger.error(f"关闭蜂鸣器失败: {str(e)}")
 
     def _play_pattern(self, pattern):
         """
@@ -204,14 +210,12 @@ class BuzzerManager:
                 self._buzzer.on()
                 time.sleep(on_time)
             except Exception as e:
-                if self.log_manager:
-                    self.log_manager.error(f"开启蜂鸣器失败: {str(e)}")
+                logger.error(f"开启蜂鸣器失败: {str(e)}")
             try:
                 self._buzzer.off()
                 time.sleep(off_time)
             except Exception as e:
-                if self.log_manager:
-                    self.log_manager.error(f"关闭蜂鸣器失败: {str(e)}")
+                logger.error(f"关闭蜂鸣器失败: {str(e)}")
 
     def is_active(self):
         """返回蜂鸣器是否处于激活状态"""
