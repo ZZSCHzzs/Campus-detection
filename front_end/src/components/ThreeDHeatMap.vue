@@ -548,6 +548,91 @@ const areaDefinitions = ref([
     position: { x: 8.72, y: 11.5, z: 11.4 },
     radius: 2 // 球体半径
   },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: 10, y: 9.6, z: -8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: 10, y: 9.6, z: -8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: 10, y: 9.6, z: -8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: 10, y: 9.6, z: -8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 10, z: -7},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 10, z: -7},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 10, z: -7},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 10, z: -7},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 10, z: -7},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 13.7, z: -6.8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 13.7, z: -6.8},
+    radius: 1 // 球体半径
+  },
+  {
+    id: 'area4',
+    name: '正心41',
+    description: 't',
+    position: { x: -16, y: 13.7, z: -6.8},
+    radius: 1 // 球体半径
+  },
+  
   
 ]);
 
@@ -2105,12 +2190,14 @@ const createHeatmapPointCloud = () => {
       size: 1,
       vertexColors: true,
       transparent: true,
-      opacity: 1,
+      opacity: 0.999,
       blending: THREE.NormalBlending,
       sizeAttenuation: true,
+      depthTest: false,
       depthWrite: false,
       map: particleTexture,
-      alphaTest: 0.01
+      alphaTest: 0.01,
+      toneMapped: true
     });
     // 创建点云对象并添加到场景
     const particles = new THREE.Points(particleGeometry, particleMaterial);
@@ -2166,11 +2253,11 @@ const createParticlesFromDensityField = (densityField) => {
     // 对密度值进行非线性增强，让高密度区域的概率增长更快
 
     // 添加基础概率确保低密度区域也能生成粒子
-    const baseProbability = 0.0000005;  // 降低基础概率，让低密度区域更稀疏
-    const densityWeight = 0.9999995;    // 增加密度权重
+    const baseProbability = 0;  // 降低基础概率，让低密度区域更稀疏
+    const densityWeight = 1;    // 增加密度权重
 
     // 计算综合概率
-    const generationProbability = baseProbability + normalizedDensity * densityWeight;
+    const generationProbability = baseProbability + normalizedDensity * densityWeight * 2.3;
 
     // 基于综合概率决定是否在此位置生成粒子
     if (Math.random() < generationProbability) {

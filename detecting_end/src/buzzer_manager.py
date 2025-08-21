@@ -43,10 +43,11 @@ class BuzzerManager:
         self._available = True
 
         try:
-            self._buzzer = Buzzer(self.pin_buzzer)
+            # 设置active_high=False表示蜂鸣器为低电平触发
+            self._buzzer = Buzzer(self.pin_buzzer, active_high=False)
             if self.log_manager:
                 self.log_manager.info(
-                    f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer}"
+                    f"蜂鸣器管理器初始化完成 - 引脚: 触发={pin_trigger}, 回声={pin_echo}, 蜂鸣器={pin_buzzer} (低电平触发)"
                 )
         except Exception as e:
             self._buzzer = None
