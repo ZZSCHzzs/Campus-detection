@@ -129,22 +129,8 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                         'timestamp': timezone.now().isoformat()
                     }
                 )
-            
-            # 处理不同类型的消息
-            if message_type == 'system_status':
-                await self.handle_system_status(data)
-            elif message_type == 'log':
-                await self.handle_log_message(data)
-            elif message_type == 'heartbeat':
-                await self.handle_heartbeat(data)
-            elif message_type == 'nodes_data':
-                await self.handle_nodes_data(data)
-            elif message_type == 'command_response':
-                # 添加命令响应处理
-                await self.handle_command_response(data)
-            else:
-                # 对于其他类型的消息，只记录不转发
-                logger.debug(f"收到未知类型消息: {message_type}")
+                # 新增：检测端已确认上线后，立即下发待发命令队列
+                await self.flush_pending_commands()
         except json.JSONDecodeError:
             logger.error(f"收到无效的JSON数据: {text_data[:100]}...")
         except Exception as e:
@@ -269,6 +255,12 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             # 更新数据库状态
             await self.update_terminal_status(self.terminal_id, True)
         
+        # 新增：心跳时尝试下发待发命令（若仍有积压）
+        try:
+            if self.is_detector:
+                await self.flush_pending_commands()
+        except Exception:
+            pass
         # 回复心跳
         await self.send(text_data=json.dumps({
             'type': 'heartbeat_response',
@@ -295,6 +287,30 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         }))
         
         logger.info(f"命令 '{command}' 已发送到终端 {self.terminal_id}")
+    
+    # 新增：下发并清空待发命令队列
+    async def flush_pending_commands(self):
+        try:
+            pending_key = f"terminal:{self.terminal_id}:pending_commands"
+            pending = cache.get(pending_key) or []
+            if not pending:
+                return
+            logger.info(f"检测端 {self.terminal_id} 上线，准备下发 {len(pending)} 条待发命令")
+            for cmd in pending:
+                command = cmd.get('command')
+                params = cmd.get('params', {})
+                timestamp = cmd.get('timestamp', timezone.now().isoformat())
+                await self.send(text_data=json.dumps({
+                    'type': 'send_command',
+                    'command': command,
+                    'params': params,
+                    'timestamp': timestamp
+                }))
+                logger.info(f"已下发待发命令到终端 {self.terminal_id}: {command}")
+            cache.delete(pending_key)
+        except Exception as e:
+            logger.error(f"下发待发命令失败: {e}")
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
     
     async def handle_command_response(self, data):
         """处理从检测端返回的命令响应"""

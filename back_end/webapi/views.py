@@ -748,17 +748,52 @@ class TerminalCommandView(APIView):
                 'params': command_data.get('params', {}),
                 'timestamp': timezone.now().isoformat()
             }
-            
             # 获取通道层
             channel_layer = get_channel_layer()
-            
-            # 发送命令到终端的消费者
-            channel_name = f"terminal_{pk}"
-            async_to_sync(channel_layer.group_send)(
-                channel_name,
-                message
-            )
-            
+
+            # 新增：若终端未在线，命令进入待发队列（保证可靠下达）
+            connected = cache.get(f"terminal:{pk}:connected")
+            if not connected and not terminal.status:
+                pending_key = f"terminal:{pk}:pending_commands"
+                pending = cache.get(pending_key) or []
+                pending.append({'command': message['command'], 'params': message['params'], 'timestamp': message['timestamp']})
+                cache.set(pending_key, pending, timeout=600)  # 10分钟
+                # 对 start/stop 仍按原逻辑即时更新缓存，提升用户感知
+                command = command_data.get('command')
+                params = command_data.get('params', {})
+                if command == "start":
+                    mode = params.get('mode')
+                    if mode == 'pull' or mode == 'both':
+                        terminal.pull_running = True
+                    if mode == 'push' or mode == 'both':
+                        terminal.push_running = True
+                    terminal.save(update_fields=['pull_running', 'push_running'])
+                    self._update_status_cache(pk, terminal)
+                elif command == "stop":
+                    mode = params.get('mode')
+                    if mode == 'pull' or mode == 'both':
+                        terminal.pull_running = False
+                    if mode == 'push' or mode == 'both':
+                        terminal.push_running = False
+                    terminal.save(update_fields=['pull_running', 'push_running'])
+                    self._update_status_cache(pk, terminal)
+                elif command == "buzzer":
+                    action = params.get('action')
+                    b_key = f"terminal:{pk}:buzzer_status"
+                    if action == 'start':
+                        cache.set(b_key, {'active': True}, timeout=300)
+                    elif action == 'stop':
+                        cache.set(b_key, {'active': False}, timeout=300)
+                    elif action == 'beep':
+                        cache.set(b_key, {'active': True}, timeout=5)
+                return Response({
+                    "status": "queued",
+                    "message": f"终端 {pk} 未在线，命令已入队等待下发",
+                    "command": command_data
+                })
+
+            # 终端在线：立即下发
+            async_to_sync(channel_layer.group_send)(f"terminal_{pk}", message)
             # 更新终端的最后活动时间
             terminal.last_active = timezone.now()
             terminal.save(update_fields=['last_active'])
@@ -766,35 +801,35 @@ class TerminalCommandView(APIView):
             # 处理特殊命令 - 实时更新缓存
             command = command_data.get('command')
             params = command_data.get('params', {})
-            
             if command == "start":
-                mode = params.get('mode')
-                if mode == 'pull' or mode == 'both':
+                if params.get('mode') == 'pull' or params.get('mode') == 'both':
                     terminal.pull_running = True
-                if mode == 'push' or mode == 'both':
+                if params.get('mode') == 'push' or params.get('mode') == 'both':
                     terminal.push_running = True
                 terminal.save(update_fields=['pull_running', 'push_running'])
-                
-                # 更新状态缓存
                 self._update_status_cache(pk, terminal)
-                
             elif command == "stop":
-                mode = params.get('mode')
-                if mode == 'pull' or mode == 'both':
+                if params.get('mode') == 'pull' or params.get('mode') == 'both':
                     terminal.pull_running = False
-                if mode == 'push' or mode == 'both':
+                if params.get('mode') == 'push' or params.get('mode') == 'both':
                     terminal.push_running = False
                 terminal.save(update_fields=['pull_running', 'push_running'])
-                
-                # 更新状态缓存
                 self._update_status_cache(pk, terminal)
-            
+            elif command == "buzzer":
+                action = params.get('action')
+                cache_key = f"terminal:{pk}:buzzer_status"
+                if action == 'start':
+                    cache.set(cache_key, {'active': True}, timeout=300)
+                elif action == 'stop':
+                    cache.set(cache_key, {'active': False}, timeout=300)
+                elif action == 'beep':
+                    cache.set(cache_key, {'active': True}, timeout=5)
+
             return Response({
                 "status": "success",
                 "message": f"命令已发送到终端 {pk}",
                 "command": command_data
             })
-            
         except ProcessTerminal.DoesNotExist:
             return Response(
                 {"error": f"终端ID {pk} 不存在"},

@@ -5,8 +5,8 @@ import logging
 import time
 import re
 import traceback
-from threading import Thread, Lock
-from urllib.parse import urlparse, urljoin
+from threading import Lock
+from urllib.parse import urlparse
 import ssl
 
 logger = logging.getLogger('websocket_client')
@@ -21,7 +21,8 @@ class TerminalWebSocketClient:
         self.connected = False
         self.on_command = on_command
         self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 10
+        # max_reconnect_attempts=None 表示无限重连
+        self.max_reconnect_attempts = None
         self.reconnect_delay = 2  # 初始重连延迟(秒)
         self.reconnect_task = None
         self.heartbeat_task = None
@@ -47,15 +48,12 @@ class TerminalWebSocketClient:
         """启动WebSocket客户端"""
         self.running = True
         self.reconnect_attempts = 0
-        
-        # 获取当前事件循环
-        try:
-            self.loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            
+        # 仅绑定当前线程正在运行的事件循环
+        self.loop = asyncio.get_running_loop()
         await self.connect()
+        # 首次连接失败则启动重连循环
+        if not self.connected and self.running:
+            await self.schedule_reconnect()
         return self.connected
     
     async def stop(self):
@@ -63,9 +61,9 @@ class TerminalWebSocketClient:
         logger.info("正在停止WebSocket客户端...")
         self.running = False
         
-        # 取消所有心跳和重连任务
+        # 取消所有跟踪任务
         with self.tasks_lock:
-            for task in self.tasks:
+            for task in list(self.tasks):
                 if not task.done():
                     try:
                         task.cancel()
@@ -73,19 +71,16 @@ class TerminalWebSocketClient:
                         logger.error(f"取消任务时出错: {str(e)}")
             self.tasks.clear()
             
-        # 关闭连接
+        # 断开连接
         await self.disconnect()
         logger.info("WebSocket客户端已停止")
     
     def _create_task(self, coro):
         """安全地创建任务并跟踪它"""
+        # 使用已绑定在 start() 中的 loop，避免跨线程误建新的loop
         if not self.loop or self.loop.is_closed():
-            try:
-                self.loop = asyncio.get_running_loop()
-            except RuntimeError:
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-                
+            logger.warning("事件循环不可用，忽略任务创建")
+            return asyncio.get_running_loop().create_task(asyncio.sleep(0))  # 占位，避免返回None
         task = self.loop.create_task(coro)
         
         with self.tasks_lock:
@@ -182,12 +177,15 @@ class TerminalWebSocketClient:
         """建立WebSocket连接"""
         if not self.running:
             return False
+        # 已连接则跳过
+        if self.is_connected():
+            logger.debug("已连接，跳过重复连接")
+            return True
             
         ws_url = self.get_ws_url()
         logger.info(f"尝试连接到WebSocket服务器: {ws_url}")
         
         try:
-            # 更新连接参数，添加SSL上下文和超时设置
             self.ws = await asyncio.wait_for(
                 websockets.connect(
                     ws_url, 
@@ -195,45 +193,42 @@ class TerminalWebSocketClient:
                     ping_timeout=10,
                     close_timeout=5,
                     ssl=self.ssl_context if ws_url.startswith('wss://') else None,
-                    max_size=10_000_000,  # 增加最大消息大小
-                    max_queue=32          # 增加队列大小
+                    max_size=10_000_000,
+                    max_queue=32
                 ),
-                timeout=15  # 连接超时时间
+                timeout=15
             )
             self.connected = True
+            # 重连成功后清零计数
             self.reconnect_attempts = 0
             logger.info(f"WebSocket连接已建立: {ws_url}")
             
-            # 使用新的任务跟踪方法创建心跳任务
+            # 成功后启动心跳，并进入消息循环（直到关闭）
             self.heartbeat_task = self._create_task(self.heartbeat_loop())
-            
-            # 开始消息接收循环
             await self.message_loop()
-            
             return True
         except asyncio.TimeoutError:
-            logger.error(f"WebSocket连接超时")
+            logger.error("WebSocket连接超时")
             self.connected = False
             self.ws = None
-            
-            # 安排重连
-            await self.schedule_reconnect()
+            # 注意：不在此处调度重连，统一由重连循环管理
+            return False
+        except ConnectionResetError:
+            logger.warning("WebSocket连接被重置，连接失败")
+            self.connected = False
+            self.ws = None
             return False
         except Exception as e:
             logger.error(f"WebSocket连接失败: {str(e)}")
             logger.error(f"异常堆栈: {traceback.format_exc()}")
             self.connected = False
             self.ws = None
-            
-            # 安排重连
-            await self.schedule_reconnect()
             return False
     
     async def disconnect(self):
         """断开WebSocket连接"""
         if self.ws:
             try:
-                # 使用超时确保不会无限等待
                 await asyncio.wait_for(self.ws.close(), timeout=5)
                 logger.info("WebSocket连接已关闭")
             except asyncio.TimeoutError:
@@ -243,6 +238,14 @@ class TerminalWebSocketClient:
             finally:
                 self.ws = None
                 self.connected = False
+        # 断开时确保心跳任务被取消
+        if self.heartbeat_task and not self.heartbeat_task.done():
+            try:
+                self.heartbeat_task.cancel()
+            except Exception:
+                pass
+            finally:
+                self.heartbeat_task = None
     
     async def message_loop(self):
         """消息接收循环"""
@@ -339,16 +342,12 @@ class TerminalWebSocketClient:
         except asyncio.TimeoutError:
             logger.error("发送消息超时")
             self.connected = False
-            
-            # 安排重连
             if self.running:
                 await self.schedule_reconnect()
             return False
         except websockets.exceptions.ConnectionClosed:
             logger.error("发送消息时连接已关闭")
             self.connected = False
-            
-            # 安排重连
             if self.running:
                 await self.schedule_reconnect()
             return False
@@ -359,8 +358,6 @@ class TerminalWebSocketClient:
             logger.error(f"发送消息失败: {str(e)}")
             logger.error(f"异常堆栈: {traceback.format_exc()}")
             self.connected = False
-            
-            # 安排重连
             if self.running:
                 await self.schedule_reconnect()
             return False
@@ -372,19 +369,17 @@ class TerminalWebSocketClient:
         elif isinstance(data, list):
             return [self._ensure_serializable(item) for item in data]
         elif isinstance(data, tuple):
-            return [self._ensure_serializable(item) for item in tuple]
+            # 修复：遍历元组本身，而不是类型
+            return [self._ensure_serializable(item) for item in data]
         elif isinstance(data, (int, float, str, bool)) or data is None:
             return data
         else:
-            # 对于其他类型，转换为字符串
             return str(data)
 
     async def send_command_response(self, command, result, success=True):
         """发送命令执行结果响应"""
         try:
-            # 确保结果对象是可序列化的
             safe_result = self._ensure_serializable(result)
-            
             message = {
                 'type': 'command_response',
                 'command': command,
@@ -392,7 +387,6 @@ class TerminalWebSocketClient:
                 'success': success,
                 'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
             }
-            
             return await self.send_message(message)
         except Exception as e:
             logger.error(f"发送命令响应失败: {str(e)}")
@@ -454,132 +448,50 @@ class TerminalWebSocketClient:
                 break
     
     async def schedule_reconnect(self):
-        """安排重连任务"""
+        """确保重连循环在运行（无限重连）"""
         if not self.running:
             logger.info("客户端已停止，不再尝试重连")
             return
-            
-        # 检查是否已存在重连任务并且未完成
         if self.reconnect_task and not self.reconnect_task.done():
-            logger.debug("重连任务已在进行中，跳过")
+            logger.debug("重连循环已在运行，跳过")
             return
-            
-        self.reconnect_attempts += 1
-        
-        if self.reconnect_attempts > self.max_reconnect_attempts:
-            logger.error(f"超过最大重连尝试次数({self.max_reconnect_attempts})，停止重连")
-            return
-        
-        # 计算延迟时间（指数退避）
-        delay = min(60, self.reconnect_delay * (1.5 ** (self.reconnect_attempts - 1)))
-        logger.info(f"将在 {delay:.1f} 秒后尝试重连 (尝试 {self.reconnect_attempts}/{self.max_reconnect_attempts})")
-        
+        logger.info("启动重连循环")
         try:
-            # 使用新的任务跟踪方法创建重连任务
-            self.reconnect_task = self._create_task(self._reconnect_after_delay(delay))
+            self.reconnect_task = self._create_task(self._reconnect_loop())
         except Exception as e:
-            logger.error(f"创建重连任务失败: {str(e)}")
+            logger.error(f"创建重连循环失败: {str(e)}")
             logger.error(f"异常堆栈: {traceback.format_exc()}")
     
-    async def _reconnect_after_delay(self, delay):
-        """在延迟后重连"""
+    async def _reconnect_loop(self):
+        """持续重连循环，直到连接成功或停止运行"""
         try:
-            await asyncio.sleep(delay)
-            if self.running:
-                await self.connect()
-        except asyncio.CancelledError:
-            logger.info("重连任务已取消")
-            pass
-        except Exception as e:
-            logger.error(f"重连过程中出错: {str(e)}")
-            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            while self.running and not self.is_connected():
+                self.reconnect_attempts += 1
+                # None 表示无限重连
+                if self.max_reconnect_attempts is not None and self.reconnect_attempts > self.max_reconnect_attempts:
+                    logger.error(f"超过最大重连尝试次数({self.max_reconnect_attempts})，停止重连")
+                    break
+                delay = min(60, self.reconnect_delay * (1.5 ** (self.reconnect_attempts - 1)))
+                logger.info(f"将在 {delay:.1f} 秒后尝试重连 (尝试 {self.reconnect_attempts}/{self.max_reconnect_attempts or '∞'})")
+                try:
+                    await asyncio.sleep(delay)
+                    if not self.running:
+                        break
+                    await self.connect()
+                    if self.is_connected():
+                        logger.info("重连成功")
+                        self.reconnect_attempts = 0
+                        break
+                except asyncio.CancelledError:
+                    logger.info("重连循环已取消")
+                    break
+                except Exception as e:
+                    logger.error(f"重连过程中出错: {str(e)}")
+                    logger.error(f"异常堆栈: {traceback.format_exc()}")
+                    # 继续下一轮
         finally:
             self.reconnect_task = None
-    
-    async def send_command_response(self, command, result, success=True):
-        """发送命令执行结果响应"""
-        try:
-            # 确保结果对象是可序列化的
-            safe_result = self._ensure_serializable(result)
-            
-            message = {
-                'type': 'command_response',
-                'command': command,
-                'result': safe_result,
-                'success': success,
-                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            }
-            
-            return await self.send_message(message)
-        except Exception as e:
-            logger.error(f"发送命令响应失败: {str(e)}")
-            logger.error(f"异常堆栈: {traceback.format_exc()}")
-            return False
 
-    
-    async def schedule_reconnect(self):
-        """安排重连任务"""
-        if not self.running:
-            logger.info("客户端已停止，不再尝试重连")
-            return
-            
-        # 检查是否已存在重连任务并且未完成
-        if self.reconnect_task and not self.reconnect_task.done():
-            logger.debug("重连任务已在进行中，跳过")
-            return
-            
-        self.reconnect_attempts += 1
-        
-        if self.reconnect_attempts > self.max_reconnect_attempts:
-            logger.error(f"超过最大重连尝试次数({self.max_reconnect_attempts})，停止重连")
-            return
-        
-        # 计算延迟时间（指数退避）
-        delay = min(60, self.reconnect_delay * (1.5 ** (self.reconnect_attempts - 1)))
-        logger.info(f"将在 {delay:.1f} 秒后尝试重连 (尝试 {self.reconnect_attempts}/{self.max_reconnect_attempts})")
-        
-        try:
-            # 使用新的任务跟踪方法创建重连任务
-            self.reconnect_task = self._create_task(self._reconnect_after_delay(delay))
-        except Exception as e:
-            logger.error(f"创建重连任务失败: {str(e)}")
-            logger.error(f"异常堆栈: {traceback.format_exc()}")
-    
-    async def _reconnect_after_delay(self, delay):
-        """在延迟后重连"""
-        try:
-            await asyncio.sleep(delay)
-            if self.running:
-                await self.connect()
-        except asyncio.CancelledError:
-            logger.info("重连任务已取消")
-            pass
-        except Exception as e:
-            logger.error(f"重连过程中出错: {str(e)}")
-            logger.error(f"异常堆栈: {traceback.format_exc()}")
-        finally:
-            self.reconnect_task = None
-    
-    async def send_command_response(self, command, result, success=True):
-        """发送命令执行结果响应"""
-        try:
-            # 确保结果对象是可序列化的
-            safe_result = self._ensure_serializable(result)
-            
-            message = {
-                'type': 'command_response',
-                'command': command,
-                'result': safe_result,
-                'success': success,
-                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            }
-            
-            return await self.send_message(message)
-        except Exception as e:
-            logger.error(f"发送命令响应失败: {str(e)}")
-            logger.error(f"异常堆栈: {traceback.format_exc()}")
-            return False
-        
     async def send_system_status(self, status_data):
         """发送系统状态到服务器（用于系统监控主动推送）"""
         # 确保有终端ID

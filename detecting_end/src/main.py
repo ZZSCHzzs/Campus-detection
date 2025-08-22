@@ -9,7 +9,8 @@ import traceback
 
 from flask_cors import CORS
 import psutil
-
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # 获取项目根目录（src的父目录）
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -123,117 +124,69 @@ def init_websocket_client():
     # 确保WebSocket URL正确
     ws_url = fix_ws_url(f"{server_url}/ws/terminal/{terminal_id}/")
     
-    # 导入WebSocket客户端模块
     from websocket_client import TerminalWebSocketClient
-    
-    # 创建WebSocket客户端实例
     client = TerminalWebSocketClient(ws_url, terminal_id, on_command=handle_ws_command)
-    
-    # 启动WebSocket连接
+    client.max_reconnect_attempts = None
+
     def start_ws_client():
-        # 确保任何未捕获的异常都被记录
-        try:
-            # 创建一个新的事件循环
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # 设置异常处理
-            def exception_handler(loop, context):
-                exception = context.get('exception')
-                if exception:
-                    logger.error(f'WebSocket异常: {str(exception)}')
-                    import traceback
-                    logger.error(f'异常详情: {traceback.format_exc()}')
-                else:
-                    logger.error(f'WebSocket异常: {context.get("message", "未知错误")}')
-                
-                # 当客户端仍在运行时，尝试重启客户端连接
-                if client.running:
-                    logger.info("正在尝试重新连接WebSocket服务器...")
-                    try:
-                        # 创建任务重启连接
-                        loop.create_task(client.stop())
-                        loop.create_task(client.start())
-                    except Exception as e:
-                        logger.error(f"重新连接WebSocket失败: {str(e)}")
-
-            loop.set_exception_handler(exception_handler)
-            
-            async def run_client():
-                try:
-                    connected = await client.start()
-                    if connected:
-                        logger.info('WebSocket连接成功')
-
-                        # 发送初始状态
-                        try:
-                            if detection_manager:
-                                status_data = detection_manager.get_system_status()
-                                status_data['terminal_id'] = terminal_id
-                                await client.send_status(status_data)
-                        except Exception as e:
-                            log_manager.error(f'发送初始状态失败: {str(e)}')
-                    else:
-                        log_manager.error('WebSocket连接失败')                
-                except Exception as e:
-                    import traceback
-                    log_manager.error(f'WebSocket客户端错误: {str(e)}')
-                    log_manager.error(f'异常详情: {traceback.format_exc()}')
-
-
-            # 运行客户端，并保持事件循环运行
+        # 若事件循环意外停止，自动重建并继续运行，直到外部设置 client.running=False
+        while True:
             try:
-                loop.run_until_complete(run_client())
-                
-                # 保持事件循环运行，处理未来的任务
-                while True:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                # 显式暴露给跨线程投递
+                client.loop = loop
+
+                # 事件循环异常处理器：忽略 websockets 的已知噪声异常，避免 loop 因错误停止
+                def exception_handler(loop_, context):
+                    exc = context.get("exception")
+                    msg = context.get("message")
+                    handle = context.get("handle")
+                    text = f"{msg or exc or ''}"
+                    handle_str = str(handle or "")
+                    if (exc and isinstance(exc, AttributeError) and "recv_messages" in str(exc)) \
+                       or (isinstance(exc, ConnectionResetError)) \
+                       or ("Connection.connection_lost" in handle_str):
+                        # logger.warning(f"忽略 websockets 内部异常: {exc or msg}")
+                        return
+                    logger.error(f"事件循环异常: {text}")
+
+                loop.set_exception_handler(exception_handler)
+
+                async def boot():
                     try:
-                        loop.run_forever()
+                        await client.start()
                     except Exception as e:
-                        import traceback
-                        log_manager.error(f'事件循环错误: {str(e)}')
-                        log_manager.error(f'异常详情: {traceback.format_exc()}')
-                        # 短暂等待后继续
-                        time.sleep(1)
-                        continue
-                    # 如果正常退出循环，跳出
-                    break
+                        logger.error(f'WebSocket启动失败: {e}')
+                        logger.error(f'异常详情: {traceback.format_exc()}')
+                        # 由客户端内部无限重连逻辑继续尝试
+
+                loop.create_task(boot())
+                loop.run_forever()
             except Exception as e:
-                import traceback
-                log_manager.error(f'WebSocket主循环错误: {str(e)}')
+                log_manager.error(f'WebSocket线程循环错误: {str(e)}')
                 log_manager.error(f'异常详情: {traceback.format_exc()}')
             finally:
-                # 关闭循环前确保所有任务完成
                 try:
-                    # 取消所有挂起的任务
-                    pending = asyncio.all_tasks(loop)
-                    if pending:
-                        log_manager.info(f"正在取消{len(pending)}个挂起的任务")
-                        for task in pending:
-                            task.cancel()
-                        
-                        # 等待所有任务完成取消
-                        loop.run_until_complete(
-                            asyncio.gather(*pending, return_exceptions=True)
-                        )
-                    
-                    # 正常关闭循环
+                    # 关闭前清理异步生成器
                     loop.run_until_complete(loop.shutdown_asyncgens())
+                except Exception:
+                    pass
+                try:
                     loop.close()
-                    log_manager.info("WebSocket事件循环已关闭")
-                except Exception as e:
-                    import traceback
-                    log_manager.error(f'关闭事件循环错误: {str(e)}')
-                    log_manager.error(f'异常详情: {traceback.format_exc()}')
-        except Exception as e:
-            import traceback
-            log_manager.error(f'WebSocket线程启动错误: {str(e)}')
-            log_manager.error(f'异常详情: {traceback.format_exc()}')
-    
-    # 在新线程中启动WebSocket客户端
+                except Exception:
+                    pass
+
+            # 外部已请求停止，退出线程
+            if not getattr(client, "running", False):
+                break
+
+            # 若并非正常停止，说明 loop 意外退出；短暂等待后重建
+            logger.warning("WebSocket事件循环意外停止，1秒后重建并继续运行...")
+            time.sleep(1)
+
     ws_thread = Thread(target=start_ws_client, daemon=True)
     ws_thread.start()
-    
     return client
 
 # WebSocket命令处理函数
@@ -265,7 +218,6 @@ async def handle_ws_command(command_data):
         elif command == "stop":
             # 停止指定模式的检测
             mode = params.get("mode", "both")
-            log_manager.info(f"处理停止命令: 模式={mode}")
             
             push_success = False
             pull_success = False
@@ -279,9 +231,6 @@ async def handle_ws_command(command_data):
             # 综合结果
             success = (mode == "push" and push_success) or (mode == "pull" and pull_success) or (mode == "both" and (push_success or pull_success))
                  
-            # 添加验证，确保状态正确更新
-            logger.info(f"停止后状态: push_running={detection_manager.push_running}, pull_running={detection_manager.pull_running}")
-            
             # 发送更新后的状态
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
@@ -429,6 +378,35 @@ async def handle_ws_command(command_data):
             else:
                 await ws_client.send_command_response(command, {"error": f"未知的蜂鸣器操作: {action}"}, success=False)
         
+        elif command == "light_rotate":
+            # 远程灯光旋转控制
+            try:
+                node_id = params.get("node_id")
+                angle = params.get("angle")
+                if node_id is None or angle is None:
+                    await ws_client.send_command_response(command, {"error": "缺少参数: node_id/angle"}, success=False)
+                    return
+                try:
+                    node_id_int = int(node_id)
+                except Exception:
+                    node_id_int = node_id
+                try:
+                    angle_val = float(angle)
+                except Exception:
+                    await ws_client.send_command_response(command, {"error": "angle 必须为数字"}, success=False)
+                    return
+                if angle_val < 0 or angle_val > 180:
+                    await ws_client.send_command_response(command, {"error": "角度必须在 0-180 之间"}, success=False)
+                    return
+                ok = node_manager.rotate_light(node_id_int, angle_val)
+                await ws_client.send_command_response(
+                    command,
+                    {"success": bool(ok), "node_id": node_id, "angle": angle_val},
+                    success=bool(ok)
+                )
+            except Exception as e:
+                logger.error(f"处理 light_rotate 命令失败: {e}")
+                await ws_client.send_command_response(command, {"error": str(e)}, success=False)
         elif command == "update_config" or command == "change_config":
             # 更新配置
             config_data = params
@@ -717,27 +695,21 @@ def receive_frame(node_id):
                         "temperature": temperature,
                         "humidity": humidity
                     }
-                    
-                    # 如果有检测结果，也包含在内
                     if 'detected_count' in result and result['status'] == 'success':
                         node_data["detected_count"] = result['detected_count']
-                    
+
                     log_manager.info(f"接收到节点{node_id}的数据: 温度={temperature}, 湿度={humidity}, 检测结果={node_data.get('detected_count', 'N/A')}")
-                    # 获取事件循环
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    # 发送节点数据
-                    asyncio.run_coroutine_threadsafe(
-                        ws_client.send_nodes_data([node_data]),
-                        loop
-                    )
+                    # 使用 WebSocket 线程事件循环发送
+                    loop = getattr(ws_client, 'loop', None)
+                    if loop and ws_client.connected:
+                        asyncio.run_coroutine_threadsafe(
+                            ws_client.send_nodes_data([node_data]),
+                            loop
+                        )
+                    else:
+                        log_manager.warning("WebSocket循环不可用或未连接，跳过环境数据上报")
                 except Exception as e:
                     log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
-            
             return jsonify(result)
         else:
             # 仅处理环境数据，没有图像
@@ -756,16 +728,16 @@ def receive_frame(node_id):
                 # 通过WebSocket发送
                 if ws_client and ws_client.connected:
                     try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    asyncio.run_coroutine_threadsafe(
-                        ws_client.send_nodes_data([node_data]),
-                        loop
-                    )
-                
+                        loop = getattr(ws_client, 'loop', None)
+                        if loop and ws_client.connected:
+                            asyncio.run_coroutine_threadsafe(
+                                ws_client.send_nodes_data([node_data]),
+                                loop
+                            )
+                        else:
+                            log_manager.warning("WebSocket循环不可用或未连接，跳过环境数据上报")
+                    except Exception as e:
+                        log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
                 return jsonify({"status": "success", "message": "环境数据已接收"})
             else:
                 return jsonify({"status": "error", "message": "未接收到图像或环境数据"}), 400
@@ -794,34 +766,31 @@ def receive_environmental_data(node_id):
         # 通过WebSocket发送环境数据
         if ws_client and ws_client.connected:
             try:
-                # 如果有CO2数据，更新系统状态
                 if co2_level is not None:
                     status_data = system_monitor.get_status()
                     status_data["co2_level"] = co2_level
-                    
-                    # 获取事件循环
-                    loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(
-                        ws_client.send_status(status_data),
-                        loop
-                    )
-                
-                # 如果有温度或湿度数据，发送节点数据
+                    loop = getattr(ws_client, 'loop', None)
+                    if loop and ws_client.connected:
+                        asyncio.run_coroutine_threadsafe(
+                            ws_client.send_status(status_data),
+                            loop
+                        )
+                    else:
+                        log_manager.warning("WebSocket循环不可用或未连接，跳过状态上报")
                 if temperature is not None or humidity is not None:
-                    node_data = {
-                        "id": node_id
-                    }
+                    node_data = {"id": node_id}
                     if temperature is not None:
                         node_data["temperature"] = temperature
                     if humidity is not None:
                         node_data["humidity"] = humidity
-                    
-                    # 获取事件循环
-                    loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(
-                        ws_client.send_nodes_data([node_data]),
-                        loop
-                    )
+                    loop = getattr(ws_client, 'loop', None)
+                    if loop and ws_client.connected:
+                        asyncio.run_coroutine_threadsafe(
+                            ws_client.send_nodes_data([node_data]),
+                            loop
+                        )
+                    else:
+                        log_manager.warning("WebSocket循环不可用或未连接，跳过节点数据上报")
             except Exception as e:
                 log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
         
@@ -1111,19 +1080,20 @@ def cleanup():
                 detection_manager.stop_push()
         
         if ws_client:
-            # 关闭WebSocket连接 - 使用一个独立的事件循环
             log_manager.info("关闭WebSocket连接...")
             try:
-                # 创建一个新的事件循环来执行关闭操作
-                close_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(close_loop)
-                
-                # 在这个循环中执行停止操作
-                close_loop.run_until_complete(ws_client.stop())
-                
-                # 确保循环正确关闭
-                close_loop.run_until_complete(close_loop.shutdown_asyncgens())
-                close_loop.close()
+                loop = getattr(ws_client, 'loop', None)
+                if loop:
+                    # 在 WS 线程事件循环上停止客户端
+                    fut = asyncio.run_coroutine_threadsafe(ws_client.stop(), loop)
+                    try:
+                        fut.result(timeout=10)
+                    except Exception as e:
+                        log_manager.warning(f"等待WebSocket停止超时或异常: {e}")
+                    # 停止事件循环线程
+                    loop.call_soon_threadsafe(loop.stop)
+                else:
+                    log_manager.warning("未找到WebSocket事件循环，跳过关闭")
                 log_manager.info("WebSocket连接已安全关闭")
             except Exception as e:
                 log_manager.error(f"关闭WebSocket连接失败: {str(e)}")

@@ -39,6 +39,7 @@ import {
   Bell,
   Mute,
   MagicStick,
+  Warning, // 新增：用于按钮图标
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -753,30 +754,20 @@ const checkBuzzerStatus = async () => {
   }
 };
 
-// 控制蜂鸣器（仅本地模式）
+// 控制蜂鸣器（远程走命令，本地仍走本地API）
 const controlBuzzer = async (action, params = {}) => {
-  if (connectionMode.value !== 'local') {
-    ElMessage.warning('硬件控制仅限本地模式');
-    return;
-  }
+  // 兼容远程模式：通过命令转发
   try {
     loading.value = true;
-    
-    const data = {
-      action,
-      ...params
-    };
-    
-    let result;
-    result = await apiService.localTerminal.controlBuzzer(data);
-    
-    // 短暂延迟后刷新状态
-    setTimeout(() => {
-      checkBuzzerStatus();
-    }, 500);
-    
+    const data = { action, ...params };
+    if (connectionMode.value === 'local') {
+      const { data: _ } = await apiService.localTerminal.getBuzzerStatus(); // 预热可选
+      await apiService.localTerminal.controlBuzzer(data);
+    } else {
+      await sendCommand('buzzer', data);
+    }
+    setTimeout(() => { checkBuzzerStatus(); }, 500);
     ElMessage.success(`蜂鸣器命令已发送: ${action}`);
-    return result;
   } catch (error) {
     console.error('控制蜂鸣器失败:', error);
     ElMessage.error('控制蜂鸣器失败');
@@ -822,16 +813,16 @@ const fetchLightStatus = async () => {
   }
 };
 
-// 旋转灯光（仅本地模式）
+// 旋转灯光（远程走命令）
 const rotateLight = async () => {
-  if (connectionMode.value !== 'local') {
-    ElMessage.warning('硬件控制仅限本地模式');
-    return;
-  }
   try {
     const angle = Number(lightAngle.value) || lightStatus.default_angle || 90;
-    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
-    ElMessage.success(`已发送灯光旋转指令：${angle}°，将于${lightStatus.auto_return_time}s自动回正`);
+    if (connectionMode.value === 'local') {
+      await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    } else {
+      await sendCommand('light_rotate', { node_id: lightStatus.node_id, angle });
+    }
+    ElMessage.success(`已发送灯光旋转指令：${angle}°`);
   } catch (e) {
     console.error('旋转灯光失败', e);
     ElMessage.error('旋转灯光失败');
@@ -840,13 +831,13 @@ const rotateLight = async () => {
 
 // 开灯（仅本地模式）
 const turnLightOn = async () => {
-  if (connectionMode.value !== 'local') {
-    ElMessage.warning('硬件控制仅限本地模式');
-    return;
-  }
   try {
     const angle = Number(lightOnAngle.value) || 130;
-    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    if (connectionMode.value === 'local') {
+      await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    } else {
+      await sendCommand('light_rotate', { node_id: lightStatus.node_id, angle });
+    }
     ElMessage.success(`已发送开灯指令：${angle}°`);
   } catch (e) {
     console.error('开灯失败', e);
@@ -856,13 +847,13 @@ const turnLightOn = async () => {
 
 // 关灯（仅本地模式）
 const turnLightOff = async () => {
-  if (connectionMode.value !== 'local') {
-    ElMessage.warning('硬件控制仅限本地模式');
-    return;
-  }
   try {
     const angle = Number(lightOffAngle.value) || 65;
-    await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    if (connectionMode.value === 'local') {
+      await apiService.localTerminal.controlLightRotate({ node_id: lightStatus.node_id, angle });
+    } else {
+      await sendCommand('light_rotate', { node_id: lightStatus.node_id, angle });
+    }
     ElMessage.success(`已发送关灯指令：${angle}°`);
   } catch (e) {
     console.error('关灯失败', e);
@@ -1905,6 +1896,7 @@ watch(connectionMode, handleModeChange);
                             :label="pattern.label" :value="pattern.value">
                             <div class="option-content">
                               <el-icon class="option-icon">
+
                                 <component :is="pattern.icon" />
                               </el-icon>
                               <span>{{ pattern.label }}</span>
@@ -1951,13 +1943,14 @@ watch(connectionMode, handleModeChange);
                 
                 <div class="buzzer-actions">
                   <el-button-group>
-                    <el-button type="primary" @click="beep" :disabled="connectionMode !== 'local' || buzzerActive">
+                    <!-- 修改禁用条件：不再依赖 connectionMode -->
+                    <el-button type="primary" @click="beep" :disabled="!buzzerAvailable || buzzerActive">
                       <el-icon><Bell /></el-icon> 简单鸣叫
                     </el-button>
-                    <el-button type="success" @click="startBuzzer" :disabled="connectionMode !== 'local' || buzzerActive">
+                    <el-button type="success" @click="startBuzzer" :disabled="!buzzerAvailable || buzzerActive">
                       <el-icon><Warning /></el-icon> 启动模式
                     </el-button>
-                    <el-button type="danger" @click="stopBuzzer" :disabled="connectionMode !== 'local'">
+                    <el-button type="danger" @click="stopBuzzer" :disabled="!buzzerAvailable">
                       <el-icon><Mute /></el-icon> 停止鸣叫
                     </el-button>
                   </el-button-group>
@@ -1993,7 +1986,8 @@ watch(connectionMode, handleModeChange);
                     </el-col>
                     <el-col :span="6">
                       <el-form-item label=" ">
-                        <el-button type="primary" @click="rotateLight" :disabled="connectionMode !== 'local'">
+                        <!-- 允许远程：移除仅本地禁用 -->
+                        <el-button type="primary" @click="rotateLight" :disabled="false">
                           <el-icon><MagicStick /></el-icon> 旋转
                         </el-button>
                       </el-form-item>
@@ -2012,8 +2006,8 @@ watch(connectionMode, handleModeChange);
                     </el-col>
                     <el-col :span="8">
                       <el-form-item label=" ">
-                        <el-button type="success" @click="turnLightOn" :disabled="connectionMode !== 'local'">开灯</el-button>
-                        <el-button type="warning" @click="turnLightOff" :disabled="connectionMode !== 'local'" style="margin-left: 8px;">关灯</el-button>
+                        <el-button type="success" @click="turnLightOn">开灯</el-button>
+                        <el-button type="warning" @click="turnLightOff" style="margin-left: 8px;">关灯</el-button>
                       </el-form-item>
                     </el-col>
                   </el-row>
