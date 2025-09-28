@@ -12,6 +12,7 @@ import NotFound from "../views/NotFound.vue";
 import TerminalView from '../views/TerminalView.vue';
 import LLMView from '../views/LLMView.vue';
 import { useAuthStore } from '../stores/auth'
+import TerminalForPi from '../views/TerminalForPi.vue';
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -73,6 +74,12 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/terminalPi/:id',
+    name: 'terminalPi-detail',
+    component: TerminalForPi,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: AdminView,
@@ -83,6 +90,7 @@ const routes: Array<RouteRecordRaw> = [
     name: 'NotFound',
     component: NotFound
   }
+  
 ];
 
 const router = createRouter({
