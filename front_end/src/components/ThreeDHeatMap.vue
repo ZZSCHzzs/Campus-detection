@@ -3392,9 +3392,9 @@ const updateAreaMarkersData = (areasData) => {
     <button @click="toggleAutoRotate" class="auto-rotate-btn">
       {{ autoRotateEnabled ? '停止环视' : '自动环视' }}
     </button>
-    <button @click="toggleVertexDisplay" class="vertex-display-btn">
+    <!-- <button @click="toggleVertexDisplay" class="vertex-display-btn">
       {{ vertexDisplayMode ? '隐藏顶点' : '显示顶点' }}
-    </button>
+    </button> -->
 
     <!-- 顶点信息面板 -->
     <div v-if="vertexLabelVisible" class="vertex-label" :style="{
