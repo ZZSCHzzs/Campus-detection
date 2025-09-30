@@ -184,6 +184,7 @@ class HistoricalData(models.Model):
     detected_count = models.IntegerField(verbose_name="检测到的人数")
     timestamp = models.DateTimeField(verbose_name="检测时间")
 
+
     def __str__(self):
         return f"{self.area.name} - {self.timestamp}"
 
@@ -210,6 +211,7 @@ class TemperatureHumidityData(models.Model):
 class CO2Data(models.Model):
     terminal = models.ForeignKey('ProcessTerminal', on_delete=models.CASCADE, verbose_name="终端")
     co2_level = models.IntegerField(verbose_name="CO2浓度(ppm)")
+    tvoc_level = models.FloatField(verbose_name="TVOC浓度(mg/m³)", default=0.0)  # 添加这行
     timestamp = models.DateTimeField(verbose_name="记录时间")
 
     def __str__(self):
