@@ -124,7 +124,7 @@ export const terminalCustomMethods = {
     customApiCall(`/api/terminals/${id}/command/`, 'post', command),
     
   updateTerminalConfig: (id: number, config: any) => 
-    customApiCall(`/api/terminals/${id}/config/`, 'put', config),
+    customApiCall(`/api/terminals/${id}/config/`, 'post', config),
 };
 
 // 告警服务自定义方法

@@ -526,3 +526,32 @@ class NodeManager:
             raise ValueError(f"获取环境数据异常(已尝试{retry}次): {str(last_exception)}")
         else:
             raise ValueError(f"获取环境数据失败，未知错误")
+    
+    def update_environment_data(self, node_id, temperature=None, humidity=None):
+        """更新节点环境数据（温度/湿度）到 node_status.data"""
+        node_id = self._normalize_node_id(node_id)
+        if temperature is None and humidity is None:
+            return False
+        with self.lock:
+            if node_id not in self.node_status:
+                # 若不存在则初始化
+                self.node_status[node_id] = {
+                    'status': '未知',
+                    'last_capture': None,
+                    'detection_count': 0,
+                    'error': None,
+                    'last_seen': None,
+                    'device_type': 'data' if node_id in self.data_nodes else ('control' if node_id in self.control_nodes else '未知'),
+                    'ip': None,
+                    'rssi': None,
+                    'uptime_ms': None,
+                    'capabilities': [],
+                    'data': {}
+                }
+            data = self.node_status[node_id].get('data') or {}
+            if temperature is not None:
+                data['temperature'] = temperature
+            if humidity is not None:
+                data['humidity'] = humidity
+            self.node_status[node_id]['data'] = data
+            return True

@@ -210,6 +210,13 @@ async def handle_ws_command(command_data):
             # 发送更新后的状态
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
+            # 注入节点详情
+            try:
+                node_details = node_manager.get_node_status()
+                status_data['node_details'] = node_details
+                status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+            except Exception as _:
+                pass
             await ws_client.send_status(status_data)
             
             # 发送命令执行结果
@@ -234,6 +241,13 @@ async def handle_ws_command(command_data):
             # 发送更新后的状态
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
+            # 注入节点详情
+            try:
+                node_details = node_manager.get_node_status()
+                status_data['node_details'] = node_details
+                status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+            except Exception as _:
+                pass
             await ws_client.send_status(status_data)
             
             # 发送命令执行结果
@@ -283,6 +297,13 @@ async def handle_ws_command(command_data):
             # 发送当前系统状态
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
+            # 注入节点详情
+            try:
+                node_details = node_manager.get_node_status()
+                status_data['node_details'] = node_details
+                status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+            except Exception as _:
+                pass
             await ws_client.send_status(status_data)
         
         elif command == "get_config":
@@ -441,6 +462,13 @@ async def handle_ws_command(command_data):
                 # 发送更新后的状态
                 status_data = detection_manager.get_system_status()
                 status_data['terminal_id'] = config_manager.get('terminal_id')
+                # 注入节点详情
+                try:
+                    node_details = node_manager.get_node_status()
+                    status_data['node_details'] = node_details
+                    status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+                except Exception as _:
+                    pass
                 await ws_client.send_status(status_data)
                 
                 # 发送命令执行结果
@@ -469,6 +497,13 @@ async def handle_ws_command(command_data):
         try:
             status_data = detection_manager.get_system_status()
             status_data['terminal_id'] = config_manager.get('terminal_id')
+            # 注入节点详情
+            try:
+                node_details = node_manager.get_node_status()
+                status_data['node_details'] = node_details
+                status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+            except Exception as _:
+                pass
             await ws_client.send_status(status_data)
         except Exception as status_err:
             logger.error(f"发送状态更新失败: {str(status_err)}")
@@ -686,7 +721,12 @@ def receive_frame(node_id):
                 result['temperature'] = temperature
             if humidity is not None:
                 result['humidity'] = humidity
-                
+            # 同步写入本地节点环境数据
+            try:
+                if temperature is not None or humidity is not None:
+                    node_manager.update_environment_data(node_id, temperature, humidity)
+            except Exception as _:
+                pass
             # 如果有环境数据，通过WebSocket发送
             if (temperature is not None or humidity is not None) and ws_client and ws_client.connected:
                 try:
@@ -769,28 +809,20 @@ def receive_environmental_data(node_id):
                 if co2_level is not None:
                     status_data = system_monitor.get_status()
                     status_data["co2_level"] = co2_level
-                    loop = getattr(ws_client, 'loop', None)
-                    if loop and ws_client.connected:
-                        asyncio.run_coroutine_threadsafe(
-                            ws_client.send_status(status_data),
-                            loop
-                        )
-                    else:
-                        log_manager.warning("WebSocket循环不可用或未连接，跳过状态上报")
+                    # 注入节点详情
+                    try:
+                        node_details = node_manager.get_node_status()
+                        status_data['node_details'] = node_details
+                        status_data['nodes'] = {nid: (st.get('status', '未知') or '未知') for nid, st in node_details.items()}
+                    except Exception as _:
+                        pass
                 if temperature is not None or humidity is not None:
-                    node_data = {"id": node_id}
-                    if temperature is not None:
-                        node_data["temperature"] = temperature
-                    if humidity is not None:
-                        node_data["humidity"] = humidity
-                    loop = getattr(ws_client, 'loop', None)
-                    if loop and ws_client.connected:
-                        asyncio.run_coroutine_threadsafe(
-                            ws_client.send_nodes_data([node_data]),
-                            loop
-                        )
-                    else:
-                        log_manager.warning("WebSocket循环不可用或未连接，跳过节点数据上报")
+                    # 同步写入本地节点环境数据
+                    try:
+                        node_manager.update_environment_data(node_id, temperature, humidity)
+                    except Exception as _:
+                        pass
+                   
             except Exception as e:
                 log_manager.error(f"通过WebSocket发送环境数据失败: {str(e)}")
         
@@ -1054,6 +1086,29 @@ def get_light_status(node_id):
         log_manager.error(f"获取节点 {node_id} 灯光状态失败: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/image/last/<int:node_id>/')
+def get_last_image(node_id):
+    """获取指定数据节点最近一次保存的图片"""
+    try:
+        base_dir = os.path.join(ROOT_DIR, 'captures', f'node_{node_id}')
+        if not os.path.exists(base_dir):
+            return jsonify({'error': '未找到该节点的图片目录'}), 404
+        # 仅筛选常见图片格式
+        files = [f for f in os.listdir(base_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if not files:
+            return jsonify({'error': '未找到该节点的图片'}), 404
+        # 文件名为时间戳(YYYYmmdd_HHMMSS.jpg)，按文件名倒序即可
+        files.sort(reverse=True)
+        latest_file = files[0]
+        file_path = os.path.join(base_dir, latest_file)
+        if not os.path.exists(file_path):
+            return jsonify({'error': '图片文件不存在'}), 404
+        return send_file(file_path, mimetype='image/jpeg')
+    except Exception as e:
+        if log_manager:
+            log_manager.error(f"获取节点 {node_id} 最新图片失败: {str(e)}")
+        return jsonify({'error': '内部错误', 'details': str(e)}), 500
+
 # 改进清理函数，确保安全关闭WebSocket
 def cleanup():
     """清理资源，确保优雅退出"""
@@ -1126,25 +1181,3 @@ if __name__ == "__main__":
         # 确保程序退出时清理资源
         cleanup()
 
-@app.route('/api/image/last/<int:node_id>')
-def get_last_image(node_id):
-    """获取指定数据节点最近一次保存的图片"""
-    try:
-        base_dir = os.path.join(ROOT_DIR, 'captures', f'node_{node_id}')
-        if not os.path.exists(base_dir):
-            return jsonify({'error': '未找到该节点的图片目录'}), 404
-        # 仅筛选常见图片格式
-        files = [f for f in os.listdir(base_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        if not files:
-            return jsonify({'error': '未找到该节点的图片'}), 404
-        # 文件名为时间戳(YYYYmmdd_HHMMSS.jpg)，按文件名倒序即可
-        files.sort(reverse=True)
-        latest_file = files[0]
-        file_path = os.path.join(base_dir, latest_file)
-        if not os.path.exists(file_path):
-            return jsonify({'error': '图片文件不存在'}), 404
-        return send_file(file_path, mimetype='image/jpeg')
-    except Exception as e:
-        if log_manager:
-            log_manager.error(f"获取节点 {node_id} 最新图片失败: {str(e)}")
-        return jsonify({'error': '内部错误', 'details': str(e)}), 500

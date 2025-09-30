@@ -269,7 +269,6 @@ const content = ref([
     title: '终端管理',
     path: '/terminal',
     icon: 'Monitor',
-    hideOnMobile: true
   }
 ])
 

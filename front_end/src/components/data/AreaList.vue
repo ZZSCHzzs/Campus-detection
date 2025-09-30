@@ -91,7 +91,7 @@ const processedAreas = computed(() => {
                 v-for="area in processedAreas" 
                 :key="area.id"
                 :xs="24" 
-                :sm="12" 
+                :sm="8" 
                 :md="8" 
                 :lg="6" 
                 :xl="6"

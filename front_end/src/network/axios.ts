@@ -150,6 +150,7 @@ export const apiCore = new ApiCore();
 
 // 创建默认API实例
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://smarthit.top';
+export const API_LOCAL_URL = import.meta.env.VITE_API_LOCAL_URL || 'http://localhost:5000';
 export const defaultApi = apiCore.createInstance('default', {
   baseURL: API_BASE_URL,
   mode: ApiMode.REMOTE,
@@ -158,7 +159,7 @@ export const defaultApi = apiCore.createInstance('default', {
 
 // 创建本地API实例
 export const localApi = apiCore.createInstance('local', {
-  baseURL: 'http://192.168.1.100:5000',
+  baseURL: API_LOCAL_URL,
   timeout: 5000,
   mode: ApiMode.LOCAL
 });

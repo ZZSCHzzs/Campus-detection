@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import EnvironmentalChart from '../components/chart/EnvironmentalChart.vue';
 
 import apiService from '../services';
+import { useAuthStore } from '../stores/auth';
 
 // 导入所需的图标组件
 import {
@@ -45,6 +46,9 @@ import {
 const route = useRoute();
 const router = useRouter();
 
+const authStore = useAuthStore();
+const isAuthenticated = computed(() => authStore.isAuthenticated);
+
 const frameSizes = {
   10: { size: [1600, 1200], label: 'UXGA (1600x1200)' },
   9: { size: [1280, 1024], label: 'SXGA (1280x1024)' },
@@ -58,7 +62,7 @@ const frameSizes = {
 };
 
 // 连接模式（只使用一种模式简化逻辑）
-const connectionMode = ref('remote');
+const connectionMode = ref(isAuthenticated.value ? 'remote' : 'local');
 const loading = ref(true);
 const pollTimer = ref(null);
 const isActive = ref(true);
@@ -168,9 +172,26 @@ const localAvailable = ref(false);
 // 判断远程终端是否可用
 const remoteAvailable = ref(false);
 
+const remoteButtonDisabled = computed(() => !isAuthenticated.value || !remoteAvailable.value);
+const remoteModeHint = computed(() => {
+  if (!isAuthenticated.value) {
+    return '远程模式需要登录账户';
+  }
+  if (!remoteAvailable.value) {
+    return '未检测到可用的远程终端';
+  }
+  return '';
+});
+
 // 加载终端列表
 const loadTerminalList = async () => {
   try {
+    if (!isAuthenticated.value) {
+      terminalList.value = [];
+      remoteAvailable.value = false;
+      return [];
+    }
+
     const data = await apiService.terminals.getAll();
     terminalList.value = data;
     remoteAvailable.value = data && data.length > 0;
@@ -371,6 +392,18 @@ const loadLogs = async () => {
     return [];
   }
 };
+
+watch(isAuthenticated, async (loggedIn) => {
+  if (!isActive.value) return;
+
+  if (loggedIn) {
+    await loadTerminalList();
+  } else {
+    remoteAvailable.value = false;
+    terminalList.value = [];
+    connectionMode.value = 'local';
+  }
+});
 
 // 设置轮询
 const setupPolling = () => {
@@ -919,8 +952,13 @@ onMounted(async () => {
     if (!isActive.value) return;
 
     // 加载终端列表（用于远程模式）并确定远程可用性
-    await loadTerminalList();
-    remoteAvailable.value = terminalList.value.length > 0;
+    if (isAuthenticated.value) {
+      await loadTerminalList();
+    } else {
+      remoteAvailable.value = false;
+      terminalList.value = [];
+      connectionMode.value = 'local';
+    }
 
     // 根据环境可用性决定初始模式
     if (localAvailable.value) {
@@ -935,13 +973,23 @@ onMounted(async () => {
         terminal.name = environmentInfo.value.name;
       }
     } else if (!remoteAvailable.value) {
-      // 如果本地和远程都不可用，显示提示
-      ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
+      // 如果本地不可用，根据认证状态给出提示
+      if (isAuthenticated.value) {
+        ElMessage.error('无法连接到任何终端，请检查网络连接或配置');
+      } else {
+        ElMessage.warning('未检测到本地终端服务，且远程终端需要登录后才能使用');
+      }
     }
     // 根据选定的模式加载相应数据
     if (!isActive.value) return;
     if (!localAvailable.value) {
-      ElMessage.warning('未检测到本地终端服务，使用远程模式');
+      if (isAuthenticated.value && remoteAvailable.value) {
+        ElMessage.warning('未检测到本地终端服务，使用远程模式');
+      } else if (!isAuthenticated.value) {
+        ElMessage.warning('未检测到本地终端服务，本地模式不可用时请先登录以访问远程终端');
+      } else {
+        ElMessage.warning('未检测到本地终端服务');
+      }
     }
     if (connectionMode.value === 'remote') {
       // 确定终端ID - 优先使用路由参数
@@ -1039,20 +1087,26 @@ const switchTerminal = async (id) => {
 };
 
 // 切换连接模式
-const handleModeChange = async () => {
-  // 检查模式切换条件
-  if (connectionMode.value === 'local' && !localAvailable.value) {
-    ElMessage.error('本地终端不可用，无法切换到本地模式');
-    connectionMode.value = 'remote';
+const handleModeChange = async (newMode = connectionMode.value, oldMode = newMode) => {
+  // 检查身份限制
+  if (newMode === 'remote' && !isAuthenticated.value) {
+    ElMessage.warning('远程模式需要登录账户');
+    connectionMode.value = oldMode === 'remote' ? 'local' : oldMode;
     return;
   }
 
-  if (connectionMode.value === 'remote' && !remoteAvailable.value) {
+  // 检查模式切换条件
+  if (newMode === 'local' && !localAvailable.value) {
+    ElMessage.error('本地终端不可用，无法切换到本地模式');
+    connectionMode.value = oldMode;
+    return;
+  }
+
+  if (newMode === 'remote' && !remoteAvailable.value) {
     ElMessage.error('远程终端不可用，无法切换到远程模式');
 
     if (localAvailable.value) {
-      // 如果本地可用，则回退到本地模式
-      connectionMode.value = 'local';
+      connectionMode.value = oldMode;
     } else {
       // 如果本地也不可用，显示警告但允许继续尝试
       ElMessage.warning('本地终端不可用，将尝试连接远程终端');
@@ -1064,7 +1118,7 @@ const handleModeChange = async () => {
 
   try {
     // 根据新模式处理
-    if (connectionMode.value === 'remote') {
+    if (newMode === 'remote') {
       // 确保有终端ID
       if (!terminal.id || !terminalList.value.some(t => t.id === terminal.id)) {
         if (terminalList.value.length > 0) {
@@ -1100,7 +1154,7 @@ const handleModeChange = async () => {
     ElMessage.error(`切换连接模式失败: ${error.message}`);
 
     // 如果失败，回退到之前的模式
-    connectionMode.value = connectionMode.value === 'remote' ? 'local' : 'remote';
+    connectionMode.value = oldMode;
   } finally {
     loading.value = false;
   }
@@ -1157,7 +1211,9 @@ onUnmounted(() => {
 });
 
 // 监听连接模式变化
-watch(connectionMode, handleModeChange);
+watch(connectionMode, (newMode, oldMode) => {
+  handleModeChange(newMode, oldMode);
+});
 </script>
 
 <template>
@@ -1194,7 +1250,7 @@ watch(connectionMode, handleModeChange);
           </el-select>
 
           <el-radio-group v-model="connectionMode" size="small" class="mode-switcher">
-            <el-radio-button value="remote" :disabled="!remoteAvailable && localAvailable">
+            <el-radio-button value="remote" :disabled="remoteButtonDisabled" :title="remoteModeHint || undefined">
               <el-icon>
                 <Connection />
               </el-icon> 远程
@@ -1568,13 +1624,41 @@ watch(connectionMode, handleModeChange);
                       <el-tag :type="nodeStatus === '在线' ? 'success' : 'danger'" size="small" class="node-status">
                         {{ nodeStatus }}
                       </el-tag>
-                      <!-- 新增：数据节点上次检测结果直接展示 -->
+
+                      <!-- 数据节点：上次人数 -->
                       <div
                         class="node-last-detect"
                         v-if="getNodeDetail(id)?.device_type === 'data' && getNodeDetail(id)?.detection_count !== undefined"
                       >
                         上次：{{ getNodeDetail(id).detection_count }} 人
                         <span v-if="getNodeDetail(id)?.last_capture"> · {{ getNodeDetail(id).last_capture }}</span>
+                      </div>
+
+                      <!-- 数据节点：上次温湿度 -->
+                      <div
+                        class="node-last-detect"
+                        v-if="getNodeDetail(id)?.device_type === 'data' && (getNodeDetail(id)?.data?.temperature !== undefined || getNodeDetail(id)?.data?.humidity !== undefined)"
+                      >
+                        环境：
+                        <span v-if="getNodeDetail(id)?.data?.temperature !== undefined">
+                          T {{ getNodeDetail(id).data.temperature }}°C
+                        </span>
+                        <span v-if="getNodeDetail(id)?.data?.humidity !== undefined" style="margin-left:8px">
+                          H {{ getNodeDetail(id).data.humidity }}%
+                        </span>
+                      </div>
+
+                      <!-- 控制节点：角度/旋转状态 -->
+                      <div
+                        class="node-last-detect"
+                        v-if="getNodeDetail(id)?.device_type === 'control' && (getNodeDetail(id)?.data?.current_angle !== undefined || getNodeDetail(id)?.data?.rotating !== undefined)"
+                      >
+                        <span v-if="getNodeDetail(id)?.data?.current_angle !== undefined">
+                          角度 {{ getNodeDetail(id).data.current_angle }}°
+                        </span>
+                        <span v-if="getNodeDetail(id)?.data?.rotating !== undefined" style="margin-left:8px">
+                          旋转 {{ getNodeDetail(id).data.rotating ? '进行中' : '停止' }}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1697,30 +1781,30 @@ watch(connectionMode, handleModeChange);
                     <div class="node-section-header">数据节点</div>
                     <div class="node-list-container">
                       <el-table :data="config.data_nodes" size="small" height="200px" class="node-table">
-                        <el-table-column prop="id" label="ID" width="60" align="center" />
-                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
+                        <el-table-column prop="id" label="ID" width="30" align="center" />
+                        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip>
                           <template #default="scope">
                             <el-input v-model="scope.row.name" size="small" />
                           </template>
                         </el-table-column>
-                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                        <el-table-column prop="ip" label="IP" width="120" show-overflow-tooltip>
                           <template #default="scope">
                             <el-input v-model="scope.row.ip" size="small" />
                           </template>
                         </el-table-column>
-                        <el-table-column prop="port" label="端口" width="90" align="center">
+                        <el-table-column prop="port" label="端口">
                           <template #default="scope">
                             <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
                           </template>
                         </el-table-column>
-                        <el-table-column label="功能" min-width="210">
+                        <el-table-column label="功能" width="180">
                           <template #default="scope">
                             <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
                               <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
                             </el-select>
                           </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="140" align="center">
+                        <el-table-column label="操作" width="80">
                           <template #default="scope">
                             <el-button size="small" @click="previewNodeImage(scope.row.id)" circle :disabled="connectionMode !== 'local'">
                               <el-icon><Picture /></el-icon>
@@ -1741,7 +1825,7 @@ watch(connectionMode, handleModeChange);
                         <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
                       </el-select>
                       <el-button type="primary" @click="addDataNode" size="small" class="add-button">
-                        <el-icon><Plus /></el-icon>添加数据节点
+                        <el-icon><Plus /></el-icon>添加
                       </el-button>
                     </div>
                   </div>
@@ -1751,30 +1835,30 @@ watch(connectionMode, handleModeChange);
                     <div class="node-section-header">控制节点</div>
                     <div class="node-list-container">
                       <el-table :data="config.control_nodes" size="small" height="200px" class="node-table">
-                        <el-table-column prop="id" label="ID" width="60" align="center" />
-                        <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip>
+                        <el-table-column prop="id" label="ID" width="30" align="center" />
+                        <el-table-column prop="name" label="名称" width="120" show-overflow-tooltip>
                           <template #default="scope">
                             <el-input v-model="scope.row.name" size="small" />
                           </template>
                         </el-table-column>
-                        <el-table-column prop="ip" label="IP" width="160" show-overflow-tooltip>
+                        <el-table-column prop="ip" label="IP" width="120" show-overflow-tooltip>
                           <template #default="scope">
                             <el-input v-model="scope.row.ip" size="small" />
                           </template>
                         </el-table-column>
-                        <el-table-column prop="port" label="端口" width="90" align="center">
+                        <el-table-column prop="port" label="端口">
                           <template #default="scope">
-                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" />
+                            <el-input-number v-model="scope.row.port" :min="1" :max="65535" size="small" width="90px" />
                           </template>
                         </el-table-column>
-                        <el-table-column label="功能" min-width="210">
+                        <el-table-column label="功能" width="180">
                           <template #default="scope">
                             <el-select v-model="scope.row.capabilities" size="small" multiple collapse-tags collapse-tags-tooltip style="width: 100%;">
                               <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
                             </el-select>
                           </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="80" align="center">
+                        <el-table-column label="操作" width="80">
                           <template #default="scope">
                             <el-button type="danger" size="small" @click="removeControlNode(scope.$index)" circle>
                               <el-icon><Delete /></el-icon>
@@ -1788,11 +1872,11 @@ watch(connectionMode, handleModeChange);
                       <el-input v-model="newControlNode.name" placeholder="名称" class="node-name-input" size="small" />
                       <el-input v-model="newControlNode.ip" placeholder="IP" class="node-ip-input" size="small" />
                       <el-input v-model.number="newControlNode.port" placeholder="端口" class="node-port-input" size="small" />
-                      <el-select v-model="newControlNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 180px;">
+                      <el-select v-model="newControlNode.capabilities" placeholder="功能(多选)" multiple collapse-tags collapse-tags-tooltip class="node-cap-input" size="small" style="min-width: 100px;">
                         <el-option v-for="opt in NODE_CAPABILITIES" :key="opt.value" :label="opt.label" :value="opt.value" />
                       </el-select>
                       <el-button type="primary" @click="addControlNode" size="small" class="add-button">
-                        <el-icon><Plus /></el-icon>添加控制节点
+                        <el-icon><Plus /></el-icon>添加
                       </el-button>
                     </div>
                   </div>
@@ -1867,6 +1951,7 @@ watch(connectionMode, handleModeChange);
           </div>
           <!-- 硬件控制面板 -->
           <div class="panel-section">
+
             <div class="section-header">
               <h3>
                 <el-icon><MagicStick /></el-icon> 硬件控制

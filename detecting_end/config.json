@@ -8,14 +8,26 @@
                 "ip": "192.168.1.101",
                 "port": 80,
                 "name": "数据节点1",
-                "capabilities": ["capture", "stream", "status", "environment"]
+                "capabilities": [
+                    "capture",
+                    "stream",
+                    "status",
+                    "environment",
+                    "status_led"
+                ]
             },
             "3": {
                 "type": "data",
                 "ip": "192.168.1.102",
                 "port": 80,
                 "name": "数据节点2",
-                "capabilities": ["capture", "stream", "status", "environment"]
+                "capabilities": [
+                    "capture",
+                    "stream",
+                    "status",
+                    "environment",
+                    "status_led"
+                ]
             }
         },
         "control_nodes": {
@@ -24,7 +36,12 @@
                 "ip": "192.168.1.105",
                 "port": 80,
                 "name": "控制节点1",
-                "capabilities": ["control", "rotate", "status"]
+                "capabilities": [
+                    "control",
+                    "rotate",
+                    "status",
+                    "status_led"
+                ]
             }
         }
     },
@@ -43,8 +60,12 @@
         "hmirror": false,
         "vflip": false
     },
+    "light_control": {
+        "default_angle": 90,
+        "auto_return_time": 3
+    },
     "camera_config": {
-        "frame_size": 10,
+        "frame_size": 7,
         "frame_rate": 30,
         "exposure": 0,
         "brightness": 0,
@@ -54,14 +75,10 @@
         "gain": 0,
         "white_balance": "auto",
         "auto_exposure": true,
-        "special_effect": 1,
+        "special_effect": 0,
         "hmirror": false,
         "vflip": false
     },
     "co2_enabled": true,
-    "co2_read_interval": 27,
-    "light_control": {
-        "default_angle": 90,
-        "auto_return_time": 3
-    }
+    "co2_read_interval": 30
 }

@@ -61,7 +61,7 @@ unsigned long led33LastBlink = 0;       // 慢速频闪节拍
 // =================== 网络配置 ===================
 const char* ssid = "smarthit";
 const char* password = "smart123";
-const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/3";
+const char* serverUrl = "http://192.168.1.100:5000/api/push_frame/2";
 
 
 // =================== HTTP 服务器配置 ===================
