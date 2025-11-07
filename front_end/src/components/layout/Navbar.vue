@@ -206,7 +206,7 @@ onMounted(async () => {
     (function (a:any, h, g, f, e, d, c, b) { b = function () { d = h.createElement(g); c = h.getElementsByTagName(g)[0]; d.src = e; d.charset = "utf-8"; d.async = 1; c.parentNode.insertBefore(d, c) }; a["SeniverseWeatherWidgetObject"] = f; a[f] || (a[f] = function () { (a[f].q = a[f].q || []).push(arguments) }); a[f].l = +new Date(); if (a.attachEvent) { a.attachEvent("onload", b) } else { a.addEventListener("load", b, false) } }(window, document, "script", "SeniverseWeatherWidget", "//cdn.sencdn.com/widget2/static/js/bundle.js?t=" + parseInt((new Date().getTime() / 100000000).toString(), 10)));
     (window as any).SeniverseWeatherWidget('show', {
       flavor: "slim",
-      location: "WX4FBXXFKE4F",
+      location: "YB1UX38K6DY1",
       geolocation: true,
       language: "zh-Hans",
       unit: "c",
@@ -267,8 +267,9 @@ const content = ref([
   {
     index: '6',
     title: '终端管理',
-    path: '/terminal',
+    path: '/terminalPi',
     icon: 'Monitor',
+    hideOnMobile: false,
   }
 ])
 
@@ -298,7 +299,7 @@ const routePathMap = {
   '3': '/screen',
   '4': '/alerts',
   '5': '/admin',
-  '6': '/terminal'
+  '6': '/terminalPi'
 }
 
 const activeIndex = ref('0')

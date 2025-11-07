@@ -671,7 +671,7 @@ class DetectionManager:
                             }
                     return True
             except Exception as e:
-                logger.error(f"节点 {node_id} 通过WebSocket上传失败: {str(e)}")
+                logger.error(f"节点 {node_id} 通过WebSocket上传失败: {e}")
 
         # 如果WebSocket不可用或失败则回退HTTP
         try:

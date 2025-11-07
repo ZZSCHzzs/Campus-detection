@@ -71,13 +71,11 @@ const routes: Array<RouteRecordRaw> = [
     path: '/terminal/:id',
     name: 'terminal-detail',
     component: TerminalView,
-    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
-    path: '/terminalPi/:id',
+    path: '/terminalPi',
     name: 'terminalPi-detail',
     component: TerminalForPi,
-    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/admin',

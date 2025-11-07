@@ -2593,12 +2593,12 @@ watch(connectionMode, handleModeChange);
 }
 
 .node-tip .k {
-  color: #909399;
+  color: #ffffff;
   margin-right: 8px;
 }
 
 .node-tip .v {
-  color: #303133;
+  color: #ffffff;
 }
 
 .node-config {

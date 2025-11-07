@@ -2898,12 +2898,12 @@ watch(connectionMode, (newMode, oldMode) => {
   font-size: 12px;
 }
 .node-tip .k {
-  color: #909399;
+  color: #ffffff;
   width: 52px;
   flex: 0 0 52px;
 }
 .node-tip .v {
-  color: #303133;
+  color: #ffffff;
   flex: 1;
   word-break: break-all;
 }
